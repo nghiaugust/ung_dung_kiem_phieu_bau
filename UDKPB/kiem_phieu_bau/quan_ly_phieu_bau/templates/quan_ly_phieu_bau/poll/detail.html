@@ -1,0 +1,215 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Chi tiết cuộc bỏ
+phiếu{% endblock %} {% block content %}
+
+<div class="row mb-4">
+  <div class="col-4">
+    <h4>Thông tin cuộc bỏ phiếu</h4>
+    <table class="table table-bordered">
+      <tr>
+        <th>ID Cuộc bỏ phiếu</th>
+        <td>{{ poll.poll_id|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Tiêu đề</th>
+        <td>{{ poll.title|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Mô tả</th>
+        <td>{{ poll.description|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Thời gian bắt đầu</th>
+        <td>{{ poll.start_time|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Thời gian kết thúc</th>
+        <td>{{ poll.end_time|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Bắt đầu kiểm phiếu</th>
+        <td>{{ poll.counting_start_time|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Kết thúc kiểm phiếu</th>
+        <td>{{ poll.counting_end_time|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Người tạo</th>
+        <td>{{ created_by_username|default_if_none:'Không' }}</td>
+      </tr>
+      <tr>
+        <th>Trạng thái</th>
+        <td>
+          {% if poll.status == 'scheduled' %}Chờ diễn ra
+          {% elif poll.status == 'ongoing' %}Đang diễn ra
+          {% elif poll.status == 'closed' %}Đã đóng
+          {% elif poll.status == 'counted' %}Đã kiểm phiếu
+          {% elif poll.status == 'published' %}Đã công bố
+          {% elif poll.status == 'locked' %}Đã khoá
+          {% elif poll.status == 'cancelled' %}Đã huỷ
+          {% else %}{{ poll.status }}{% endif %}
+      </td>
+      </tr>
+    </table>
+  </div>
+  <div class="col-4 d-flex flex-column align-items-center">
+    <h4>Danh sách ứng cử viên</h4>
+    {% if candidates %}
+    <table class="table table-striped w-auto mb-0">
+      <thead>
+        <tr>
+          <th>STT</th>
+          <th>Tên ứng cử viên</th>
+          <th>Mô tả</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td>{{ c.name|default_if_none:'Không' }}</td>
+          <td>{{ c.description|default_if_none:'Không' }}</td>
+          <td>
+            <div class="d-flex gap-1">
+              <a
+                href="{% url 'edit_candidate' c.candidate_id %}"
+                class="btn btn-warning btn-sm px-2 py-1"
+                style="font-size: 0.55rem"
+                >Chỉnh sửa</a
+              >
+              <a
+                href="{% url 'delete_candidate' c.candidate_id %}"
+                class="btn btn-danger btn-sm px-2 py-1"
+                style="font-size: 0.55rem"
+                onclick="return confirm('Bạn có chắc muốn xoá ứng cử viên này?');"
+                >Xoá</a
+              >
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Chưa có ứng cử viên nào.</p>
+    {% endif %}
+    <div class="mt-3">
+      <a href="{% url 'add_candidate' poll.poll_id %}" class="btn btn-success"
+        >Thêm ứng cử viên</a
+      >
+      <a
+        href="{% url 'delete_all_candidates' poll.poll_id %}"
+        class="btn btn-danger ms-2"
+        onclick="return confirm('Bạn có chắc muốn xoá tất cả ứng cử viên?');"
+        >Xoá tất cả ứng cử viên</a
+      >
+    </div>
+  </div>
+  <div class="col-4 d-flex flex-column align-items-center">
+    <h4>Thống kê phiếu bầu</h4>
+    <ul class="list-unstyled mb-3">
+      <li>Tổng số lượng phiếu: {{ total_ballots }}</li>
+      <li>Số phiếu đã kiểm phiếu: {{ checked_ballots }}</li>
+      <li>Số phiếu chưa kiểm phiếu: {{ unchecked_ballots }}</li>
+      <li>Số phiếu hợp lệ: {{ valid_ballots }}</li>
+      <li>Số phiếu không hợp lệ: {{ invalid_ballots }}</li>
+    </ul>
+    <div class="mb-3">
+      <a href="{% url 'upload_ballots' poll.poll_id %}" class="btn btn-info"
+        >Tải lên</a
+      >
+      <a
+        href="{% url 'ballot_list' poll.poll_id %}"
+        class="btn btn-outline-primary ms-2"
+        >Danh sách</a
+      >
+    </div>
+    <div class="mt-5 w-100 d-flex justify-content-center">
+      <button
+        id="kiem-phieu-btn"
+        class="btn btn-danger btn-lg px-5 py-3 fw-bold"
+        style="font-size: 2rem; border-radius: 1rem"
+        type="button"
+      >
+        KIỂM PHIẾU
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="mt-4">
+  <a href="/danh_sach_cuoc_bo_phieu/" class="btn btn-secondary">Quay lại</a>
+  <a href="{% url 'edit_poll' poll.poll_id %}" class="btn btn-warning ms-2"
+    >Chỉnh sửa</a
+  >
+</div>
+
+{% block scripts %}
+<script>
+  // Hàm hiển thị alert toast sử dụng Bootstrap, KHÔNG đổi tên id/class
+
+  const kiemPhieuButton = document.getElementById("kiem-phieu-btn");
+  const loadingOverlay = document.getElementById("loading-overlay");
+  const loadingText = document.getElementById("loading-text");
+
+  if (loadingText) {
+    // Thay đổi URL trỏ đến view stream mới
+    const streamUrl = "{% url 'kiem_phieu_stream' poll.poll_id %}";
+
+    kiemPhieuButton.addEventListener("click", function (event) {
+      event.preventDefault();
+
+      // 1. CHUẨN BỊ: Hiển thị loading với text ban đầu
+      loadingText.innerText = "Đang kết nối đến server...";
+      loadingOverlay.style.display = "flex";
+
+      // 2. KHỞI TẠO KẾT NỐI STREAM
+      const eventSource = new EventSource(streamUrl);
+
+      // 3. LẮNG NGHE CÁC CẬP NHẬT TỪ SERVER
+      // Hàm này sẽ được gọi MỖI KHI server 'yield' một mẩu tin
+      eventSource.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+
+        // Cập nhật text trên màn hình loading với tin nhắn từ server
+        loadingText.innerText = data.message;
+
+        // Nếu nhận được tín hiệu lỗi (progress: -1), đóng kết nối và báo lỗi
+        if (data.progress === -1) {
+          eventSource.close(); // Đóng kết nối
+          //setTimeout(function () {
+          // Đợi một chút để người dùng đọc lỗi
+          loadingOverlay.style.display = "none";
+          showAlert(data.message);
+          //}, 100);
+        }
+
+        // Nếu nhận được tín hiệu thành công, chuẩn bị đóng kết nối
+        if (data.progress === 100) {
+          eventSource.close(); // Đóng kết nối
+          setTimeout(function () {
+            loadingOverlay.style.display = "none";
+            showAlert(data.message);
+            window.location.reload(); // Tải lại trang để xem kết quả cuối
+          }, 500); // Đợi 0.5s cho người dùng đọc tin nhắn cuối
+        }
+      };
+
+      // 4. XỬ LÝ KHI CÓ LỖI KẾT NỐI
+      // Hàm này được gọi khi kết nối bị ngắt đột ngột hoặc không thể thiết lập
+      eventSource.onerror = function (err) {
+        console.error("EventSource failed:", err);
+        eventSource.close();
+        loadingOverlay.style.display = "none";
+        alert("Mất kết nối với server!");
+      };
+    });
+  } else {
+    // Báo lỗi ra console nếu thiếu một phần tử nào đó
+    console.error(
+      "Lỗi: Không tìm thấy nút bấm hoặc các phần tử của màn hình loading. Vui lòng kiểm tra lại cấu trúc file base.html và detail.html."
+    );
+  }
+</script>
+{% endblock %} {% endblock %}

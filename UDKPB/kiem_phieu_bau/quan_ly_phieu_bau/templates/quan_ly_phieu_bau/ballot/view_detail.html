@@ -1,0 +1,59 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Chi tiết phiếu
+bầu{% endblock %} {% block content %}
+<h2>Chi tiết phiếu bầu</h2>
+<div class="mb-3">
+  <label class="form-label">Tên phiếu bầu</label>
+  <input
+    type="text"
+    class="form-control"
+    value="{{ ballot.ballot_name }}"
+    readonly
+  />
+</div>
+<div class="mb-3">
+  <label class="form-label">Thời gian bỏ phiếu</label>
+  <input
+    type="text"
+    class="form-control"
+    value="{{ ballot.timestamp|default_if_none:'-' }}"
+    readonly
+  />
+</div>
+<div class="mb-3">
+  <label class="form-label">Ảnh phiếu bầu</label><br />
+  {% if ballot.ballot_file_path %}
+  <a href="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}" target="_blank">
+    <img
+      src="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}"
+      alt="Ảnh phiếu"
+      style="max-width: 200px; max-height: 200px; object-fit: contain"
+    />
+  </a>
+  {% else %}
+  <span>-</span>
+  {% endif %}
+</div>
+<div class="mb-3">
+  <label class="form-label">Đã kiểm phiếu</label>
+  <input
+    type="text"
+    class="form-control"
+    value="{% if ballot.is_checked %}Đã kiểm{% else %}Chưa kiểm{% endif %}"
+    readonly
+  />
+</div>
+<div class="mb-3">
+  <label class="form-label">Hợp lệ</label>
+  <input
+    type="text"
+    class="form-control"
+    value="{% if ballot.is_valid %}Hợp lệ{% elif ballot.is_valid == False %}Không hợp lệ{% else %}-{% endif %}"
+    readonly
+  />
+</div>
+<a
+  href="{% url 'ballot_list_redirect' ballot.poll.poll_id %}"
+  class="btn btn-secondary"
+  >Quay lại</a
+>
+{% endblock %}

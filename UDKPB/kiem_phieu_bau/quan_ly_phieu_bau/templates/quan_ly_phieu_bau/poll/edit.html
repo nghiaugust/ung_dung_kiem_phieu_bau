@@ -1,0 +1,48 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% block title %}Chỉnh sửa cuộc bỏ phiếu{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h2>Chỉnh sửa cuộc bỏ phiếu</h2>
+  <form method="post" class="ajax-form">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label">Tiêu đề</label>
+      <input type="text" name="title" class="form-control" value="{{ poll.title|default_if_none:'' }}" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Mô tả</label>
+      <textarea name="description" class="form-control">{{ poll.description|default_if_none:'' }}</textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Thời gian bắt đầu</label>
+  <input type="datetime-local" name="start_time" class="form-control" value="{{ poll.start_time|date:'Y-m-d\\TH:i'|default_if_none:'' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Thời gian kết thúc</label>
+  <input type="datetime-local" name="end_time" class="form-control" value="{{ poll.end_time|date:'Y-m-d\\TH:i'|default_if_none:'' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Bắt đầu kiểm phiếu</label>
+  <input type="datetime-local" name="counting_start_time" class="form-control" value="{{ poll.counting_start_time|date:'Y-m-d\\TH:i'|default_if_none:'' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Kết thúc kiểm phiếu</label>
+  <input type="datetime-local" name="counting_end_time" class="form-control" value="{{ poll.counting_end_time|date:'Y-m-d\\TH:i'|default_if_none:'' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Trạng thái</label>
+      <select name="status" class="form-select">
+        <option value="scheduled" {% if poll.status == 'scheduled' %}selected{% endif %}>Chờ diễn ra</option>
+        <option value="ongoing" {% if poll.status == 'ongoing' %}selected{% endif %}>Đang diễn ra</option>
+        <option value="closed" {% if poll.status == 'closed' %}selected{% endif %}>Đã đóng</option>
+        <option value="counted" {% if poll.status == 'counted' %}selected{% endif %}>Đã kiểm phiếu</option>
+        <option value="published" {% if poll.status == 'published' %}selected{% endif %}>Đã công bố</option>
+        <option value="locked" {% if poll.status == 'locked' %}selected{% endif %}>Đã khoá</option>
+        <option value="cancelled" {% if poll.status == 'cancelled' %}selected{% endif %}>Đã huỷ</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+    <a href="{% url 'poll_detail' poll.poll_id %}" class="btn btn-secondary ms-2">Quay lại</a>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+django
+torch
+transformers
+Pillow
+opencv-python
+numpy
+ultralytics
+mysqlclient

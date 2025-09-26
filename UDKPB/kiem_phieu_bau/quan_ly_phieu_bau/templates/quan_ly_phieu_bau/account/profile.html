@@ -1,0 +1,49 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Thông tin tài
+khoản{% endblock %} {% block content %}
+<div class="d-flex justify-content-between align-items-center">
+  <h2>Thông tin tài khoản</h2>
+  <div>
+    <a href="{% url 'account_list' %}" class="btn btn-secondary me-2"
+      >Quay lại</a
+    >
+    <a href="{% url 'edit_account_redirect' user.id %}" class="btn btn-primary me-2"
+      >Chỉnh sửa</a
+    >
+    <a href="{% url 'logout' %}" class="btn btn-danger">Đăng xuất</a>
+  </div>
+</div>
+<table class="table table-bordered w-auto">
+  <tr>
+    <th>ID</th>
+    <td>{{ user.id }}</td>
+  </tr>
+  <tr>
+    <th>Tên đăng nhập</th>
+    <td>{{ user.username }}</td>
+  </tr>
+  <tr>
+    <th>Họ tên</th>
+    <td>{{ user.last_name }}</td>
+  </tr>
+  <tr>
+    <th>Email</th>
+    <td>{{ user.email }}</td>
+  </tr>
+  <tr>
+    <th>Vai trò</th>
+    <td>{{ user.role }}</td>
+  </tr>
+  <tr>
+    <th>Trạng thái</th>
+    <td>{% if user.is_active %}Hoạt động{% else %}Bị khoá{% endif %}</td>
+  </tr>
+  <tr>
+    <th>Ngày tạo</th>
+    <td>{{ user.created_at }}</td>
+  </tr>
+  <tr>
+    <th>Cập nhật gần nhất</th>
+    <td>{{ user.updated_at }}</td>
+  </tr>
+</table>
+{% endblock %}

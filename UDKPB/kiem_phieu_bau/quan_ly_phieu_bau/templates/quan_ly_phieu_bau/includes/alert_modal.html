@@ -1,0 +1,66 @@
+{% comment %} {% if alert_message %} {% endcomment %}
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100">
+  
+  <div
+    id="alertToast"
+    class="toast d-none"
+    role="alert"
+    aria-live="assertive"
+    aria-atomic="true"
+    data-bs-delay="2000"
+    data-bs-autohide="true"
+  >
+    <div class="d-flex">
+      <div class="toast-body">
+        {{ alert_message }}
+      </div>
+      <button
+        type="button"
+        class="btn-close me-2 m-auto"
+        data-bs-dismiss="toast"
+        aria-label="Close"
+      ></button>
+    </div>
+
+    </div>
+</div>
+
+<style>
+  #alertToast {
+    position: relative;    
+    overflow: hidden;       
+    background-color: #fff; 
+    border: none;           
+  }
+  #alertToast::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 4px;
+    width: 100%;
+    background-color: #0d6efd; 
+    transform-origin: left;
+    animation: shrink-width 2s linear forwards;
+  }
+
+  @keyframes shrink-width {
+    from {
+      transform: scaleX(1);
+    }
+    to {
+      transform: scaleX(0);
+    }
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var toastElement = document.getElementById("alertToast");
+    if (toastElement) {
+      var toast = new bootstrap.Toast(toastElement);
+      toast.show();
+    }
+  });
+</script>
+{% comment %} {% endif %} {% endcomment %}

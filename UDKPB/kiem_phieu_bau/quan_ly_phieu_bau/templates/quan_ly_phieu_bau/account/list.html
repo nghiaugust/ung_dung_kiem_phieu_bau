@@ -1,0 +1,63 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Danh sách tài
+khoản{% endblock %} {% block content %}
+<h2>Danh sách tài khoản</h2>
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Tên đăng nhập</th>
+      <th>Họ tên</th>
+      <th>Email</th>
+      <th>Vai trò</th>
+      <th>Trạng thái</th>
+      <th>Ngày tạo</th>
+      <th>Hành động</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.id }}</td>
+      <td>{{ user.username }}</td>
+      <td>{{ user.last_name }}</td>
+      <td>{{ user.email }}</td>
+      <td>{{ user.role }}</td>
+      <td>{% if user.is_active %}Hoạt động{% else %}Bị khoá{% endif %}</td>
+      <td>{{ user.date_joined }}</td>
+      <td>
+        <a href="{% url 'account_profile' %}" class="btn btn-info btn-sm"
+          >Xem</a
+        >
+        <a
+          href="{% url 'edit_account' user.id %}"
+          class="btn btn-primary btn-sm"
+          >Sửa</a
+        >
+        <form
+          method="post"
+          action="{% url 'delete_account' user.id %}"
+          style="display: inline"
+          class="d-inline ajax-form"
+          onsubmit="return confirm('Bạn có chắc chắn muốn xoá tài khoản này?');"
+        >
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-sm">Xoá</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div class="mt-3 text-end">
+  <div class="mt-3 d-flex justify-content-between">
+    <div>
+      <a href="{% url 'tai_khoan' %}" class="btn btn-secondary"> Quay lại </a>
+    </div>
+    <div class="text-end">
+      <a href="{% url 'add_account' %}" class="btn btn-success">
+        Thêm tài khoản
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

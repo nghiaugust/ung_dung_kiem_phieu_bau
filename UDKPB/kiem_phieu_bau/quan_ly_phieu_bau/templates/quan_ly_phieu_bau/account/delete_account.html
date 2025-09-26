@@ -1,0 +1,13 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Xoá tài
+khoản{%endblock %} {% block content %}
+<h2>Xoá tài khoản</h2>
+<p>
+  Bạn có chắc chắn muốn xoá tài khoản
+  <strong>{{ account.username }}</strong> không?
+</p>
+<form method="post" class="ajax-form">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-danger">Xoá</button>
+  <a href="{% url 'tai_khoan' %}" class="btn btn-secondary">Huỷ</a>
+</form>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Thêm ứng cử
+viên{%endblock %} {% block content %}
+
+<div class="row">
+  <div class="col-md-6">
+    <form id="candidate-amount-form" onsubmit="return false;">
+      <div class="mb-3">
+        <label class="form-label">Số lượng ứng cử viên</label>
+        <input
+          type="number"
+          min="1"
+          max="20"
+          id="candidate-amount"
+          class="form-control"
+          value="1"
+          required
+        />
+      </div>
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick="generateCandidateInputs()"
+      >
+        Tạo
+      </button>
+    </form>
+    <form
+      method="post"
+      enctype="multipart/form-data"
+      id="candidates-form"
+      style="display: none"
+      action="{% url 'add_candidate' poll.poll_id %}"
+      class="ajax-form"
+    >
+      {% csrf_token %}
+      <div id="candidates-inputs"></div>
+      <button type="submit" class="btn btn-primary mt-3">
+        Thêm ứng cử viên
+      </button>
+      <button type="reset" class="btn btn-secondary mt-3">Làm mới</button>
+    </form>
+  </div>
+  <div class="col-md-6 d-flex flex-column align-items-end">
+    <form
+      method="post"
+      action="{% url 'copy_candidates' poll.poll_id %}"
+      class="border p-3 bg-light rounded"
+      style="min-width: 300px"
+    >
+      {% csrf_token %}
+      <label class="form-label">Sao chép danh sách ứng cử viên</label>
+      <div class="input-group mb-2">
+        <input
+          type="number"
+          name="source_poll_id"
+          class="form-control"
+          placeholder="Nhập ID cuộc bỏ phiếu"
+          required
+        />
+        <button type="submit" class="btn btn-success">Sao chép</button>
+      </div>
+      <small class="text-muted"
+        >Nhập ID cuộc bỏ phiếu nguồn để sao chép toàn bộ ứng cử viên sang cuộc
+        bỏ phiếu này.</small
+      >
+    </form>
+  </div>
+</div>
+
+<script>
+  function generateCandidateInputs() {
+    const amount =
+      parseInt(document.getElementById("candidate-amount").value) || 1;
+    const container = document.getElementById("candidates-inputs");
+    container.innerHTML = "";
+    for (let i = 1; i <= amount; i++) {
+      container.innerHTML += `
+      <div class="mb-3">
+        <label class="form-label">Tên ứng cử viên ${i}</label>
+        <input type="text" name="name_${i}" class="form-control" required>
+      </div>
+    `;
+    }
+    document.getElementById("candidates-form").style.display = "block";
+  }
+</script>
+
+<div class="mt-4">
+  <a href="{% url 'poll_detail' poll.poll_id %}" class="btn btn-secondary">
+    Quay lại
+  </a>
+</div>
+{% endblock %}

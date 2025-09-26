@@ -1,0 +1,60 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Chi tiết phiếu
+bầu{% endblock %} {% block content %}
+<h2>Chi tiết phiếu bầu</h2>
+<form method="post" enctype="multipart/form-data" class="ajax-form">
+  {% csrf_token %}
+  <table class="table table-bordered w-auto">
+    <tr>
+      <th>ID phiếu bầu</th>
+      <td>{{ ballot.ballot_id }}</td>
+    </tr>
+    <tr>
+      <th>Cuộc bỏ phiếu</th>
+      <td>{{ ballot.poll.title }}</td>
+    </tr>
+    <tr>
+      <th>Thời gian bỏ phiếu</th>
+      <td>
+        <input
+          type="datetime-local"
+          name="timestamp"
+          class="form-control"
+          value="{{ ballot.timestamp|date:'Y-m-d\TH:i' }}"
+        />
+      </td>
+    </tr>
+    <tr>
+      <th>Ảnh phiếu bầu</th>
+      <td>
+        {% if ballot.ballot_file_path %}
+        <a href="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}" target="_blank">
+          <img
+            src="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}"
+            alt="Ảnh phiếu"
+            style="max-width: 200px; max-height: 200px; object-fit: contain"
+          />
+        </a>
+        <br />
+        {% endif %}
+        <input type="file" name="ballot_file" class="form-control mt-2" />
+      </td>
+    </tr>
+    <tr>
+      <th>Đã kiểm phiếu</th>
+      <td>{% if ballot.is_checked %}✅{% else %}❌{% endif %}</td>
+    </tr>
+    <tr>
+      <th>Hợp lệ</th>
+      <td>
+        {% if ballot.is_valid %}✅{% elif ballot.is_valid == False %}❌{% else %}-{% endif %}
+      </td>
+    </tr>
+  </table>
+  <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+  <a
+    href="{% url 'ballot_list' ballot.poll.poll_id %}"
+    class="btn btn-secondary ms-2"
+    >Quay lại danh sách</a
+  >
+</form>
+{% endblock %}

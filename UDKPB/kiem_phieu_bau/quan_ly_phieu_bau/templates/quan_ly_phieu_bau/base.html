@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Quản Lý Phiếu Bầu{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f8fafd;
+        color: #222;
+      }
+      .header {
+        background: #1976d2;
+        color: #fff;
+        padding: 0 32px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        letter-spacing: 1px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 64px;
+      }
+      .header-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+      }
+      .nav-menu {
+        display: flex;
+        gap: 24px;
+      }
+      .nav-menu a {
+        color: #fff;
+        text-decoration: none;
+        font-size: 1rem;
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 4px;
+        transition: background 0.2s;
+      }
+      .nav-menu a:hover, .nav-menu a.active {
+        background: #1565c0;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 32px auto;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+        padding: 32px;
+      }
+    </style>
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    <div class="header">
+      <div class="header-title">Hệ Thống Kiểm Phiếu Bầu</div>
+      <nav class="nav-menu">
+        <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Home</a>
+        <a href="/tao_cuoc_bo_phieu/" {% if request.path == '/tao_cuoc_bo_phieu/' %}class="active"{% endif %}>Tạo cuộc bỏ phiếu</a>
+        <a href="/danh_sach_cuoc_bo_phieu/" {% if request.path == '/danh_sach_cuoc_bo_phieu/' %}class="active"{% endif %}>Danh sách cuộc bỏ phiếu</a>
+        <a href="/thong_ke/" {% if request.path == '/thong_ke/' %}class="active"{% endif %}>Thống kê</a>
+        {% if request.user.is_authenticated %}
+          {% if request.user.role == 'admin' %}
+            <a href="/tai_khoan/" {% if request.path == '/tai_khoan/' %}class="active"{% endif %}>{{ request.user.username }}</a>
+          {% else %}
+            <a href="/account/profile/" {% if request.path == '/account/profile/' %}class="active"{% endif %}>{{ request.user.username }}</a>
+          {% endif %}
+        {% else %}
+          <a href="/tai_khoan/" {% if request.path == '/tai_khoan/' %}class="active"{% endif %}>Tài khoản</a>
+        {% endif %}
+      </nav>
+    </div>
+    
+    {% include 'quan_ly_phieu_bau/includes/alert_modal.html' %}
+    {% include 'quan_ly_phieu_bau/includes/loading_overlay.html' %}
+
+    <script>
+      function showAlert(message) {
+        var toastElement = document.getElementById("alertToast");
+        if (!toastElement) return;
+        var toastBody = toastElement.querySelector(".toast-body");
+        if (toastBody) toastBody.innerText = message;
+        toastElement.classList.remove("d-none");
+        var toast = new bootstrap.Toast(toastElement);
+        toast.show();
+      }
+    </script>
+
+    <div class="container">{% block content %}{% endblock %}</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+     
+    <script>
+      // Hiển thị thông báo cho tất cả các hành động (thêm, sao chép, sửa, xoá, tải lên, xoá tất cả, sửa poll, xoá phiếu bầu)
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("copied")) {
+          const count = params.get("copied");
+          showAlert(`Đã sao chép ${count} ứng cử viên thành công!`);
+        }
+        if (params.has("added")) {
+          const count = params.get("added");
+          showAlert(`Đã thêm ${count} ứng cử viên thành công!`);
+        }
+        if (params.has("edited")) {
+          showAlert("Đã chỉnh sửa ứng cử viên thành công!");
+        }
+        if (params.has("deleted")) {
+          showAlert("Đã xoá ứng cử viên thành công!");
+        }
+        if (params.has("deleted_all")) {
+          const count = params.get("deleted_all");
+          showAlert(`Đã xoá tất cả (${count}) ứng cử viên thành công!`);
+        }
+        if (params.has("uploaded")) {
+          const count = params.get("uploaded");
+          showAlert(`Đã tải lên ${count} phiếu bầu thành công!`);
+        }
+        if (params.has("deleted_ballots")) {
+          const count = params.get("deleted_ballots");
+          showAlert(`Đã xoá tất cả (${count}) phiếu bầu thành công!`);
+        }
+        if (params.has("edited_poll")) {
+          showAlert("Đã chỉnh sửa thông tin cuộc bỏ phiếu thành công!");
+        }
+      })();
+
+      // Xử lý AJAX cho tất cả các form có class 'ajax-form'
+      document.addEventListener('DOMContentLoaded', function() {
+        var ajaxForms = document.querySelectorAll('form.ajax-form');
+        ajaxForms.forEach(function(form) {
+          form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(form);
+            fetch(form.action, {
+              method: form.method ? form.method.toUpperCase() : 'POST',
+              headers: { 'X-Requested-With': 'XMLHttpRequest' },
+              body: formData
+            })
+            .then(res => {
+              // Nếu response không phải JSON (ví dụ lỗi 403), trả về object lỗi
+              if (res.headers.get('content-type') && res.headers.get('content-type').includes('application/json')) {
+                return res.json();
+              } else {
+                return { success: false, message: 'Lỗi hệ thống hoặc không có quyền.' };
+              }
+            })
+            .then(data => {
+              console.log('Server response:', data);
+              if (data.success) {
+                // Nếu có redirect_url thì chuyển hướng đúng URL, kèm message
+                localStorage.setItem('redirect_alert_message', data.message || 'Thao tác thành công!');
+
+                if (data.redirect_url) {
+                  window.location.href = data.redirect_url;
+                } else {
+                  window.location.reload(); // reload lại trang hiện tại nếu không có redirect_url
+                }
+              } else {
+                showAlert(data.message || 'Thao tác không thành công!');
+              }
+            })
+            .catch(err => {
+              showAlert('Lỗi AJAX hoặc hệ thống!');
+              console.error('AJAX error:', err);
+            });
+          });
+        });
+      });
+    </script>
+
+  </body>
+</html>

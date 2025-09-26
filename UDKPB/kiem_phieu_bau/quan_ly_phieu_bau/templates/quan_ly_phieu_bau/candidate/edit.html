@@ -1,0 +1,38 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Sửa ứng cử
+viên{%endblock %} {% block content %}
+<h2>Sửa ứng cử viên</h2>
+<form method="post" enctype="multipart/form-data" class="ajax-form">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label">Tên ứng cử viên</label>
+    <input
+      type="text"
+      name="name"
+      class="form-control"
+      value="{{ candidate.name }}"
+      required
+    />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Mô tả</label>
+    <textarea name="description" class="form-control">
+{{ candidate.description|default_if_none:'' }}</textarea
+    >
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Ảnh (URL)</label>
+    <input
+      type="url"
+      name="image_url"
+      class="form-control"
+      value="{{ candidate.image_url|default_if_none:'' }}"
+    />
+  </div>
+  <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+  <a
+    href="{% url 'poll_detail' candidate.poll.poll_id %}"
+    class="btn btn-secondary ms-2"
+    >Quay lại</a
+  >
+</form>
+{% endblock %}

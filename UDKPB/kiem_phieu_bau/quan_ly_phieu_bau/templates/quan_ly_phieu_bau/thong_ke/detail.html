@@ -1,0 +1,45 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Chi tiết thống kê
+cuộc bỏ phiếu{% endblock %} {% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h2 class="me-4 mb-0">Chi tiết thống kê: {{ poll.title }}</h2>
+  <span class="fs-5 text-muted">Số lượng phiếu: {{ total_ballots }}</span>
+</div>
+<div class="mb-3">
+  <span class="me-4"
+    >Bắt đầu kiểm phiếu:
+    <strong>{{ poll.counting_start_time|default_if_none:'-' }}</strong></span
+  >
+  <span
+    >Kết thúc kiểm phiếu:
+    <strong>{{ poll.counting_end_time|default_if_none:'-' }}</strong></span
+  >
+</div>
+<table class="table table-bordered table-striped">
+  <thead>
+    <tr>
+      <th>Ứng cử viên</th>
+      <th>Số lượt được chọn</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in candidate_stats %}
+    <tr>
+      <td>{{ row.name }}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="2">Không có dữ liệu.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div class="d-flex gap-2">
+  <a href="{% url 'thong_ke' %}" class="btn btn-secondary">Quay lại</a>
+  <a
+    href="{% url 'ballot_list_redirect' poll.poll_id %}"
+    class="btn btn-primary"
+    >Danh sách phiếu bầu</a
+  >
+</div>
+{% endblock %}

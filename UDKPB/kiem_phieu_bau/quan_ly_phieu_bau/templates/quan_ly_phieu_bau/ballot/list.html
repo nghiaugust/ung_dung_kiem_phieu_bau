@@ -1,0 +1,102 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %} Danh sách phiếu
+bầu {% endblock %} {% block content %}
+<!-- Tiêu đề hiển thị tên cuộc bỏ phiếu -->
+<h2>Danh sách phiếu bầu cho cuộc bỏ phiếu: {{ poll.title }}</h2>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <a href="{% url 'poll_detail' poll.poll_id %}" class="btn btn-secondary"
+      >Quay lại</a
+    >
+    <a
+      href="{% url 'ballot_list' poll.poll_id %}?filter=valid"
+      class="btn btn-success ms-2"
+      >Phiếu hợp lệ</a
+    >
+    <a
+      href="{% url 'ballot_list' poll.poll_id %}?filter=invalid"
+      class="btn btn-danger ms-2"
+      >Phiếu không hợp lệ</a
+    >
+  </div>
+  <div>
+    <a
+      href="{% url 'delete_all_ballots' poll.poll_id %}"
+      class="btn btn-outline-danger"
+      onclick="return confirm('Bạn có chắc muốn xoá tất cả phiếu bầu?');"
+      >Xoá tất cả</a
+    >
+  </div>
+</div>
+
+<!-- Bảng hiển thị danh sách phiếu bầu -->
+<table class="table table-bordered table-striped">
+  <thead>
+    <tr>
+      <th>STT</th>
+      <th>Tên phiếu bầu</th>
+      <th>Thời gian bỏ phiếu</th>
+      <th>Ảnh phiếu bầu</th>
+      <th>Đã kiểm phiếu</th>
+      <th>Hợp lệ</th>
+      <th>Thao tác</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for ballot in ballots %}
+    <tr>
+      <!-- Số thứ tự -->
+      <td>{{ forloop.counter }}</td>
+      <!-- Tên phiếu bầu -->
+      <td>
+        {% if ballot.ballot_name %} {{ ballot.ballot_name }} {% else %} - {% endif %}
+      </td>
+      <!-- Thời gian bỏ phiếu -->
+      <td>{{ ballot.timestamp|default_if_none:'-' }}</td>
+
+      <!-- Ảnh phiếu bầu -->
+      <td>
+        {% if ballot.ballot_file_path %}
+        <a href="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}" target="_blank">
+          <img
+            src="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}"
+            alt="Ảnh phiếu"
+            style="max-width: 80px; max-height: 80px; object-fit: contain"
+          />
+        </a>
+        {% else %} - {% endif %}
+      </td>
+      <!-- Trạng thái kiểm phiếu -->
+      <td>{% if ballot.is_checked %}✅{% else %}❌{% endif %}</td>
+      <!-- Trạng thái hợp lệ -->
+      <td>
+        {% if ballot.is_valid %} ✅ {% elif ballot.is_valid == False %} ❌ {% else %} - {% endif %}
+      </td>
+      <td>
+        <div class="d-flex gap-1">
+          <a
+            href="{% url 'ballot_detail' ballot.ballot_id %}"
+            class="btn btn-info btn-sm px-2 py-1"
+            style="font-size: 0.85rem"
+            >Chỉnh sửa</a
+          >
+          <a
+            href="{% url 'delete_ballot' ballot.ballot_id %}"
+            class="btn btn-danger btn-sm px-2 py-1"
+            style="font-size: 0.85rem"
+            onclick="return confirm('Bạn có chắc muốn xoá phiếu bầu này?');"
+            >Xoá</a
+          >
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Thông báo khi không có phiếu bầu -->
+{% if not ballots %}
+<p>Chưa có phiếu bầu nào.</p>
+{% endif %}
+
+{% endblock %}

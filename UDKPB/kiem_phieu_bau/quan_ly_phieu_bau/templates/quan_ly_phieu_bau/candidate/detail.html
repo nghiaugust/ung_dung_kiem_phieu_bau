@@ -1,0 +1,40 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Chi tiết ứng cử viên{% endblock %} {% block content %}
+  <h2>Chi tiết ứng cử viên</h2>
+  <table class="table table-bordered w-auto">
+    <tr>
+      <th>ID</th>
+      <td>{{ candidate.candidate_id }}</td>
+    </tr>
+    <tr>
+      <th>Tên ứng cử viên</th>
+      <td>{{ candidate.name }}</td>
+    </tr>
+    <tr>
+      <th>Mô tả</th>
+      <td>{{ candidate.description }}</td>
+    </tr>
+    <tr>
+      <th>Ảnh</th>
+      <td>
+        {% if candidate.image_url %}<img
+          src="{{ candidate.image_url }}"
+          alt="Ảnh ứng cử viên"
+          style="max-width: 120px"
+        />{% else %}Chưa có{% endif %}
+      </td>
+    </tr>
+    <tr>
+      <th>Cuộc bỏ phiếu</th>
+      <td>{{ candidate.poll.title }}</td>
+    </tr>
+  </table>
+  <a
+    href="{% url 'poll_detail' candidate.poll.poll_id %}"
+    class="btn btn-secondary"
+    >Quay lại</a
+  >
+  <a
+    href="{% url 'edit_candidate' candidate.candidate_id %}"
+    class="btn btn-primary ms-2"
+    >Sửa</a>
+{% endblock %}

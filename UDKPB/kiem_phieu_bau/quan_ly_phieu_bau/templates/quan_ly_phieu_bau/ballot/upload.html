@@ -1,0 +1,25 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Tải lên danh sách
+phiếu bầu{% endblock %} {% block content %}
+<div class="container py-4">
+  <h2>Tải lên danh sách phiếu bầu cho cuộc bỏ phiếu: {{ poll.title }}</h2>
+  <form method="post" enctype="multipart/form-data" class="ajax-form">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label">Chọn các file phiếu bầu</label>
+      <input
+        type="file"
+        name="ballot_files"
+        class="form-control"
+        multiple
+        required
+      />
+    </div>
+    <button type="submit" class="btn btn-primary">Tải lên</button>
+    <a
+      href="{% url 'poll_detail' poll.poll_id %}"
+      class="btn btn-secondary ms-2"
+      >Quay lại</a
+    >
+  </form>
+</div>
+{% endblock %}

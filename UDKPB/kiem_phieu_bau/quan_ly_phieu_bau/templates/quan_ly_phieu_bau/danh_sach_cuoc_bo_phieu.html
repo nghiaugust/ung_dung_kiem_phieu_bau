@@ -1,0 +1,55 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Danh sách cuộc bỏ
+phiếu{% endblock %} {% block content %}
+<h2>Danh sách cuộc bỏ phiếu</h2>
+<table class="table table-bordered table-hover" class="ajax-form">
+  <thead>
+    <tr>
+      <th class="w-auto">Tên</th>
+      <th class="w-25">Mô tả</th>
+      <th class="w-auto">Ngày</th>
+      <th class="w-auto">Số ứng viên</th>
+      <th class="w-auto">Số phiếu</th>
+      <th class="w-auto">Trạng thái</th>
+      <th class="w-auto"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for poll in polls %}
+    <tr>
+      <td class="w-auto">{{ poll.title }}</td>
+      <td class="w-25">{{ poll.description|truncatechars:120 }}</td>
+      <td class="w-auto">{{ poll.start_time|date:'d/m/Y H:i' }}</td>
+      <td class="w-auto">{{ poll.candidate_set.count }}</td>
+      <td class="w-auto">{{ poll.ballot_set.count }}</td>
+      <td>
+        {% if poll.status == 'scheduled' %}Chờ diễn ra 
+        {% elif poll.status == 'ongoing' %}Đang diễn ra 
+        {% elif poll.status == 'closed' %}Đã đóng 
+        {% elif poll.status == 'counted' %}Đã kiểm phiếu 
+        {% elif poll.status == 'published' %}Đã công bố 
+        {% elif poll.status == 'locked' %}Đã khoá 
+        {% elif poll.status == 'cancelled' %}Đã huỷ 
+        {% else %}{{ poll.status }}{% endif %}
+      </td>
+      <td>
+        <a
+          href="{% url 'poll_detail' poll.poll_id %}"
+          class="btn btn-sm btn-info"
+          >Chi tiết</a
+        >
+        <a
+          href="{% url 'delete_poll' poll.poll_id %}"
+          class="btn btn-sm btn-danger ms-1"
+          onclick="return confirm('Bạn có chắc muốn xoá cuộc bỏ phiếu này?');"
+          >Xoá</a
+        >
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="7" class="text-center">Chưa có cuộc bỏ phiếu nào.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

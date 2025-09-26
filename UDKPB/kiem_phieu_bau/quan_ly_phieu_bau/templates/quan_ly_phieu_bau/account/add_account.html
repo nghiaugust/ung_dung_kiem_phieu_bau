@@ -1,0 +1,40 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Thêm tài
+khoản{%endblock %} {% block content %}
+<h2>Thêm tài khoản</h2>
+<form method="post" class="ajax-form">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label">Tên đăng nhập</label>
+    <input type="text" name="username" class="form-control" required />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Họ tên</label>
+    <input type="text" name="name" class="form-control" required />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Email</label>
+    <input type="email" name="email" class="form-control" required />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Mật khẩu</label>
+    <input type="password" name="password" class="form-control" required />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Vai trò</label>
+    <select name="role" class="form-select">
+      <option value="user">User</option>
+      <option value="assistant">Assistant</option>
+      <option value="admin">Admin</option>
+    </select>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Trạng thái</label>
+    <select name="is_active" class="form-select">
+      <option value="1">Hoạt động</option>
+      <option value="0">Bị khoá</option>
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Thêm</button>
+  <a href="{% url 'account_list' %}" class="btn btn-secondary">Huỷ</a>
+</form>
+{% endblock %}

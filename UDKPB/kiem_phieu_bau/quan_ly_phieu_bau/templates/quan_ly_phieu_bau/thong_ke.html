@@ -1,0 +1,48 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Thống kê{% endblock%} {% block content %}
+
+<h2>Thống kê các cuộc bỏ phiếu</h2>
+<table class="table table-bordered table-striped">
+  <thead>
+    <tr>
+      <th>Tên cuộc bỏ phiếu</th>
+      <th>Người được chọn nhiều nhất</th>
+      <th>Số lượng chọn</th>
+      <th>Trạng thái</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in thong_ke_data %}
+    <tr>
+      <td>{{ row.poll_title }}</td>
+      <td>
+        {% if row.top_count == 0 %}Chưa có{% else %}{{ row.top_candidate }}{% endif %}
+      </td>
+      <td>{{ row.top_count }}</td>
+      <td>
+        {% if row.status == 'scheduled' %}Chờ diễn ra
+        {% elif row.status == 'ongoing' %}Đang diễn ra
+        {% elif row.status == 'closed' %}Đã đóng
+        {% elif row.status == 'counted' %}Đã kiểm phiếu
+        {% elif row.status == 'published' %}Đã công bố
+        {% elif row.status == 'locked' %}Đã khoá
+        {% elif row.status == 'cancelled' %}Đã huỷ
+        {% else %}{{ row.status }}{% endif %}
+      </td>
+      <td>
+        <a
+          href="{% url 'thong_ke_detail' row.poll_id %}"
+          class="btn btn-info btn-sm"
+          >Chi tiết</a
+        >
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="4">Không có dữ liệu.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

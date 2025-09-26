@@ -1,0 +1,37 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Tạo cuộc bỏ
+phiếu{%endblock %} {% block content %}
+<h2>Tạo cuộc bỏ phiếu</h2>
+<form method="post" class="ajax-form">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label">Tiêu đề</label>
+    <input type="text" name="title" class="form-control" required />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Mô tả</label>
+    <textarea name="description" class="form-control"></textarea>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Thời gian bắt đầu</label>
+    <input type="datetime-local" name="start_time" class="form-control" />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Thời gian kết thúc</label>
+    <input type="datetime-local" name="end_time" class="form-control" />
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Trạng thái</label>
+    <select name="status" class="form-select">
+      <option value="ongoing">Đang diễn ra</option>
+      <option value="scheduled">Chờ diễn ra</option>
+      <option value="closed">Đã đóng</option>
+      <option value="counted">Đã kiểm phiếu</option>
+      <option value="published">Đã công bố</option>
+      <option value="locked">Đã khoá</option>
+      <option value="cancelled">Đã huỷ</option>
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Tạo cuộc bỏ phiếu</button>
+  <button type="reset" class="btn btn-secondary">Làm mới</button>
+</form>
+{% endblock %}
