@@ -47,8 +47,13 @@ python manage.py migrate
 cd UDKPB/kiem_phieu_bau
 python manage.py collectstatic
 ```
+## 7. Tạo tài khoản admin
 
-## 7. Chạy server
+```powershell
+cd UDKPB/kiem_phieu_bau
+python manage.py shell -c "from quan_ly_phieu_bau.models import Account; Account.objects.create_user('admin', password='1', role='admin')"
+```
+## 8. Chạy server
 
 - Dev:
   ```powershell
