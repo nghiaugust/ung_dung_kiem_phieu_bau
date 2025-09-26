@@ -26,6 +26,21 @@ python -c "from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoP
 
 ## 4. Cấu hình file `settings.py`
 
+- Tạo database udkpb và đổi password
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'udkpb',
+        'USER': 'root',
+        'PASSWORD': 'root',
+        'HOST': 'localhost',
+        'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+    }
+}
+
 - Đổi `DEBUG = False` khi chạy production.
 - Sửa `ALLOWED_HOSTS` thành domain hoặc IP server thật.
 - Thêm dòng sau vào cuối file để collect static files:

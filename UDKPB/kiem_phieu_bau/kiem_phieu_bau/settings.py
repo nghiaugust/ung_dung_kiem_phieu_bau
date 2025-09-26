@@ -139,8 +139,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Sử dụng Account làm user model mặc định
-# Sử dụng Account làm user model mặc định
 AUTH_USER_MODEL = 'quan_ly_phieu_bau.Account'
 
 # Đường dẫn login cho login_required
 LOGIN_URL = '/login/'
+
+# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
