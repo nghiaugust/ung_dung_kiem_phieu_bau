@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -13,21 +14,47 @@
         color: #222;
       }
       .header {
-        background: #1976d2;
+        background: #3d8bfd;
         color: #fff;
         padding: 0 32px;
-        font-size: 1.5rem;
-        font-weight: bold;
-        letter-spacing: 1px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        height: 64px;
+        height: 80px;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+      }
+      .logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #fff;
+        margin-right: 18px;
+        object-fit: cover;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      }
+      .header-text {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
       .header-title {
-        font-size: 1.5rem;
+        font-size: 1.6rem;
         font-weight: bold;
+        line-height: 1.2;
+      }
+      .header-sub {
+        font-size: 1.05rem;
+        font-weight: 400;
+        margin-top: 2px;
+        color: #fff;
+        opacity: 0.9;
       }
       .nav-menu {
         display: flex;
@@ -54,11 +81,18 @@
         padding: 32px;
       }
     </style>
+    <link rel="stylesheet" href="{% static 'css/small-h2.css' %}" />
     {% block extra_head %}{% endblock %}
   </head>
   <body>
     <div class="header">
-      <div class="header-title">Hệ thống kiểm phiếu bầu</div>
+      <div style="display: flex; align-items: center;">
+        <img src="{% static 'logo/kma.png' %}" alt="Logo" class="logo" />
+        <div style="display: flex; flex-direction: column; margin-left: 12px;">
+          <span style="font-size: 1.5rem; font-weight: bold;">Học viện Kỹ thuật Mật mã</span>
+          <span style="font-size: 1.05rem; font-weight: 400;">Hệ thống kiểm phiếu bầu</span>
+        </div>
+      </div>
       <nav class="nav-menu">
         <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Home</a>
         <a href="/tao_cuoc_bo_phieu/" {% if request.path == '/tao_cuoc_bo_phieu/' %}class="active"{% endif %}>Tạo cuộc bỏ phiếu</a>

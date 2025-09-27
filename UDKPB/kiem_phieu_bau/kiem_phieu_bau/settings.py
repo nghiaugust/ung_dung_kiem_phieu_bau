@@ -122,11 +122,12 @@ USE_I18N = True
 
 USE_TZ = True
 
-
+import os
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 # Media files (user uploads)
 import os
@@ -144,4 +145,4 @@ AUTH_USER_MODEL = 'quan_ly_phieu_bau.Account'
 # Đường dẫn login cho login_required
 LOGIN_URL = '/login/'
 
-# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
