@@ -24,7 +24,28 @@ cd UDKPB/ballot_processing_system
 python -c "from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoProcessor; AutoModelForVision2Seq.from_pretrained('microsoft/trocr-base-printed', cache_dir='model_trocr'); AutoTokenizer.from_pretrained('microsoft/trocr-base-printed', cache_dir='model_trocr'); AutoProcessor.from_pretrained('microsoft/trocr-base-printed', cache_dir='model_trocr')"
 ```
 
-## 4. Cấu hình file `settings.py`
+## 4. Cấu hình `settings.py`
+- thêm file .env trong UDKPB/kiem_phieu_bau
+cấu trúc:
+# Django settings
+SECRET_KEY=
+ALLOWED_HOSTS=
+CSRF_TRUSTED_ORIGINS=
+
+# Database settings
+DB_ENGINE=
+DB_NAME=
+DB_USER=
+DB_PASSWORD=
+DB_HOST=
+DB_PORT=
+
+# Static & Media
+STATIC_URL=
+STATIC_ROOT=
+MEDIA_URL=
+MEDIA_ROOT=
+
 
 - Tạo database udkpb và đổi password
 DATABASES = {

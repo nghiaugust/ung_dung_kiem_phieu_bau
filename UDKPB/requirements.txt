@@ -6,3 +6,4 @@ opencv-python
 numpy
 ultralytics
 mysqlclient
+python-dotenv

@@ -184,10 +184,10 @@ def edit_account(request, account_id):
 		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
 			return JsonResponse({
 				'success': True,
-				'redirect_url': reverse('account_profile'),
+				'redirect_url': reverse('account_list'),
 				'message': 'Cập nhật tài khoản thành công!'
 			})
-		return redirect('account_profile')
+		return redirect('account_list')
 	return render(request, 'quan_ly_phieu_bau/account/edit_account.html', {'account': account})
 
 @login_required
@@ -258,7 +258,7 @@ def tao_cuoc_bo_phieu(request):
 		counting_start_time = request.POST.get('counting_start_time')
 		counting_end_time = request.POST.get('counting_end_time')
 		status = request.POST.get('status')
-		created_by = request.user.id if request.user.is_authenticated else None
+		created_by = request.user if request.user.is_authenticated else None
 		poll = Poll.objects.create(
 			title=title,
 			description=description,
@@ -291,7 +291,14 @@ def danh_sach_cuoc_bo_phieu(request):
 				'message': 'Bạn không có quyền truy cập chức năng này!'
 			})
 		return redirect('permission_denied')
-	polls = Poll.objects.all().order_by('-start_time')
+	if request.user.role == 'admin':
+		# Nếu là admin, lấy TẤT CẢ các cuộc bỏ phiếu
+		polls_queryset = Poll.objects.all()
+	else: 
+		# Nếu là assistant, chỉ lấy các cuộc bỏ phiếu có 'created_by' là chính người dùng này
+		polls_queryset = Poll.objects.filter(created_by=request.user)
+
+	polls = polls_queryset.order_by('-start_time')
 	return render(request, 'quan_ly_phieu_bau/danh_sach_cuoc_bo_phieu.html', {'polls': polls})
 
 @login_required
@@ -318,7 +325,7 @@ def poll_detail(request, poll_id):
 	created_by_username = None
 	if poll.created_by:
 		try:
-			created_by_username = Account.objects.get(id=poll.created_by).username
+			created_by_username = poll.created_by.username if poll.created_by else None
 		except Account.DoesNotExist:
 			created_by_username = poll.created_by
 

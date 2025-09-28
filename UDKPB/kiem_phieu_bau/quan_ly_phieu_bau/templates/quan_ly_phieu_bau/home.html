@@ -1,185 +1,342 @@
 {% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Home{% endblock %}{% block content %}
 
 <!-- Thư viện cho Demo So Sánh Ảnh -->
-<script type="module" src="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/index.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/style.css" />
+<script
+  type="module"
+  src="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/index.js"
+></script>
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/style.css"
+/>
 
 <!-- CSS tùy chỉnh cho các hiệu ứng đặc biệt -->
 <style>
-    .feature-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 4rem;
-        height: 4rem;
-        border-radius: 50%;
-    }
+  h1,
+  .display-4,
+  .display-3,
+  .display-5 {
+    font-size: 1.5rem !important;
+  }
+  h2,
+  .display-5 {
+    font-size: 1.4rem !important;
+  }
+  h3 {
+    font-size: 1rem !important;
+  }
+  p,
+  .lead {
+    font-size: 0.95rem !important;
+  }
+  .fw-bold {
+    font-weight: 500 !important;
+  }
+  .fs-4 {
+    font-size: 1.2rem !important;
+  }
+  .card-title {
+    font-size: 1.2rem !important;
+  }
+  h5 {
+    font-size: 1.2rem !important;
+  }
+  .feature-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+  }
 
-    .feature-card {
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
+  .feature-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
 
-    .feature-card:hover {
-        transform: translateY(-10px);
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-    }
-    
-    /* Hiệu ứng Fade-in khi cuộn */
-    .fade-in-up {
-        opacity: 0;
-        transform: translateY(30px);
-        transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-    }
+  .feature-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+  }
 
-    .fade-in-up.is-visible {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  /* Hiệu ứng Fade-in khi cuộn */
+  .fade-in-up {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  }
 
-    /* Tùy chỉnh thanh trượt so sánh ảnh */
-    img-comparison-slider {
-        --divider-width: 3px;
-        --divider-color: #0d6efd;
-        --handle-size: 50px;
-        --handle-color: #0d6efd;
-    }
+  .fade-in-up.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Tùy chỉnh thanh trượt so sánh ảnh */
+  img-comparison-slider {
+    --divider-width: 3px;
+    --divider-color: #0d6efd;
+    --handle-size: 50px;
+    --handle-color: #0d6efd;
+  }
 </style>
 
-<script>document.querySelector('.container').classList.remove('container');</script>
+<script>
+  document.querySelector(".container").classList.remove("container");
+</script>
 
 <!-- 1. Hero Section -->
 <div class="text-center py-5">
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-lg-9">
-                <h1 class="display-4 fw-bold text-dark">Kiểm phiếu tự động với AI</h1>
-                <p class="lead mt-4 mb-5 text-muted">
-                    Giới thiệu Hệ thống kiểm phiếu bầu - một dự án nghiên cứu giúp tự động hóa công việc kiểm đếm phiếu bầu. Tiết kiệm thời gian, giảm sai sót và xem kết quả ngay lập tức.
-                </p>
-                <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
-                    <a href="#" class="btn btn-primary btn-lg px-4 fw-bold">Thử Ngay Bây Giờ</a>
-                    <a href="#demo" class="btn btn-outline-secondary btn-lg px-4">Xem Demo Hoạt Động</a>
-                </div>
-            </div>
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-9">
+        <h1 class="display-4 fw-bold text-dark">Kiểm phiếu tự động với AI</h1>
+        <p class="lead mt-4 mb-5 text-muted">
+          Giới thiệu Hệ thống kiểm phiếu bầu - một dự án nghiên cứu giúp tự động
+          hóa công việc kiểm đếm phiếu bầu. Tiết kiệm thời gian, giảm sai sót và
+          xem kết quả ngay lập tức.
+        </p>
+        <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
+          <a href="#" class="btn btn-primary btn-lg px-4 fw-bold"
+            >Thử Ngay Bây Giờ</a
+          >
+          <a href="#demo" class="btn btn-outline-secondary btn-lg px-4"
+            >Xem Demo Hoạt Động</a
+          >
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <!-- 2. "How it works" Section -->
 <section id="how-it-works" class="py-5">
-    <div class="container px-4 py-5">
-        <h2 class="text-center display-5 fw-bold mb-3">Quy trình hoạt động</h2>
-        <p class="text-center lead text-muted mb-5 pb-3">5 bước từ lúc bắt đầu cho đến khi có kết quả cuối cùng.</p>
-        <div class="row g-4 py-4 justify-content-center">
-            <!-- Step 1 -->
-            <div class="col-lg-4 col-md-6 text-center fade-in-up">
-                <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" class="bi bi-file-earmark-plus" viewBox="0 0 16 16"><path d="M8 6.5a.5.5 0 0 1 .5.5v1.5H10a.5.5 0 0 1 0 1H8.5V11a.5.5 0 0 1-1 0V9.5H6a.5.5 0 0 1 0-1h1.5V7a.5.5 0 0 1 .5-.5z"/><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
-                </div>
-                <h3 class="fw-bold fs-4">1. Tạo cuộc bỏ phiếu</h3>
-                <p class="text-muted">Khởi tạo một cuộc bỏ phiếu mới với các thông tin cơ bản như tên và ngày tổ chức.</p>
-            </div>
-            <!-- Step 2 -->
-            <div class="col-lg-4 col-md-6 text-center fade-in-up">
-                <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" class="bi bi-person-plus" viewBox="0 0 16 16"><path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H1s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C9.516 10.68 8.289 10 6 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/><path fill-rule="evenodd" d="M13.5 5a.5.5 0 0 1 .5.5V7h1.5a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0V8h-1.5a.5.5 0 0 1 0-1H13V5.5a.5.5 0 0 1 .5-.5z"/></svg>
-                </div>
-                <h3 class="fw-bold fs-4">2. Thêm ứng viên</h3>
-                <p class="text-muted">Nhập danh sách các ứng viên hoặc các lựa chọn có trong phiếu bầu của bạn.</p>
-            </div>
-             <!-- Step 3 -->
-            <div class="col-lg-4 col-md-6 text-center fade-in-up">
-                <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" class="bi bi-cloud-arrow-up" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M7.646 5.146a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2z"/><path d="M4.406 3.342A5.53 5.53 0 0 1 8 2c2.69 0 4.923 2 5.166 4.579C14.758 6.804 16 8.137 16 9.773 16 11.569 14.502 13 12.687 13H3.781C1.708 13 0 11.366 0 9.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383zm.653.757c-.757.653-1.153 1.44-1.153 2.056v.448l-.445.049C2.064 6.805 1 7.952 1 9.318 1 10.785 2.23 12 3.781 12h8.906C13.98 12 15 10.988 15 9.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 4.825 10.328 3 8 3a4.53 4.53 0 0 0-2.941 1.1z"/></svg>
-                </div>
-                <h3 class="fw-bold fs-4">3. Tải phiếu lên</h3>
-                <p class="text-muted">Tải lên hình ảnh chứa các lá phiếu cần kiểm. Hệ thống hỗ trợ xử lý hàng loạt.</p>
-            </div>
+  <div class="container px-4 py-5">
+    <h2 class="text-center display-5 fw-bold mb-3">Quy trình hoạt động</h2>
+    <p class="text-center lead text-muted mb-5 pb-3">
+      5 bước từ lúc bắt đầu cho đến khi có kết quả cuối cùng.
+    </p>
+    <div class="row g-4 py-4 justify-content-center">
+      <!-- Step 1 -->
+      <div class="col-lg-4 col-md-6 text-center fade-in-up">
+        <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            fill="currentColor"
+            class="bi bi-file-earmark-plus"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M8 6.5a.5.5 0 0 1 .5.5v1.5H10a.5.5 0 0 1 0 1H8.5V11a.5.5 0 0 1-1 0V9.5H6a.5.5 0 0 1 0-1h1.5V7a.5.5 0 0 1 .5-.5z"
+            />
+            <path
+              d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"
+            />
+          </svg>
         </div>
-        <div class="row g-4 py-4 justify-content-center">
-             <!-- Step 4 -->
-            <div class="col-lg-4 col-md-6 text-center fade-in-up">
-                <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" class="bi bi-cpu" viewBox="0 0 16 16"><path d="M5 0a.5.5 0 0 1 .5.5V2h5V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-5v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3h6A1.5 1.5 0 0 1 12 4.5v6A1.5 1.5 0 0 1 10.5 12h-6A1.5 1.5 0 0 1 3 10.5v-6A1.5 1.5 0 0 1 4.5 3zM5 4.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zM5 7.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1z"/></svg>
-                </div>
-                <h3 class="fw-bold fs-4">4. AI tự động kiểm phiếu</h3>
-                <p class="text-muted">Hệ thống tự động nhận diện và trích xuất dữ liệu từ mỗi lá phiếu sử dụng mô hình deeplearning và transformer.</p>
-            </div>
-             <!-- Step 5 -->
-            <div class="col-lg-4 col-md-6 text-center fade-in-up">
-                <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" class="bi bi-bar-chart-line" viewBox="0 0 16 16"><path d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1V2zm1 12h2V2h-2v12zm-3 0V7H7v7h2zm-5 0v-3H2v3h2z"/></svg>
-                </div>
-                <h3 class="fw-bold fs-4">5. Nhận kết quả thống kê</h3>
-                <p class="text-muted">Xem báo cáo thống kê trực quan và tải về kết quả chi tiết ngay lập tức.</p>
-            </div>
+        <h3 class="fw-bold fs-4">1. Tạo cuộc bỏ phiếu</h3>
+        <p class="text-muted">
+          Khởi tạo một cuộc bỏ phiếu mới với các thông tin cơ bản như tên và
+          ngày tổ chức.
+        </p>
+      </div>
+      <!-- Step 2 -->
+      <div class="col-lg-4 col-md-6 text-center fade-in-up">
+        <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            fill="currentColor"
+            class="bi bi-person-plus"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H1s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C9.516 10.68 8.289 10 6 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"
+            />
+            <path
+              fill-rule="evenodd"
+              d="M13.5 5a.5.5 0 0 1 .5.5V7h1.5a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0V8h-1.5a.5.5 0 0 1 0-1H13V5.5a.5.5 0 0 1 .5-.5z"
+            />
+          </svg>
         </div>
+        <h3 class="fw-bold fs-4">2. Thêm ứng viên</h3>
+        <p class="text-muted">
+          Nhập danh sách các ứng viên hoặc các lựa chọn có trong phiếu bầu của
+          bạn.
+        </p>
+      </div>
+      <!-- Step 3 -->
+      <div class="col-lg-4 col-md-6 text-center fade-in-up">
+        <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            fill="currentColor"
+            class="bi bi-cloud-arrow-up"
+            viewBox="0 0 16 16"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M7.646 5.146a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2z"
+            />
+            <path
+              d="M4.406 3.342A5.53 5.53 0 0 1 8 2c2.69 0 4.923 2 5.166 4.579C14.758 6.804 16 8.137 16 9.773 16 11.569 14.502 13 12.687 13H3.781C1.708 13 0 11.366 0 9.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383zm.653.757c-.757.653-1.153 1.44-1.153 2.056v.448l-.445.049C2.064 6.805 1 7.952 1 9.318 1 10.785 2.23 12 3.781 12h8.906C13.98 12 15 10.988 15 9.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 4.825 10.328 3 8 3a4.53 4.53 0 0 0-2.941 1.1z"
+            />
+          </svg>
+        </div>
+        <h3 class="fw-bold fs-4">3. Tải phiếu lên</h3>
+        <p class="text-muted">
+          Tải lên hình ảnh chứa các lá phiếu cần kiểm. Hệ thống hỗ trợ xử lý
+          hàng loạt.
+        </p>
+      </div>
     </div>
+    <div class="row g-4 py-4 justify-content-center">
+      <!-- Step 4 -->
+      <div class="col-lg-4 col-md-6 text-center fade-in-up">
+        <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            fill="currentColor"
+            class="bi bi-cpu"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M5 0a.5.5 0 0 1 .5.5V2h5V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-5v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3h6A1.5 1.5 0 0 1 12 4.5v6A1.5 1.5 0 0 1 10.5 12h-6A1.5 1.5 0 0 1 3 10.5v-6A1.5 1.5 0 0 1 4.5 3zM5 4.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zM5 7.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1zm3 0a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-1z"
+            />
+          </svg>
+        </div>
+        <h3 class="fw-bold fs-4">4. AI tự động kiểm phiếu</h3>
+        <p class="text-muted">
+          Hệ thống tự động nhận diện và trích xuất dữ liệu từ mỗi lá phiếu sử
+          dụng mô hình deeplearning và transformer.
+        </p>
+      </div>
+      <!-- Step 5 -->
+      <div class="col-lg-4 col-md-6 text-center fade-in-up">
+        <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="1em"
+            height="1em"
+            fill="currentColor"
+            class="bi bi-bar-chart-line"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1V2zm1 12h2V2h-2v12zm-3 0V7H7v7h2zm-5 0v-3H2v3h2z"
+            />
+          </svg>
+        </div>
+        <h3 class="fw-bold fs-4">5. Nhận kết quả thống kê</h3>
+        <p class="text-muted">
+          Xem báo cáo thống kê trực quan và tải về kết quả chi tiết ngay lập
+          tức.
+        </p>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- 3. Features Section -->
 <section id="features" class="py-5 bg-light">
-    <div class="container px-4 py-5">
-        <div class="text-center">
-            <h2 class="display-5 fw-bold mb-3">Khám phá các tính năng chính</h2>
-            <p class="lead text-muted">Những gì Hệ thống kiểm phiếu bầu có thể giúp bạn trong công việc kiểm phiếu.</p>
-        </div>
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4 mt-5">
-            <div class="col fade-in-up">
-                <div class="card h-100 border-0 shadow-sm feature-card">
-                    <div class="card-body p-4">
-                        <h4 class="card-title fw-bold">Xử lý phiếu hàng loạt</h4>
-                        <p class="card-text text-muted mt-3">Tải lên nhiều phiếu cùng lúc và để AI làm phần việc còn lại, giúp bạn tiết kiệm hàng giờ làm việc thủ công.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col fade-in-up">
-                <div class="card h-100 border-0 shadow-sm feature-card">
-                    <div class="card-body p-4">
-                        <h4 class="card-title fw-bold">Độ chính xác cao</h4>
-                        <p class="card-text text-muted mt-3">Được xây dựng trên các mô hình mô hình deeplearning và transformer đã được tối ưu, hệ thống nhận diện phiếu với độ chính xác cao, hạn chế tối đa sai sót.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col fade-in-up">
-                <div class="card h-100 border-0 shadow-sm feature-card">
-                    <div class="card-body p-4">
-                        <h4 class="card-title fw-bold">Báo cáo trực quan</h4>
-                        <p class="card-text text-muted mt-3">Không còn phải tổng hợp bằng tay. Xem kết quả thống kê trực quan.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col fade-in-up">
-                <div class="card h-100 border-0 shadow-sm feature-card">
-                    <div class="card-body p-4">
-                        <h4 class="card-title fw-bold">Dữ liệu riêng tư</h4>
-                        <p class="card-text text-muted mt-3">Chúng tôi tôn trọng dữ liệu của bạn và không lưu trữ hình ảnh phiếu sau khi phiên làm việc kết thúc.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="container px-4 py-5">
+    <div class="text-center">
+      <h2 class="display-5 fw-bold mb-3">Khám phá các tính năng chính</h2>
+      <p class="lead text-muted">
+        Những gì Hệ thống kiểm phiếu bầu có thể giúp bạn trong công việc kiểm
+        phiếu.
+      </p>
     </div>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4 mt-5">
+      <div class="col fade-in-up">
+        <div class="card h-100 border-0 shadow-sm feature-card">
+          <div class="card-body p-4">
+            <h4 class="card-title fw-bold">Xử lý phiếu hàng loạt</h4>
+            <p class="card-text text-muted mt-3">
+              Tải lên nhiều phiếu cùng lúc và để AI làm phần việc còn lại, giúp
+              bạn tiết kiệm hàng giờ làm việc thủ công.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="col fade-in-up">
+        <div class="card h-100 border-0 shadow-sm feature-card">
+          <div class="card-body p-4">
+            <h4 class="card-title fw-bold">Độ chính xác cao</h4>
+            <p class="card-text text-muted mt-3">
+              Được xây dựng trên các mô hình mô hình deeplearning và transformer
+              đã được tối ưu, hệ thống nhận diện phiếu với độ chính xác cao, hạn
+              chế tối đa sai sót.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="col fade-in-up">
+        <div class="card h-100 border-0 shadow-sm feature-card">
+          <div class="card-body p-4">
+            <h4 class="card-title fw-bold">Báo cáo trực quan</h4>
+            <p class="card-text text-muted mt-3">
+              Không còn phải tổng hợp bằng tay. Xem kết quả thống kê trực quan.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="col fade-in-up">
+        <div class="card h-100 border-0 shadow-sm feature-card">
+          <div class="card-body p-4">
+            <h4 class="card-title fw-bold">Dữ liệu riêng tư</h4>
+            <p class="card-text text-muted mt-3">
+              Dữ liệu của bạn thuộc về bạn. Hình ảnh phiếu bạn tải lên sẽ được
+              lưu trữ bảo mật
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- 4. Demo Section -->
 <section id="demo" class="py-5">
-    <div class="container px-4 py-5">
-        <div class="text-center">
-            <h2 class="display-5 fw-bold mb-3">Xem AI của chúng tôi hoạt động</h2>
-            <p class="lead text-muted">Kéo thanh trượt để thấy sự khác biệt. Công nghệ biến sự phức tạp thành đơn giản.</p>
-        </div>
-        <div class="mt-5 pt-3 fade-in-up">
-            <div class="col-lg-10 mx-auto rounded overflow-hidden shadow-lg border">
-                 <img-comparison-slider>
-                    <img slot="first" src="https://placehold.co/1200x800/ffffff/333333?text=Phi%E1%BA%BFu+B%E1%BA%A7u+G%E1%BB%91c" alt="Phiếu bầu gốc">
-                    <img slot="second" src="https://placehold.co/1200x800/ffffff/1d4ed8?text=AI+%C4%90%C3%A3+X%E1%BB%AD+L%C3%BD%0A(bounding+box+%2B+OCR)" alt="Phiếu bầu đã xử lý">
-                </img-comparison-slider>
-            </div>
-        </div>
-        <div class="mt-5 col-lg-10 mx-auto fade-in-up">
-            <h3 class="text-center fs-4 fw-semibold mb-4">Kết quả được cấu trúc hóa</h3>
-            <div class="bg-dark rounded p-4">
-                <pre class="text-light mb-0" style="white-space: pre-wrap; word-break: break-all;"><code class="language-json">{
+  <div class="container px-4 py-5">
+    <div class="text-center">
+      <h2 class="display-5 fw-bold mb-3">Xem AI của chúng tôi hoạt động</h2>
+      <p class="lead text-muted">
+        Kéo thanh trượt để thấy sự khác biệt. Công nghệ biến sự phức tạp thành
+        đơn giản.
+      </p>
+    </div>
+    <div class="mt-5 pt-3 fade-in-up">
+      <div class="col-lg-10 mx-auto rounded overflow-hidden shadow-lg border">
+        <img-comparison-slider>
+          <img
+            slot="first"
+            src="https://placehold.co/1200x800/ffffff/333333?text=Phi%E1%BA%BFu+B%E1%BA%A7u+G%E1%BB%91c"
+            alt="Phiếu bầu gốc"
+          />
+          <img
+            slot="second"
+            src="https://placehold.co/1200x800/ffffff/1d4ed8?text=AI+%C4%90%C3%A3+X%E1%BB%AD+L%C3%BD%0A(bounding+box+%2B+OCR)"
+            alt="Phiếu bầu đã xử lý"
+          />
+        </img-comparison-slider>
+      </div>
+    </div>
+    <div class="mt-5 col-lg-10 mx-auto fade-in-up">
+      <h3 class="text-center fs-4 fw-semibold mb-4">
+        Kết quả được cấu trúc hóa
+      </h3>
+      <div class="bg-dark rounded p-4">
+        <pre
+          class="text-light mb-0"
+          style="white-space: pre-wrap; word-break: break-all"
+        ><code class="language-json">{
   "ballot_id": "PB-2024-00123",
   "confidence_score": 0.998,
   "results": [
@@ -190,64 +347,85 @@
   "is_valid": true,
   "processed_at": "2024-10-26T14:30:00Z"
 }</code></pre>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
 </section>
 
 <!-- 5. Footer Section -->
 <footer class="pt-5 pb-4 bg-light">
-    <div class="container text-center text-md-start">
-        <div class="row">
-            <div class="col-md-4 col-lg-5 mx-auto mt-3">
-                <h5 class="text-uppercase mb-4 fw-bold text-primary">Về Hệ thống kiểm phiếu bầu</h5>
-                <p class="text-muted">
-                    Hệ thống kiểm phiếu bầu là một dự án nghiên cứu khoa học của nhóm sinh viên Học viện Kỹ thuật Mật mã, với mục tiêu ứng dụng công nghệ deeplearning kết hợp transformer để giải quyết các bài toán thực tế.
-                </p>
-            </div>
+  <div class="container text-center text-md-start">
+    <div class="row">
+      <div class="col-md-4 col-lg-5 mx-auto mt-3">
+        <h5 class="text-uppercase mb-4 fw-bold text-primary">
+          Về Hệ thống kiểm phiếu bầu
+        </h5>
+        <p class="text-muted">
+          Hệ thống kiểm phiếu bầu là một dự án nghiên cứu khoa học của nhóm sinh
+          viên Học viện Kỹ thuật Mật mã, với mục tiêu ứng dụng công nghệ
+          deeplearning kết hợp transformer để giải quyết các bài toán thực tế.
+        </p>
+      </div>
 
-            <div class="col-md-4 col-lg-4 mx-auto mt-3">
-                <h5 class="text-uppercase mb-4 fw-bold">Thành viên thực hiện</h5>
-                <p class="text-muted mb-1">Nhóm sinh viên Học viện Kỹ thuật Mật mã</p>
-                {% comment %} <p class="text-muted mb-1">Nguyễn Văn A - Lớp AT15</p>
-                <p class="text-muted mb-1">Trần Thị B - Lớp AT15</p>
-                <p class="text-muted mb-1">Lê Văn C - Lớp AT15</p> {% endcomment %}
-            </div>
+      <div class="col-md-4 col-lg-4 mx-auto mt-3">
+        <h5 class="text-uppercase mb-4 fw-bold">Thành viên thực hiện</h5>
+        <p class="text-muted mb-1">Nhóm sinh viên Học viện Kỹ thuật Mật mã</p>
+        {% comment %}
+        <p class="text-muted mb-1">Nguyễn Văn A - Lớp AT15</p>
+        <p class="text-muted mb-1">Trần Thị B - Lớp AT15</p>
+        <p class="text-muted mb-1">Lê Văn C - Lớp AT15</p>
+        {% endcomment %}
+      </div>
 
-            <div class="col-md-4 col-lg-3 mx-auto mt-3">
-                <h5 class="text-uppercase mb-4 fw-bold">Liên kết</h5>
-                <p><a href="#!" class="text-muted text-decoration-none">Mã nguồn (Github)</a></p>
-                <p><a href="#!" class="text-muted text-decoration-none">Báo cáo dự án</a></p>
-                <p><a href="#!" class="text-muted text-decoration-none">Liên hệ gmail: <span class="text-primary">domanhnghiaforwork@gmail.com</span></a></p>
-            </div>
-        </div>
-        <hr class="my-3">
-        <div class="row align-items-center">
-            <div class="col-md-7 col-lg-8">
-                <p class="text-center text-md-start text-muted">© 2025 Copyright: Nhóm sinh viên - HVKTMM</p>
-            </div>
-        </div>
+      <div class="col-md-4 col-lg-3 mx-auto mt-3">
+        <h5 class="text-uppercase mb-4 fw-bold">Liên kết</h5>
+        <p>
+          <a href="#!" class="text-muted text-decoration-none"
+            >Mã nguồn (Github)</a
+          >
+        </p>
+        <p>
+          <a href="#!" class="text-muted text-decoration-none">Báo cáo dự án</a>
+        </p>
+        <p>
+          <a href="#!" class="text-muted text-decoration-none"
+            >Liên hệ gmail:
+            <span class="text-primary">domanhnghiaforwork@gmail.com</span></a
+          >
+        </p>
+      </div>
     </div>
+    <hr class="my-3" />
+    <div class="row align-items-center">
+      <div class="col-12">
+        <p class="text-center text-muted mb-0">
+          © 2025 Copyright: Nhóm sinh viên - HVKTMM
+        </p>
+      </div>
+    </div>
+  </div>
 </footer>
-
 
 <!-- Script cho hiệu ứng cuộn -->
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const observer = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('is-visible');
-            }
+  document.addEventListener("DOMContentLoaded", () => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+          }
         });
-    }, {
-        threshold: 0.1
-    });
+      },
+      {
+        threshold: 0.1,
+      }
+    );
 
-    document.querySelectorAll('.fade-in-up').forEach(el => {
-        observer.observe(el);
+    document.querySelectorAll(".fade-in-up").forEach((el) => {
+      observer.observe(el);
     });
-});
+  });
 </script>
 
 {% endblock %}

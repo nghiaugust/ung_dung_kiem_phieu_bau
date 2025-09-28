@@ -19,7 +19,7 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	end_time = models.DateTimeField(null=True)  # Thời gian kết thúc bỏ phiếu
 	counting_start_time = models.DateTimeField(null=True)  # Bắt đầu kiểm phiếu
 	counting_end_time = models.DateTimeField(null=True)  # Kết thúc kiểm phiếu
-	created_by = models.IntegerField(null=True)  # Người tạo (id tài khoản)
+	created_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True)  # Người tạo (id tài khoản)
 	status = models.CharField(max_length=32, null=True)  # Trạng thái
 
 class Candidate(models.Model): # ứng cử viên
