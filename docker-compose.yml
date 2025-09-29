@@ -19,7 +19,7 @@ services:
     depends_on:
       - db
     volumes:
-      - media:/app/UDKPB/kiem_phieu_bau/media          # Django MEDIA_ROOT
+      - media:/app/UDKPB/kiem_phieu_bau/media # Django MEDIA_ROOT
       - staticfiles:/app/UDKPB/kiem_phieu_bau/staticfiles # Django STATIC_ROOT
 
   db:
@@ -30,7 +30,7 @@ services:
       - MYSQL_DATABASE=udkpb
       - MYSQL_ROOT_PASSWORD=root
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - dbdata:/var/lib/mysql
 
