@@ -40,7 +40,7 @@ services:
     depends_on:
       - web
     ports:
-      - "80:80"
+      - "8088:80"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - staticfiles:/var/www/static:ro
