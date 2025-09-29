@@ -1,0 +1,52 @@
+version: "3.9"
+services:
+  web:
+    build: .
+    container_name: udkpb_web
+    restart: unless-stopped
+    env_file:
+      - UDKPB/kiem_phieu_bau/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=kiem_phieu_bau.settings
+      - PYTHONPATH=/app/UDKPB:/app/UDKPB/kiem_phieu_bau:/app/UDKPB/ballot_processing_system
+      - CREATE_ADMIN=true
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=1
+      - GUNICORN_WORKERS=2
+      - GUNICORN_THREADS=2
+      - GUNICORN_TIMEOUT=120
+    # Web will be accessed through nginx
+    depends_on:
+      - db
+    volumes:
+      - media:/app/UDKPB/kiem_phieu_bau/media          # Django MEDIA_ROOT
+      - staticfiles:/app/UDKPB/kiem_phieu_bau/staticfiles # Django STATIC_ROOT
+
+  db:
+    image: mysql:8.0
+    container_name: udkpb_db
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=udkpb
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: udkpb_nginx
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - staticfiles:/var/www/static:ro
+      - media:/var/www/media:ro
+
+volumes:
+  dbdata:
+  media:
+  staticfiles:

@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.egg-info
+.eggs
+
+venv/
+.env
+.DS_Store
+Thumbs.db
+
+# Django generated
+UDKPB/kiem_phieu_bau/staticfiles/
+UDKPB/kiem_phieu_bau/media/
+
+# Model cache (will be downloaded during build)
+UDKPB/ballot_processing_system/model_trocr/
