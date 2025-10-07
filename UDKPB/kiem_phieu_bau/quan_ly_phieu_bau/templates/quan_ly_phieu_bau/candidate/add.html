@@ -3,7 +3,13 @@ viên{%endblock %} {% block content %}
 
 <div class="row">
   <div class="col-md-6">
-    <form id="candidate-amount-form" onsubmit="return false;">
+    <form
+      method="post"
+      id="candidate-amount-form"
+      onsubmit="return false;"
+      class="ajax-form"
+    >
+      {% csrf_token %}
       <div class="mb-3">
         <label class="form-label">Số lượng ứng cử viên</label>
         <input
@@ -44,7 +50,7 @@ viên{%endblock %} {% block content %}
     <form
       method="post"
       action="{% url 'copy_candidates' poll.poll_id %}"
-      class="border p-3 bg-light rounded"
+      class="border p-3 bg-light rounded ajax-form"
       style="min-width: 300px"
     >
       {% csrf_token %}

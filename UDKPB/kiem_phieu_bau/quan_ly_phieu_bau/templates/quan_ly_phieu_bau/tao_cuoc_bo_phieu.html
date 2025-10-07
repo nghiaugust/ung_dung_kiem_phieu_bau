@@ -1,8 +1,34 @@
 {% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Tạo cuộc bỏ
 phiếu{%endblock %} {% block content %}
+
+<!-- Gợi ý tutorial -->
+{% if tutorial == 'true' %}
+<div
+  class="alert alert-info alert-dismissible fade show"
+  role="alert"
+  id="tutorialHint"
+>
+  <h5 class="alert-heading">
+    <i class="bi bi-lightbulb"></i> Bước 1: Tạo cuộc bỏ phiếu
+  </h5>
+  <p class="mb-0">
+    Hãy điền thông tin để tạo cuộc bỏ phiếu đầu tiên của bạn. Sau khi tạo xong,
+    bạn sẽ được hướng dẫn các bước tiếp theo.
+  </p>
+  <button
+    type="button"
+    class="btn-close"
+    data-bs-dismiss="alert"
+    aria-label="Close"
+  ></button>
+</div>
+{% endif %}
+
 <h2>Tạo cuộc bỏ phiếu</h2>
 <form method="post" class="ajax-form">
-  {% csrf_token %}
+  {% csrf_token %} {% if tutorial == 'true' %}
+  <input type="hidden" name="tutorial" value="true" />
+  {% endif %}
   <div class="mb-3">
     <label class="form-label">Tiêu đề</label>
     <input type="text" name="title" class="form-control" required />

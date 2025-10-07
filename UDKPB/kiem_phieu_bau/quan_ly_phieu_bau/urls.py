@@ -7,6 +7,7 @@ urlpatterns = [
     path('tai_khoan/', views.tai_khoan, name='tai_khoan'),
     
     path('login/', views.login_view, name='login'),
+    path('register/', views.register_view, name='register'),
     path('logout/', views.logout_view, name='logout'),
 
     path('account/profile/', views.account_profile, name='account_profile'),
@@ -39,6 +40,7 @@ urlpatterns = [
     path('ballot/detail/<int:ballot_id>/', views.ballot_detail, name='ballot_detail'),
     path('ballot/delete/<int:ballot_id>/', views.delete_ballot, name='delete_ballot'),
     path('ballot/view_detail/<int:ballot_id>/', views.ballot_view_detail, name='ballot_view_detail'),
+    path('ballot/download-sample-ballots/', views.download_sample_ballots, name='download_sample_ballots'),
     
     path('thong_ke/', views.thong_ke, name='thong_ke'),
     path('thong_ke/<int:poll_id>/', views.thong_ke_detail, name='thong_ke_detail'),

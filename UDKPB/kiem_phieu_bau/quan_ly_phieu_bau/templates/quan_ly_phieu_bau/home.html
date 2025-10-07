@@ -1,14 +1,4 @@
-{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Home{% endblock %}{% block content %}
-
-<!-- Thư viện cho Demo So Sánh Ảnh -->
-<script
-  type="module"
-  src="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/index.js"
-></script>
-<link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/style.css"
-/>
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Home{% endblock %}{% block content %} {% load static %}
 
 <!-- CSS tùy chỉnh cho các hiệu ứng đặc biệt -->
 <style>
@@ -71,12 +61,38 @@
     transform: translateY(0);
   }
 
-  /* Tùy chỉnh thanh trượt so sánh ảnh */
-  img-comparison-slider {
-    --divider-width: 3px;
-    --divider-color: #0d6efd;
-    --handle-size: 50px;
-    --handle-color: #0d6efd;
+  /* Nút Back to Top */
+  #backToTop {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 999;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+  }
+
+  #backToTop.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  #backToTop:hover {
+    background-color: #0b5ed7;
+    transform: translateY(-5px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
   }
 </style>
 
@@ -85,18 +101,20 @@
 </script>
 
 <!-- 1. Hero Section -->
-<div class="text-center py-5">
+<div class="text-center py-4">
   <div class="container">
     <div class="row justify-content-center">
       <div class="col-lg-9">
         <h1 class="display-4 fw-bold text-dark">Kiểm phiếu tự động với AI</h1>
-        <p class="lead mt-4 mb-5 text-muted">
+        <p class="lead mt-3 mb-4 text-muted">
           Giới thiệu Hệ thống kiểm phiếu bầu - một dự án nghiên cứu giúp tự động
           hóa công việc kiểm đếm phiếu bầu. Tiết kiệm thời gian, giảm sai sót và
           xem kết quả ngay lập tức.
         </p>
         <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
-          <a href="#" class="btn btn-primary btn-lg px-4 fw-bold"
+          <a
+            href="{% url 'tao_cuoc_bo_phieu' %}?tutorial=true"
+            class="btn btn-primary btn-lg px-4 fw-bold"
             >Thử Ngay Bây Giờ</a
           >
           <a href="#demo" class="btn btn-outline-secondary btn-lg px-4"
@@ -109,13 +127,13 @@
 </div>
 
 <!-- 2. "How it works" Section -->
-<section id="how-it-works" class="py-5">
-  <div class="container px-4 py-5">
-    <h2 class="text-center display-5 fw-bold mb-3">Quy trình hoạt động</h2>
-    <p class="text-center lead text-muted mb-5 pb-3">
+<section id="how-it-works" class="py-4">
+  <div class="container px-4 py-3">
+    <h2 class="text-center display-5 fw-bold mb-2">Quy trình hoạt động</h2>
+    <p class="text-center lead text-muted mb-4">
       5 bước từ lúc bắt đầu cho đến khi có kết quả cuối cùng.
     </p>
-    <div class="row g-4 py-4 justify-content-center">
+    <div class="row g-4 py-3 justify-content-center">
       <!-- Step 1 -->
       <div class="col-lg-4 col-md-6 text-center fade-in-up">
         <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
@@ -194,7 +212,7 @@
         </p>
       </div>
     </div>
-    <div class="row g-4 py-4 justify-content-center">
+    <div class="row g-4 py-3 justify-content-center">
       <!-- Step 4 -->
       <div class="col-lg-4 col-md-6 text-center fade-in-up">
         <div class="feature-icon bg-primary bg-gradient text-white fs-2 mb-3">
@@ -244,16 +262,16 @@
 </section>
 
 <!-- 3. Features Section -->
-<section id="features" class="py-5 bg-light">
-  <div class="container px-4 py-5">
+<section id="features" class="py-4 bg-light">
+  <div class="container px-4 py-3">
     <div class="text-center">
-      <h2 class="display-5 fw-bold mb-3">Khám phá các tính năng chính</h2>
+      <h2 class="display-5 fw-bold mb-2">Khám phá các tính năng chính</h2>
       <p class="lead text-muted">
         Những gì Hệ thống kiểm phiếu bầu có thể giúp bạn trong công việc kiểm
         phiếu.
       </p>
     </div>
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4 mt-5">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4 mt-3">
       <div class="col fade-in-up">
         <div class="card h-100 border-0 shadow-sm feature-card">
           <div class="card-body p-4">
@@ -303,33 +321,83 @@
 </section>
 
 <!-- 4. Demo Section -->
-<section id="demo" class="py-5">
-  <div class="container px-4 py-5">
+<section id="demo" class="py-4">
+  <div class="container px-4 py-3">
     <div class="text-center">
-      <h2 class="display-5 fw-bold mb-3">Xem AI của chúng tôi hoạt động</h2>
+      <h2 class="display-5 fw-bold mb-2">Xem AI của chúng tôi hoạt động</h2>
       <p class="lead text-muted">
-        Kéo thanh trượt để thấy sự khác biệt. Công nghệ biến sự phức tạp thành
-        đơn giản.
+        So sánh phiếu bầu trước và sau khi xử lý bởi AI
       </p>
     </div>
-    <div class="mt-5 pt-3 fade-in-up">
-      <div class="col-lg-10 mx-auto rounded overflow-hidden shadow-lg border">
-        <img-comparison-slider>
-          <img
-            slot="first"
-            src="https://placehold.co/1200x800/ffffff/333333?text=Phi%E1%BA%BFu+B%E1%BA%A7u+G%E1%BB%91c"
-            alt="Phiếu bầu gốc"
-          />
-          <img
-            slot="second"
-            src="https://placehold.co/1200x800/ffffff/1d4ed8?text=AI+%C4%90%C3%A3+X%E1%BB%AD+L%C3%BD%0A(bounding+box+%2B+OCR)"
-            alt="Phiếu bầu đã xử lý"
-          />
-        </img-comparison-slider>
+    <div class="mt-4 pt-2 fade-in-up">
+      <div class="row col-lg-11 mx-auto align-items-center g-3">
+        <!-- Ảnh gốc -->
+        <div class="col-md-5">
+          <div class="card border-0 shadow">
+            <div class="card-header bg-secondary text-white text-center">
+              <h5 class="mb-0">Phiếu bầu gốc</h5>
+            </div>
+            <div class="card-body p-0">
+              <img
+                src="{% static 'images/ballot_original.jpg' %}"
+                alt="Phiếu bầu gốc"
+                class="img-fluid w-100"
+                style="
+                  max-height: 500px;
+                  object-fit: contain;
+                  background-color: #f8f9fa;
+                "
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Mũi tên ở giữa -->
+        <div class="col-md-2 text-center">
+          <div
+            class="d-flex justify-content-center align-items-center"
+            style="height: 100%"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="80"
+              height="80"
+              fill="#0d6efd"
+              class="bi bi-arrow-right-circle-fill"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM4.5 7.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H4.5z"
+              />
+            </svg>
+          </div>
+          <p class="text-muted mt-2 fw-bold">AI xử lý</p>
+        </div>
+
+        <!-- Ảnh đã xử lý -->
+        <div class="col-md-5">
+          <div class="card border-0 shadow">
+            <div class="card-header bg-primary text-white text-center">
+              <h5 class="mb-0">Phiếu bầu đã xử lý</h5>
+            </div>
+            <div class="card-body p-0">
+              <img
+                src="{% static 'images/ballot_detect.jpg' %}"
+                alt="Phiếu bầu đã xử lý - AI đã nhận diện"
+                class="img-fluid w-100"
+                style="
+                  max-height: 500px;
+                  object-fit: contain;
+                  background-color: #f8f9fa;
+                "
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="mt-5 col-lg-10 mx-auto fade-in-up">
-      <h3 class="text-center fs-4 fw-semibold mb-4">
+    <div class="mt-4 col-lg-10 mx-auto fade-in-up">
+      <h3 class="text-center fs-4 fw-semibold mb-3">
         Kết quả được cấu trúc hóa
       </h3>
       <div class="bg-dark rounded p-4">
@@ -337,15 +405,37 @@
           class="text-light mb-0"
           style="white-space: pre-wrap; word-break: break-all"
         ><code class="language-json">{
-  "ballot_id": "PB-2024-00123",
-  "confidence_score": 0.998,
-  "results": [
-    { "candidate": "Nguyễn Văn A", "vote": 1 },
-    { "candidate": "Trần Thị B", "vote": 0 },
-    { "candidate": "Lê Văn C", "vote": 1 }
-  ],
+  "ballot_id": 1,
+  "poll_id": 1,
   "is_valid": true,
-  "processed_at": "2024-10-26T14:30:00Z"
+  "is_checked": true,
+  "timestamp": "2024-10-26T14:30:00Z",
+  "ballot_file_path": "media/1/ballot_1.jpg",
+  "metadata": {
+    "total_candidates": 10,
+    "votes_agree": 5,
+    "votes_disagree": 5,
+    "avg_confidence": 0.845
+  },
+  "results": [
+    {
+      "stt": 1,
+      "ho_ten": "OLIVER JOHNSON",
+      "dong_y": true,
+      "khong_dong_y": false,
+      "chi_tiet": {
+        "ho_ten_ocr": "OLIVER JOHNSON",
+        "dong_y_yolo": {
+          "co_dau_x": true,
+          "confidence_x_mark": [0.8358]
+        },
+        "khong_dong_y_yolo": {
+          "co_dau_x": false
+        }
+      }
+    },
+    ...
+  ]
 }</code></pre>
       </div>
     </div>
@@ -406,9 +496,27 @@
   </div>
 </footer>
 
+<!-- Nút Back to Top -->
+<button id="backToTop" title="Về đầu trang">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    fill="currentColor"
+    class="bi bi-arrow-up"
+    viewBox="0 0 16 16"
+  >
+    <path
+      fill-rule="evenodd"
+      d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"
+    />
+  </svg>
+</button>
+
 <!-- Script cho hiệu ứng cuộn -->
 <script>
   document.addEventListener("DOMContentLoaded", () => {
+    // Hiệu ứng fade-in khi cuộn
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -424,6 +532,26 @@
 
     document.querySelectorAll(".fade-in-up").forEach((el) => {
       observer.observe(el);
+    });
+
+    // Nút Back to Top
+    const backToTopBtn = document.getElementById("backToTop");
+
+    // Hiển thị/ẩn nút khi cuộn
+    window.addEventListener("scroll", () => {
+      if (window.pageYOffset > 300) {
+        backToTopBtn.classList.add("show");
+      } else {
+        backToTopBtn.classList.remove("show");
+      }
+    });
+
+    // Cuộn lên đầu trang khi click
+    backToTopBtn.addEventListener("click", () => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
     });
   });
 </script>
