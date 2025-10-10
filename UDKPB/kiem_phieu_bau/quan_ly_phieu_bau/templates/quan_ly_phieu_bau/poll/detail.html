@@ -110,12 +110,14 @@ phiếu{% endblock %} {% block content %}
       <tr>
         <th>Trạng thái</th>
         <td>
-          {% if poll.status == 'scheduled' %}Chờ diễn ra {% elif poll.status ==
-          'ongoing' %}Đang diễn ra {% elif poll.status == 'closed' %}Đã đóng {%
-          elif poll.status == 'counted' %}Đã kiểm phiếu {% elif poll.status ==
-          'published' %}Đã công bố {% elif poll.status == 'locked' %}Đã khoá {%
-          elif poll.status == 'cancelled' %}Đã huỷ {% else %}{{ poll.status }}{%
-          endif %}
+          {% if poll.status == 'scheduled' %}Chờ diễn ra 
+          {% elif poll.status == 'ongoing' %}Đang diễn ra 
+          {% elif poll.status == 'closed' %}Đã đóng 
+          {% elif poll.status == 'counted' %}Đã kiểm phiếu 
+          {% elif poll.status == 'published' %}Đã công bố 
+          {% elif poll.status == 'locked' %}Đã khoá 
+          {% elif poll.status == 'cancelled' %}Đã huỷ 
+          {% else %}{{ poll.status }}{% endif %}
         </td>
       </tr>
     </table>
@@ -163,8 +165,7 @@ phiếu{% endblock %} {% block content %}
     <p>Chưa có ứng cử viên nào.</p>
     {% endif %}
     <div class="mt-3{% if tutorial == 'true' %} tutorial-hint{% endif %}">
-      {% if tutorial == 'true' %}<span class="tutorial-badge">2</span>{% endif
-      %}
+      {% if tutorial == 'true' %}<span class="tutorial-badge">2</span>{% endif %}
       <a href="{% url 'add_candidate' poll.poll_id %}" class="btn btn-success"
         >Thêm ứng cử viên</a
       >
@@ -186,8 +187,7 @@ phiếu{% endblock %} {% block content %}
       <li>Số phiếu không hợp lệ: {{ invalid_ballots }}</li>
     </ul>
     <div class="mb-3{% if tutorial == 'true' %} tutorial-hint{% endif %}">
-      {% if tutorial == 'true' %}<span class="tutorial-badge">1</span>{% endif
-      %}
+      {% if tutorial == 'true' %}<span class="tutorial-badge">1</span>{% endif %}
       <a href="{% url 'upload_ballots' poll.poll_id %}" class="btn btn-info"
         >Tải lên</a
       >
