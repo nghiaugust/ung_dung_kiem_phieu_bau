@@ -70,7 +70,7 @@ Tóm tắt các bước chính:
 
 ## License
 
-Dự án sử dụng mã nguồn mở, vui lòng tham khảo file LICENSE để biết chi tiết.
+Dự án sử dụng mã nguồn mở, vui lòng tham khảo file [LICENSE](LICENSE) để biết chi tiết.
 
 ---
 
