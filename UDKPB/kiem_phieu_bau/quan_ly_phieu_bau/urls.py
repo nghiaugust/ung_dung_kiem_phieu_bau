@@ -41,6 +41,8 @@ urlpatterns = [
     path('ballot/delete/<int:ballot_id>/', views.delete_ballot, name='delete_ballot'),
     path('ballot/view_detail/<int:ballot_id>/', views.ballot_view_detail, name='ballot_view_detail'),
     path('ballot/download-sample-ballots/', views.download_sample_ballots, name='download_sample_ballots'),
+    path('ballot/hau-kiem/<int:ballot_id>/', views.hau_kiem_ballot, name='hau_kiem_ballot'),
+    path('ballot/hau-kiem/<int:ballot_id>/save/', views.save_hau_kiem, name='save_hau_kiem'),
     
     path('thong_ke/', views.thong_ke, name='thong_ke'),
     path('thong_ke/<int:poll_id>/', views.thong_ke_detail, name='thong_ke_detail'),

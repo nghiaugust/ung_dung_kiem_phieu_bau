@@ -51,12 +51,18 @@ def thong_ke(request):
 		)
 		# Tìm ứng viên được chọn nhiều nhất
 		top_candidate = candidates.order_by('-num_selected', 'name').first()
+		
+		# Lấy ID của ballot đầu tiên trong poll này để dùng cho nút Hậu kiểm
+		first_ballot = Ballot.objects.filter(poll=poll).order_by('ballot_id').first()
+		first_ballot_id = first_ballot.ballot_id if first_ballot else None
+		
 		thong_ke_data.append({
 			'poll_id': poll.poll_id,
 			'poll_title': poll.title,
 			'top_candidate': top_candidate.name if top_candidate else '-',
 			'top_count': top_candidate.num_selected if top_candidate else 0,
 			'status': poll.status or '-',
+			'first_ballot_id': first_ballot_id,
 		})
 	return render(request, 'quan_ly_phieu_bau/thong_ke.html', {'thong_ke_data': thong_ke_data})
 
@@ -1084,3 +1090,105 @@ def download_sample_ballots(request):
 	response['Content-Disposition'] = 'attachment; filename="Mau_5_Phieu_Bau.zip"'
 	
 	return response
+
+@login_required
+def hau_kiem_ballot(request, ballot_id):
+	"""
+	Trang hậu kiểm - xem và chỉnh sửa kết quả kiểm phiếu
+	"""
+	ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
+	poll = ballot.poll
+	
+	# Lấy tất cả phiếu bầu của poll này (đã sắp xếp theo ID)
+	all_ballots = Ballot.objects.filter(poll=poll).order_by('ballot_id')
+	total_ballots = all_ballots.count()
+	
+	# Tìm vị trí hiện tại
+	ballot_ids = list(all_ballots.values_list('ballot_id', flat=True))
+	try:
+		current_index = ballot_ids.index(ballot_id) + 1
+	except ValueError:
+		current_index = 1
+	
+	# Tìm prev và next ballot
+	prev_ballot_id = None
+	next_ballot_id = None
+	prev_ballot_url = None
+	next_ballot_url = None
+	
+	if current_index > 1:
+		prev_ballot_id = ballot_ids[current_index - 2]
+		prev_ballot_url = reverse('hau_kiem_ballot', kwargs={'ballot_id': prev_ballot_id})
+	
+	if current_index < total_ballots:
+		next_ballot_id = ballot_ids[current_index]
+		next_ballot_url = reverse('hau_kiem_ballot', kwargs={'ballot_id': next_ballot_id})
+	
+	# Lấy danh sách ứng viên
+	candidates = Candidate.objects.filter(poll=poll).order_by('candidate_id')
+	
+	# Lấy các lựa chọn hiện tại
+	selections = Ballot_Selection.objects.filter(ballot=ballot).values_list('candidate_id', flat=True)
+	
+	# Tạo danh sách kết quả
+	ballot_results = []
+	for candidate in candidates:
+		ballot_results.append({
+			'candidate_id': candidate.candidate_id,
+			'name': candidate.name,
+			'voted': candidate.candidate_id in selections
+		})
+	
+	context = {
+		'poll': poll,
+		'current_ballot': ballot,
+		'ballot_results': ballot_results,
+		'total_ballots': total_ballots,
+		'current_index': current_index,
+		'prev_ballot_id': prev_ballot_id,
+		'next_ballot_id': next_ballot_id,
+		'prev_ballot_url': prev_ballot_url,
+		'next_ballot_url': next_ballot_url,
+	}
+	
+	return render(request, 'quan_ly_phieu_bau/thong_ke/hau_kiem.html', context)
+
+@login_required
+def save_hau_kiem(request, ballot_id):
+	"""
+	API để lưu thay đổi từ trang hậu kiểm
+	"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+	
+	try:
+		data = json.loads(request.body)
+		votes = data.get('votes', [])
+		
+		ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
+		
+		# Sử dụng transaction để đảm bảo tính toàn vẹn dữ liệu
+		with transaction.atomic():
+			# Xóa tất cả selections hiện tại của ballot này
+			Ballot_Selection.objects.filter(ballot=ballot).delete()
+			
+			# Tạo selections mới dựa trên votes
+			for vote in votes:
+				if vote.get('voted', False):
+					candidate_id = vote.get('candidate_id')
+					candidate = get_object_or_404(Candidate, candidate_id=candidate_id)
+					Ballot_Selection.objects.create(
+						ballot=ballot,
+						candidate=candidate
+					)
+		
+		return JsonResponse({
+			'success': True,
+			'message': 'Đã lưu thay đổi thành công!'
+		})
+		
+	except Exception as e:
+		return JsonResponse({
+			'success': False,
+			'message': str(e)
+		}, status=500)
