@@ -795,6 +795,18 @@ def counting_stream_generator(poll_id):
 		poll.status = 'counted'
 		poll.save(update_fields=["counting_end_time", "status"])
 
+		# Chạy lệnh kiểm phiếu bằng subprocess (không chờ hoàn thành)
+		cmd = [
+			'python',
+			'-m', 'processors.yolo_detection',
+			'--input_dir', input_dir,
+			'--output_dir', input_dir
+		]
+		# Xác định đường dẫn tuyệt đối tới ballot_processing_system
+		ballot_processing_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../ballot_processing_system'))
+		#proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ballot_processing_dir)
+		proc = subprocess.Popen(cmd, cwd=ballot_processing_dir)
+
 		# Giai đoạn cuối: Báo cáo thành công
 		success_data = {'message': 'Kiểm phiếu hoàn tất!', 'progress': 100}
 		yield f"data: {json.dumps(success_data)}\n\n"
@@ -1139,6 +1151,11 @@ def hau_kiem_ballot(request, ballot_id):
 			'voted': candidate.candidate_id in selections
 		})
 	
+	original_path = ballot.ballot_file_path
+	folder, filename = os.path.split(original_path)
+	detect_filename = "detect_" + filename
+	detect_path = os.path.join(folder, detect_filename) if folder else detect_filename
+
 	context = {
 		'poll': poll,
 		'current_ballot': ballot,
@@ -1149,6 +1166,7 @@ def hau_kiem_ballot(request, ballot_id):
 		'next_ballot_id': next_ballot_id,
 		'prev_ballot_url': prev_ballot_url,
 		'next_ballot_url': next_ballot_url,
+		'detect_ballot_file_path': detect_path,
 	}
 	
 	return render(request, 'quan_ly_phieu_bau/thong_ke/hau_kiem.html', context)
