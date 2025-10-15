@@ -1,0 +1,91 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Đăng ký tài khoản{% endblock %} {% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-md-6 col-lg-5">
+    <div class="card shadow-sm p-4">
+      <h2 class="mb-4 text-center">Đăng ký tài khoản</h2>
+      <form method="post">
+        {% csrf_token %} {% if errors.general %}
+        <div class="alert alert-danger">{{ errors.general }}</div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label"
+            >Tên đăng nhập <span class="text-danger">*</span></label
+          >
+          <input
+            type="text"
+            name="username"
+            class="form-control {% if errors.username %}is-invalid{% endif %}"
+            value="{{ form_data.username|default:'' }}"
+            required
+            autofocus
+          />
+          {% if errors.username %}
+          <div class="invalid-feedback">{{ errors.username }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Họ và tên</label>
+          <input
+            type="text"
+            name="last_name"
+            class="form-control"
+            value="{{ form_data.last_name|default:'' }}"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Email</label>
+          <input
+            type="email"
+            name="email"
+            class="form-control"
+            value="{{ form_data.email|default:'' }}"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"
+            >Mật khẩu <span class="text-danger">*</span></label
+          >
+          <input
+            type="password"
+            name="password"
+            class="form-control {% if errors.password %}is-invalid{% endif %}"
+            required
+          />
+          {% if errors.password %}
+          <div class="invalid-feedback">{{ errors.password }}</div>
+          {% endif %}
+          <small class="form-text text-muted"
+            >Mật khẩu phải có ít nhất 6 ký tự.</small
+          >
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"
+            >Xác nhận mật khẩu <span class="text-danger">*</span></label
+          >
+          <input
+            type="password"
+            name="password_confirm"
+            class="form-control {% if errors.password %}is-invalid{% endif %}"
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 mb-3">
+          Đăng ký
+        </button>
+
+        <div class="text-center">
+          <p class="mb-0">
+            Đã có tài khoản? <a href="{% url 'login' %}">Đăng nhập ngay</a>
+          </p>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

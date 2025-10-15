@@ -1,9 +1,17 @@
 {% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Thêm ứng cử
 viên{%endblock %} {% block content %}
 
-<div class="row">
-  <div class="col-md-6">
-    <form id="candidate-amount-form" onsubmit="return false;">
+<div class="row g-3">
+  <!-- Nhập thủ công -->
+  <div class="col-md-4">
+    <h5 class="mb-3">Nhập thủ công</h5>
+    <form
+      method="post"
+      id="candidate-amount-form"
+      onsubmit="return false;"
+      class="ajax-form"
+    >
+      {% csrf_token %}
       <div class="mb-3">
         <label class="form-label">Số lượng ứng cử viên</label>
         <input
@@ -18,12 +26,64 @@ viên{%endblock %} {% block content %}
       </div>
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn btn-primary w-100"
         onclick="generateCandidateInputs()"
       >
         Tạo
       </button>
     </form>
+  </div>
+
+  <!-- Tải lên file text -->
+  <div class="col-md-4">
+    <h5 class="mb-3">Tải lên file text</h5>
+    <div class="mb-3">
+      <label class="form-label">Chọn file text</label>
+      <input
+        type="file"
+        id="txt-file-input"
+        class="form-control"
+        accept=".txt"
+      />
+    </div>
+    <button
+      type="button"
+      class="btn btn-success w-100"
+      onclick="loadCandidatesFromFile()"
+    >
+      <i class="bi bi-upload"></i> Tải lên
+    </button>
+  </div>
+
+  <!-- Sao chép từ poll khác -->
+  <div class="col-md-4">
+    <h5 class="mb-3">Sao chép danh sách</h5>
+    <form
+      method="post"
+      action="{% url 'copy_candidates' poll.poll_id %}"
+      class="ajax-form"
+    >
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label">ID cuộc bỏ phiếu nguồn</label>
+        <input
+          type="number"
+          name="source_poll_id"
+          class="form-control"
+          placeholder="Nhập ID"
+          required
+        />
+      </div>
+      <button type="submit" class="btn btn-info w-100">
+        <i class="bi bi-copy"></i> Sao chép
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Form nhập liệu -->
+<div class="row mt-4">
+  <div class="col-12">
     <form
       method="post"
       enctype="multipart/form-data"
@@ -34,35 +94,8 @@ viên{%endblock %} {% block content %}
     >
       {% csrf_token %}
       <div id="candidates-inputs"></div>
-      <button type="submit" class="btn btn-primary mt-3">
-        Thêm ứng cử viên
-      </button>
+      <button type="submit" class="btn btn-primary mt-3">Hoàn thành</button>
       <button type="reset" class="btn btn-secondary mt-3">Làm mới</button>
-    </form>
-  </div>
-  <div class="col-md-6 d-flex flex-column align-items-end">
-    <form
-      method="post"
-      action="{% url 'copy_candidates' poll.poll_id %}"
-      class="border p-3 bg-light rounded"
-      style="min-width: 300px"
-    >
-      {% csrf_token %}
-      <label class="form-label">Sao chép danh sách ứng cử viên</label>
-      <div class="input-group mb-2">
-        <input
-          type="number"
-          name="source_poll_id"
-          class="form-control"
-          placeholder="Nhập ID cuộc bỏ phiếu"
-          required
-        />
-        <button type="submit" class="btn btn-success">Sao chép</button>
-      </div>
-      <small class="text-muted"
-        >Nhập ID cuộc bỏ phiếu nguồn để sao chép toàn bộ ứng cử viên sang cuộc
-        bỏ phiếu này.</small
-      >
     </form>
   </div>
 </div>
@@ -82,6 +115,109 @@ viên{%endblock %} {% block content %}
     `;
     }
     document.getElementById("candidates-form").style.display = "block";
+  }
+
+  function loadCandidatesFromFile() {
+    const fileInput = document.getElementById("txt-file-input");
+    const file = fileInput.files[0];
+
+    if (!file) {
+      alert("Vui lòng chọn file TXT!");
+      return;
+    }
+
+    if (!file.name.endsWith(".txt")) {
+      alert("Vui lòng chọn file có định dạng .txt!");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const content = e.target.result;
+      // Tách nội dung theo dòng và loại bỏ dòng trống
+      const lines = content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      if (lines.length === 0) {
+        alert("File không có nội dung hoặc chỉ chứa dòng trống!");
+        return;
+      }
+
+      if (lines.length > 50) {
+        alert(
+          "File chứa quá nhiều ứng viên (tối đa 50). Chỉ lấy 50 ứng viên đầu tiên."
+        );
+        lines.length = 50;
+      }
+
+      // Hiển thị form với các input đã điền sẵn
+      const container = document.getElementById("candidates-inputs");
+      container.innerHTML = "";
+
+      lines.forEach((name, index) => {
+        container.innerHTML += `
+        <div class="mb-3">
+          <label class="form-label">Tên ứng cử viên ${index + 1}</label>
+          <input type="text" name="name_${
+            index + 1
+          }" class="form-control" value="${escapeHtml(name)}" required>
+        </div>
+      `;
+      });
+
+      document.getElementById("candidates-form").style.display = "block";
+
+      // Scroll xuống form
+      document.getElementById("candidates-form").scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      // Hiển thị thông báo thành công
+      showAlert(
+        `Đã tải ${lines.length} ứng cử viên từ file. Bạn có thể chỉnh sửa trước khi lưu.`,
+        "success"
+      );
+    };
+
+    reader.onerror = function () {
+      alert("Có lỗi xảy ra khi đọc file!");
+    };
+
+    reader.readAsText(file, "UTF-8");
+  }
+
+  // Hàm escape HTML để tránh XSS
+  function escapeHtml(text) {
+    const map = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+    return text.replace(/[&<>"']/g, function (m) {
+      return map[m];
+    });
+  }
+
+  // Hàm hiển thị alert
+  function showAlert(message, type = "info") {
+    const alertDiv = document.createElement("div");
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    const container = document.querySelector(".col-md-6");
+    container.insertBefore(alertDiv, container.firstChild);
+
+    // Tự động đóng sau 5 giây
+    setTimeout(() => {
+      alertDiv.remove();
+    }, 5000);
   }
 </script>
 

@@ -1,25 +1,69 @@
-{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Tải lên danh sách
-phiếu bầu{% endblock %} {% block content %}
+{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title %}Tải lên danh sách phiếu bầu{% endblock %} {% block content %}
 <div class="container py-4">
   <h2>Tải lên danh sách phiếu bầu cho cuộc bỏ phiếu: {{ poll.title }}</h2>
-  <form method="post" enctype="multipart/form-data" class="ajax-form">
-    {% csrf_token %}
-    <div class="mb-3">
-      <label class="form-label">Chọn các file phiếu bầu</label>
-      <input
-        type="file"
-        name="ballot_files"
-        class="form-control"
-        multiple
-        required
-      />
+
+  <div class="row mt-4">
+    <!-- Phần upload form -->
+    <div class="col-md-4">
+      <form method="post" enctype="multipart/form-data" class="ajax-form">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label fw-bold">Chọn các file phiếu bầu</label>
+          <input
+            type="file"
+            name="ballot_files"
+            class="form-control"
+            multiple
+            required
+          />
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">Tải lên</button>
+          <a
+            href="{% url 'poll_detail' poll.poll_id %}"
+            class="btn btn-secondary"
+            >Quay lại</a
+          >
+        </div>
+      </form>
     </div>
-    <button type="submit" class="btn btn-primary">Tải lên</button>
-    <a
-      href="{% url 'poll_detail' poll.poll_id %}"
-      class="btn btn-secondary ms-2"
-      >Quay lại</a
-    >
-  </form>
+
+    <!-- Phần mẫu form 1 -->
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div
+          class="card-body d-flex flex-column justify-content-center align-items-center"
+        >
+          <h5 class="card-title mb-4">Mẫu Form 1</h5>
+          <p class="text-muted mb-3">File DOCX mẫu phiếu bầu</p>
+          <a
+            href="{% static 'form/form1.docx' %}"
+            class="btn btn-success btn-lg"
+            download="Mau_Form1.docx"
+          >
+            <i class="bi bi-download me-2"></i> Tải về Form 1
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phần mẫu 5 phiếu bầu -->
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div
+          class="card-body d-flex flex-column justify-content-center align-items-center"
+        >
+          <h5 class="card-title mb-4">Mẫu 5 Phiếu Bầu</h5>
+          <p class="text-muted mb-3">5 ảnh mẫu phiếu bầu (JPG)</p>
+          <a
+            href="{% url 'download_sample_ballots' %}"
+            class="btn btn-success btn-lg"
+          >
+            <i class="bi bi-download me-2"></i> Tải về 5 phiếu
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

@@ -11,9 +11,9 @@ class LoginRequiredMessageMiddleware(MiddlewareMixin):
     Middleware: Nếu chưa đăng nhập và truy cập view cần đăng nhập, sẽ redirect về login kèm message.
     """
     def process_view(self, request, view_func, view_args, view_kwargs):
-        # Không áp dụng cho các view login, static, media
+        # Không áp dụng cho các view login, register, static, media, home
         login_url = settings.LOGIN_URL if hasattr(settings, 'LOGIN_URL') else '/login/'
-        allowed_names = ['login_view', 'login', 'logout_view', 'logout']
+        allowed_names = ['login_view', 'login', 'register_view', 'register', 'logout_view', 'logout', 'home']
         # Lấy tên view hiện tại
         try:
             match = resolve(request.path)

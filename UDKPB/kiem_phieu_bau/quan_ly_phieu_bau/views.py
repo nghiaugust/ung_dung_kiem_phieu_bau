@@ -23,6 +23,8 @@ from django.contrib import messages
 from django.db.models import Count
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+import zipfile
+from io import BytesIO
 
 def home(request):
 	return render(request, 'quan_ly_phieu_bau/home.html')
@@ -33,9 +35,14 @@ def permission_denied(request):
 
 @login_required
 def thong_ke(request):
-
-	# Lấy tất cả các cuộc bỏ phiếu
-	polls = Poll.objects.all()
+	# Lấy các cuộc bỏ phiếu dựa trên role
+	if request.user.role == 'admin':
+		# Admin xem được tất cả các cuộc bỏ phiếu
+		polls = Poll.objects.all()
+	else:
+		# User khác chỉ xem được các cuộc bỏ phiếu do mình tạo
+		polls = Poll.objects.filter(created_by=request.user)
+	
 	thong_ke_data = []
 	for poll in polls:
 		# Annotate số lượt chọn cho từng ứng viên thuộc poll này
@@ -44,12 +51,18 @@ def thong_ke(request):
 		)
 		# Tìm ứng viên được chọn nhiều nhất
 		top_candidate = candidates.order_by('-num_selected', 'name').first()
+		
+		# Lấy ID của ballot đầu tiên trong poll này để dùng cho nút Hậu kiểm
+		first_ballot = Ballot.objects.filter(poll=poll).order_by('ballot_id').first()
+		first_ballot_id = first_ballot.ballot_id if first_ballot else None
+		
 		thong_ke_data.append({
 			'poll_id': poll.poll_id,
 			'poll_title': poll.title,
 			'top_candidate': top_candidate.name if top_candidate else '-',
 			'top_count': top_candidate.num_selected if top_candidate else 0,
 			'status': poll.status or '-',
+			'first_ballot_id': first_ballot_id,
 		})
 	return render(request, 'quan_ly_phieu_bau/thong_ke.html', {'thong_ke_data': thong_ke_data})
 
@@ -96,6 +109,43 @@ def account_list(request):
 		return redirect('permission_denied')
 	users = Account.objects.all().order_by('-date_joined')
 	return render(request, 'quan_ly_phieu_bau/account/list.html', {'users': users})
+
+# View đăng ký
+def register_view(request):
+	if request.method == 'POST':
+		username = request.POST.get('username')
+		password = request.POST.get('password')
+		password_confirm = request.POST.get('password_confirm')
+		email = request.POST.get('email')
+		last_name = request.POST.get('last_name')
+		
+		# Validate
+		errors = {}
+		if not username or not password or not password_confirm:
+			errors['general'] = 'Vui lòng điền đầy đủ thông tin bắt buộc.'
+		elif password != password_confirm:
+			errors['password'] = 'Mật khẩu xác nhận không khớp.'
+		elif Account.objects.filter(username=username).exists():
+			errors['username'] = 'Tên đăng nhập đã tồn tại.'
+		elif len(password) < 6:
+			errors['password'] = 'Mật khẩu phải có ít nhất 6 ký tự.'
+		
+		if not errors:
+			# Tạo tài khoản mới với role mặc định là 'user'
+			Account.objects.create(
+				username=username,
+				password=make_password(password),
+				email=email or '',
+				last_name=last_name or '',
+				role='user',
+				is_active=True
+			)
+			messages.success(request, 'Đăng ký thành công! Vui lòng đăng nhập.')
+			return redirect('login')
+		else:
+			return render(request, 'quan_ly_phieu_bau/register.html', {'errors': errors, 'form_data': request.POST})
+	
+	return render(request, 'quan_ly_phieu_bau/register.html')
 
 # View đăng nhập
 def login_view(request):
@@ -241,15 +291,15 @@ def delete_account(request, account_id):
 
 @login_required
 def tao_cuoc_bo_phieu(request):
-	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# # Chỉ cho phép assistant hoặc admin
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	if request.method == 'POST':
 		title = request.POST.get('title')
 		description = request.POST.get('description')
@@ -272,30 +322,41 @@ def tao_cuoc_bo_phieu(request):
 		# Nếu là AJAX thì trả về JSON chứa URL chuyển hướng và message
 		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
 			redirect_url = reverse('poll_detail', kwargs={'poll_id': poll.poll_id})
+			# Kiểm tra xem có tutorial mode không
+			if request.POST.get('tutorial') == 'true':
+				redirect_url += '?tutorial=true'
 			return JsonResponse({
 				'success': True,
 				'redirect_url': redirect_url,
 				'message': 'Tạo cuộc bỏ phiếu thành công!'
 			})
-		return redirect('poll_detail', poll_id=poll.poll_id)
-	return render(request, 'quan_ly_phieu_bau/tao_cuoc_bo_phieu.html')
+		# Nếu không phải AJAX, redirect bình thường
+		tutorial = request.GET.get('tutorial', 'false')
+		redirect_url = reverse('poll_detail', kwargs={'poll_id': poll.poll_id})
+		if tutorial == 'true':
+			redirect_url += '?tutorial=true'
+		return redirect(redirect_url)
+	
+	# GET request - hiển thị form tạo cuộc bỏ phiếu
+	tutorial = request.GET.get('tutorial', 'false')
+	return render(request, 'quan_ly_phieu_bau/tao_cuoc_bo_phieu.html', {'tutorial': tutorial})
 
 @login_required
 def danh_sach_cuoc_bo_phieu(request):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	if request.user.role == 'admin':
 		# Nếu là admin, lấy TẤT CẢ các cuộc bỏ phiếu
 		polls_queryset = Poll.objects.all()
 	else: 
-		# Nếu là assistant, chỉ lấy các cuộc bỏ phiếu có 'created_by' là chính người dùng này
+		# Nếu khác admin, chỉ lấy các cuộc bỏ phiếu có 'created_by' là chính người dùng này
 		polls_queryset = Poll.objects.filter(created_by=request.user)
 
 	polls = polls_queryset.order_by('-start_time')
@@ -304,14 +365,14 @@ def danh_sach_cuoc_bo_phieu(request):
 @login_required
 def poll_detail(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	candidates = Candidate.objects.filter(poll=poll)
@@ -328,6 +389,9 @@ def poll_detail(request, poll_id):
 			created_by_username = poll.created_by.username if poll.created_by else None
 		except Account.DoesNotExist:
 			created_by_username = poll.created_by
+	
+	# Kiểm tra xem có tutorial mode không
+	tutorial = request.GET.get('tutorial', 'false')
 
 	return render(request, 'quan_ly_phieu_bau/poll/detail.html', {
 		'poll': poll,
@@ -338,20 +402,21 @@ def poll_detail(request, poll_id):
 		'valid_ballots': valid_ballots,
 		'invalid_ballots': invalid_ballots,
 		'created_by_username': created_by_username,
+		'tutorial': tutorial,
 	})
 
 # Sửa cuộc bỏ phiếu
 @login_required
 def edit_poll(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	if request.method == 'POST':
@@ -376,14 +441,14 @@ def edit_poll(request, poll_id):
 @login_required
 def add_candidate(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	if request.method == 'POST':
@@ -404,14 +469,14 @@ def add_candidate(request, poll_id):
 @login_required
 def edit_candidate(request, candidate_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	candidate = get_object_or_404(Candidate, candidate_id=candidate_id)
 	if request.method == 'POST':
@@ -433,31 +498,73 @@ def edit_candidate(request, candidate_id):
 @login_required
 def copy_candidates(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Kiểm tra quyền: chỉ người tạo poll hoặc admin mới được copy
+	if request.user.role != 'admin' and poll.created_by != request.user:
+		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+			return JsonResponse({
+				'success': False,
+				'message': 'Bạn không có quyền thực hiện thao tác này.'
+			})
+		messages.error(request, 'Bạn không có quyền thực hiện thao tác này.')
+		return redirect('add_candidate', poll_id=poll_id)
+	
 	if request.method == 'POST':
 		source_poll_id = request.POST.get('source_poll_id')
 		if not source_poll_id:
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': 'Vui lòng nhập ID cuộc bỏ phiếu nguồn.'
+				})
 			messages.error(request, 'Vui lòng nhập ID cuộc bỏ phiếu nguồn.')
 			return redirect('add_candidate', poll_id=poll_id)
 		try:
 			source_poll = Poll.objects.get(poll_id=source_poll_id)
 		except Poll.DoesNotExist:
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': f'Không tìm thấy cuộc bỏ phiếu với ID {source_poll_id}.'
+				})
 			messages.error(request, f'Không tìm thấy cuộc bỏ phiếu với ID {source_poll_id}.')
 			return redirect('add_candidate', poll_id=poll_id)
+		
+		# Kiểm tra xem user hiện tại có phải là người tạo source_poll không
+		# Admin được phép copy từ bất kỳ poll nào
+		if request.user.role != 'admin' and source_poll.created_by != request.user:
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': f'Không tìm thấy cuộc bỏ phiếu với ID {source_poll_id} trong danh sách phiếu bầu của bạn.'
+				})
+			messages.error(request, f'Không tìm thấy cuộc bỏ phiếu với ID {source_poll_id} trong danh sách phiếu bầu của bạn.')
+			return redirect('add_candidate', poll_id=poll_id)
+		
 		source_candidates = Candidate.objects.filter(poll=source_poll)
 		count = 0
 		for c in source_candidates:
 			Candidate.objects.create(poll=poll, name=c.name, description=c.description, image_url=c.image_url)
 			count += 1
+		
+		# Trả về JSON nếu là AJAX request
+		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+			redirect_url = reverse('poll_detail', kwargs={'poll_id': poll_id})
+			return JsonResponse({
+				'success': True,
+				'redirect_url': redirect_url,
+				'message': f'Đã sao chép {count} ứng cử viên thành công!'
+			})
 		# Chuyển về trang detail và truyền thông báo qua query string
 		return redirect(f'/poll/{poll_id}/?copied={count}')
 	return redirect('add_candidate', poll_id=poll_id)
@@ -466,14 +573,14 @@ def copy_candidates(request, poll_id):
 @login_required
 def upload_ballots(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	if request.method == 'POST' and request.FILES.getlist('ballot_files'):
@@ -502,14 +609,14 @@ def upload_ballots(request, poll_id):
 @login_required
 def ballot_list(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	filter_type = request.GET.get('filter')
 	ballots = Ballot.objects.filter(poll=poll).order_by('timestamp')
@@ -688,6 +795,18 @@ def counting_stream_generator(poll_id):
 		poll.status = 'counted'
 		poll.save(update_fields=["counting_end_time", "status"])
 
+		# Chạy lệnh kiểm phiếu bằng subprocess (không chờ hoàn thành)
+		cmd = [
+			'python',
+			'-m', 'processors.yolo_detection',
+			'--input_dir', input_dir,
+			'--output_dir', input_dir
+		]
+		# Xác định đường dẫn tuyệt đối tới ballot_processing_system
+		ballot_processing_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../ballot_processing_system'))
+		#proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ballot_processing_dir)
+		proc = subprocess.Popen(cmd, cwd=ballot_processing_dir)
+
 		# Giai đoạn cuối: Báo cáo thành công
 		success_data = {'message': 'Kiểm phiếu hoàn tất!', 'progress': 100}
 		yield f"data: {json.dumps(success_data)}\n\n"
@@ -702,14 +821,14 @@ def kiem_phieu_stream(request, poll_id):
 	View chính để gọi generator và trả về một StreamingHttpResponse.
 	"""
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 
 	# Trả về một luồng dữ liệu, với content type là text/event-stream
 	response = StreamingHttpResponse(counting_stream_generator(poll_id), content_type="text/event-stream")
@@ -794,14 +913,14 @@ def luu_thong_tin_kiem_phieu(poll_id):
 @login_required
 def delete_poll(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 
 	# Xoá tất cả ứng viên và phiếu bầu trước khi xoá poll
 	delete_all_candidates(request, poll_id)
@@ -814,14 +933,14 @@ def delete_poll(request, poll_id):
 @login_required
 def delete_candidate(request, candidate_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	candidate = get_object_or_404(Candidate, candidate_id=candidate_id)
 	poll_id = candidate.poll.poll_id
@@ -832,14 +951,14 @@ def delete_candidate(request, candidate_id):
 @login_required
 def delete_all_candidates(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	count = poll.candidate_set.count()
@@ -850,14 +969,14 @@ def delete_all_candidates(request, poll_id):
 @login_required
 def delete_all_ballots(request, poll_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	ballots = poll.ballot_set.all()
@@ -878,14 +997,14 @@ def delete_all_ballots(request, poll_id):
 @login_required
 def ballot_detail(request, ballot_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
 	if request.method == 'POST':
 		# Update timestamp
@@ -934,14 +1053,14 @@ def ballot_detail(request, ballot_id):
 @login_required
 def delete_ballot(request, ballot_id):
 	# Chỉ cho phép assistant hoặc admin
-	if not (request.user.role == 'assistant' or request.user.role == 'admin'):
-		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-			return JsonResponse({
-				'success': True,
-				'redirect_url': reverse('permission_denied'),
-				'message': 'Bạn không có quyền truy cập chức năng này!'
-			})
-		return redirect('permission_denied')
+	# if not (request.user.role == 'assistant' or request.user.role == 'admin'):
+	# 	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+	# 		return JsonResponse({
+	# 			'success': True,
+	# 			'redirect_url': reverse('permission_denied'),
+	# 			'message': 'Bạn không có quyền truy cập chức năng này!'
+	# 		})
+	# 	return redirect('permission_denied')
 	
 	ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
 	poll_id = ballot.poll.poll_id
@@ -955,3 +1074,139 @@ def delete_ballot(request, ballot_id):
 				pass
 	ballot.delete()
 	return redirect('ballot_list', poll_id=poll_id)
+
+def download_sample_ballots(request):
+	"""
+	View để tải về 5 file mẫu phiếu bầu trong 1 file ZIP
+	"""
+	# Tạo file ZIP trong bộ nhớ
+	zip_buffer = BytesIO()
+	
+	with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+		# Đường dẫn đến thư mục chứa các file mẫu
+		ballot_dir = os.path.join(settings.BASE_DIR, 'static', 'ballot')
+		
+		# Thêm 5 file vào ZIP
+		for i in range(1, 6):
+			file_name = f'ballot_{i}.jpg'
+			file_path = os.path.join(ballot_dir, file_name)
+			
+			if os.path.exists(file_path):
+				# Đọc file và thêm vào ZIP với tên mới
+				with open(file_path, 'rb') as f:
+					zip_file.writestr(f'Phieu_bau_{i}.jpg', f.read())
+	
+	# Trả về file ZIP
+	zip_buffer.seek(0)
+	response = HttpResponse(zip_buffer.read(), content_type='application/zip')
+	response['Content-Disposition'] = 'attachment; filename="Mau_5_Phieu_Bau.zip"'
+	
+	return response
+
+@login_required
+def hau_kiem_ballot(request, ballot_id):
+	"""
+	Trang hậu kiểm - xem và chỉnh sửa kết quả kiểm phiếu
+	"""
+	ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
+	poll = ballot.poll
+	
+	# Lấy tất cả phiếu bầu của poll này (đã sắp xếp theo ID)
+	all_ballots = Ballot.objects.filter(poll=poll).order_by('ballot_id')
+	total_ballots = all_ballots.count()
+	
+	# Tìm vị trí hiện tại
+	ballot_ids = list(all_ballots.values_list('ballot_id', flat=True))
+	try:
+		current_index = ballot_ids.index(ballot_id) + 1
+	except ValueError:
+		current_index = 1
+	
+	# Tìm prev và next ballot
+	prev_ballot_id = None
+	next_ballot_id = None
+	prev_ballot_url = None
+	next_ballot_url = None
+	
+	if current_index > 1:
+		prev_ballot_id = ballot_ids[current_index - 2]
+		prev_ballot_url = reverse('hau_kiem_ballot', kwargs={'ballot_id': prev_ballot_id})
+	
+	if current_index < total_ballots:
+		next_ballot_id = ballot_ids[current_index]
+		next_ballot_url = reverse('hau_kiem_ballot', kwargs={'ballot_id': next_ballot_id})
+	
+	# Lấy danh sách ứng viên
+	candidates = Candidate.objects.filter(poll=poll).order_by('candidate_id')
+	
+	# Lấy các lựa chọn hiện tại
+	selections = Ballot_Selection.objects.filter(ballot=ballot).values_list('candidate_id', flat=True)
+	
+	# Tạo danh sách kết quả
+	ballot_results = []
+	for candidate in candidates:
+		ballot_results.append({
+			'candidate_id': candidate.candidate_id,
+			'name': candidate.name,
+			'voted': candidate.candidate_id in selections
+		})
+	
+	original_path = ballot.ballot_file_path
+	folder, filename = os.path.split(original_path)
+	detect_filename = "detect_" + filename
+	detect_path = os.path.join(folder, detect_filename) if folder else detect_filename
+
+	context = {
+		'poll': poll,
+		'current_ballot': ballot,
+		'ballot_results': ballot_results,
+		'total_ballots': total_ballots,
+		'current_index': current_index,
+		'prev_ballot_id': prev_ballot_id,
+		'next_ballot_id': next_ballot_id,
+		'prev_ballot_url': prev_ballot_url,
+		'next_ballot_url': next_ballot_url,
+		'detect_ballot_file_path': detect_path,
+	}
+	
+	return render(request, 'quan_ly_phieu_bau/thong_ke/hau_kiem.html', context)
+
+@login_required
+def save_hau_kiem(request, ballot_id):
+	"""
+	API để lưu thay đổi từ trang hậu kiểm
+	"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+	
+	try:
+		data = json.loads(request.body)
+		votes = data.get('votes', [])
+		
+		ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
+		
+		# Sử dụng transaction để đảm bảo tính toàn vẹn dữ liệu
+		with transaction.atomic():
+			# Xóa tất cả selections hiện tại của ballot này
+			Ballot_Selection.objects.filter(ballot=ballot).delete()
+			
+			# Tạo selections mới dựa trên votes
+			for vote in votes:
+				if vote.get('voted', False):
+					candidate_id = vote.get('candidate_id')
+					candidate = get_object_or_404(Candidate, candidate_id=candidate_id)
+					Ballot_Selection.objects.create(
+						ballot=ballot,
+						candidate=candidate
+					)
+		
+		return JsonResponse({
+			'success': True,
+			'message': 'Đã lưu thay đổi thành công!'
+		})
+		
+	except Exception as e:
+		return JsonResponse({
+			'success': False,
+			'message': str(e)
+		}, status=500)
