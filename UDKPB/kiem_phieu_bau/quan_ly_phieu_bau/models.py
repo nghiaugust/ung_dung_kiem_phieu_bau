@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser
 # Bảng tài khoản kế thừa User của Django
 class Account(AbstractUser):
 	# id, username, password đã có sẵn trong AbstractUser
-	role = models.CharField(max_length=16, choices=[('admin', 'Admin'), ('assistant', 'Assistant'), ('user', 'User')], default='user')  # Vai trò
+	role = models.CharField(max_length=16, choices=[('admin', 'Admin'), ('assistant', 'Assistant'), ('operator', 'Operator'), ('user', 'User')], default='user')  # Vai trò
 	is_active = models.BooleanField(default=True)  # Trạng thái tài khoản
 	created_at = models.DateTimeField(auto_now_add=True)  # Thời gian tạo
 	updated_at = models.DateTimeField(auto_now=True)  # Thời gian cập nhật
@@ -21,6 +21,21 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	counting_end_time = models.DateTimeField(null=True)  # Kết thúc kiểm phiếu
 	created_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True)  # Người tạo (id tài khoản)
 	status = models.CharField(max_length=32, null=True)  # Trạng thái
+
+class PollMember(models.Model): # Thành viên của cuộc bỏ phiếu (phân quyền)
+	member_id = models.AutoField(primary_key=True)  # Mã thành viên
+	poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name='members')  # Cuộc bỏ phiếu
+	account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='poll_memberships')  # Tài khoản
+	assigned_at = models.DateTimeField(auto_now_add=True)  # Thời gian thêm vào cuộc bỏ phiếu
+	assigned_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, related_name='assigned_members')  # Người thêm vào
+
+	class Meta:
+		unique_together = ('poll', 'account')  # Mỗi tài khoản chỉ thuộc 1 lần trong 1 cuộc bỏ phiếu
+		verbose_name = 'Thành viên cuộc bỏ phiếu'
+		verbose_name_plural = 'Thành viên cuộc bỏ phiếu'
+
+	def __str__(self):
+		return f"{self.account.username} - {self.poll.title}"
 
 class Candidate(models.Model): # ứng cử viên
 	candidate_id = models.AutoField(primary_key=True)  # Mã ứng cử viên

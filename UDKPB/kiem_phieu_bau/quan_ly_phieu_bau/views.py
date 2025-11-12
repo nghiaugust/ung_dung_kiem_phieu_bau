@@ -8,7 +8,7 @@ from django.contrib.auth import authenticate, login
 from django.shortcuts import render, redirect, get_object_or_404, HttpResponse
 from django.contrib.auth.hashers import make_password
 from .models import Account
-from .models import Poll, Candidate, Ballot
+from .models import Poll, Candidate, Ballot, PollMember
 from django.http import JsonResponse
 import time # Để giả lập xử lý
 import json
@@ -1210,3 +1210,149 @@ def save_hau_kiem(request, ballot_id):
 			'success': False,
 			'message': str(e)
 		}, status=500)
+
+# ==================== QUẢN LÝ THÀNH VIÊN CUỘC BỎ PHIẾU ====================
+
+@login_required
+def manage_poll_accounts(request):
+	"""
+	Trang quản lý tài khoản cho tất cả các cuộc bỏ phiếu
+	Hiển thị danh sách polls với nested table cho members
+	"""
+	# Chỉ admin mới có quyền truy cập
+	if request.user.role != 'admin':
+		return redirect('permission_denied')
+	
+	# Lấy tất cả các cuộc bỏ phiếu
+	if request.user.role == 'admin':
+		polls = Poll.objects.all().order_by('-poll_id')
+	else:
+		polls = Poll.objects.filter(created_by=request.user).order_by('-poll_id')
+	
+	# Lấy tất cả members cho các polls này
+	poll_data = []
+	for poll in polls:
+		members = PollMember.objects.filter(poll=poll).select_related('account', 'assigned_by').order_by('account__username')
+		# Tạo list các account_id đã là thành viên
+		member_account_ids = [member.account.id for member in members]
+		poll_data.append({
+			'poll': poll,
+			'members': members,
+			'member_account_ids': member_account_ids,
+		})
+	
+	# Lấy danh sách tất cả tài khoản active để thêm
+	all_accounts = Account.objects.filter(is_active=True).order_by('username')
+	
+	return render(request, 'quan_ly_phieu_bau/account/manage_poll_accounts.html', {
+		'poll_data': poll_data,
+		'all_accounts': all_accounts,
+	})
+
+@login_required
+def poll_members(request, poll_id):
+	"""
+	Hiển thị danh sách thành viên của một cuộc bỏ phiếu
+	"""
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Lấy danh sách thành viên
+	members = PollMember.objects.filter(poll=poll).select_related('account', 'assigned_by').order_by('-assigned_at')
+	
+	return render(request, 'quan_ly_phieu_bau/poll_member/list.html', {
+		'poll': poll,
+		'members': members,
+	})
+
+@login_required
+def add_poll_member(request, poll_id):
+	"""
+	Thêm thành viên vào cuộc bỏ phiếu
+	"""
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	if request.method == 'POST':
+		account_id = request.POST.get('account_id')
+		
+		if not account_id:
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': 'Vui lòng chọn tài khoản!'
+				})
+			messages.error(request, 'Vui lòng chọn tài khoản!')
+			return redirect('add_poll_member', poll_id=poll_id)
+		
+		try:
+			account = Account.objects.get(id=account_id)
+		except Account.DoesNotExist:
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': 'Tài khoản không tồn tại!'
+				})
+			messages.error(request, 'Tài khoản không tồn tại!')
+			return redirect('add_poll_member', poll_id=poll_id)
+		
+		# Kiểm tra xem tài khoản đã là thành viên chưa
+		if PollMember.objects.filter(poll=poll, account=account).exists():
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': f'Tài khoản {account.username} đã là thành viên của cuộc bỏ phiếu này!'
+				})
+			messages.warning(request, f'Tài khoản {account.username} đã là thành viên của cuộc bỏ phiếu này!')
+			return redirect('add_poll_member', poll_id=poll_id)
+		
+		# Tạo thành viên mới
+		PollMember.objects.create(
+			poll=poll,
+			account=account,
+			assigned_by=request.user
+		)
+		
+		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+			return JsonResponse({
+				'success': True,
+				'redirect_url': reverse('poll_members', kwargs={'poll_id': poll_id}),
+				'message': f'Đã thêm {account.username} vào cuộc bỏ phiếu!'
+			})
+		
+		messages.success(request, f'Đã thêm {account.username} vào cuộc bỏ phiếu!')
+		return redirect('poll_members', poll_id=poll_id)
+	
+	# GET request - hiển thị form
+	# Lấy danh sách tài khoản chưa là thành viên
+	existing_member_ids = PollMember.objects.filter(poll=poll).values_list('account_id', flat=True)
+	available_accounts = Account.objects.exclude(id__in=existing_member_ids).filter(is_active=True).order_by('username')
+	
+	return render(request, 'quan_ly_phieu_bau/poll_member/add.html', {
+		'poll': poll,
+		'accounts': available_accounts,
+	})
+
+@login_required
+def delete_poll_member(request, member_id):
+	"""
+	Xóa thành viên khỏi cuộc bỏ phiếu
+	"""
+	member = get_object_or_404(PollMember, member_id=member_id)
+	poll_id = member.poll.poll_id
+	account_username = member.account.username
+	
+	if request.method == 'POST':
+		member.delete()
+		
+		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+			return JsonResponse({
+				'success': True,
+				'redirect_url': reverse('poll_members', kwargs={'poll_id': poll_id}),
+				'message': f'Đã xóa {account_username} khỏi cuộc bỏ phiếu!'
+			})
+		
+		messages.success(request, f'Đã xóa {account_username} khỏi cuộc bỏ phiếu!')
+		return redirect('poll_members', poll_id=poll_id)
+	
+	return render(request, 'quan_ly_phieu_bau/poll_member/delete.html', {
+		'member': member,
+	})

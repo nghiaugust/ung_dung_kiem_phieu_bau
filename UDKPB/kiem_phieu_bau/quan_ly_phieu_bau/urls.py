@@ -47,5 +47,11 @@ urlpatterns = [
     path('thong_ke/', views.thong_ke, name='thong_ke'),
     path('thong_ke/<int:poll_id>/', views.thong_ke_detail, name='thong_ke_detail'),
     
+    # Quản lý thành viên cuộc bỏ phiếu
+    path('account/manage-poll-accounts/', views.manage_poll_accounts, name='manage_poll_accounts'),
+    path('poll/<int:poll_id>/members/', views.poll_members, name='poll_members'),
+    path('poll/<int:poll_id>/members/add/', views.add_poll_member, name='add_poll_member'),
+    path('poll_member/delete/<int:member_id>/', views.delete_poll_member, name='delete_poll_member'),
+    
     path('permission_denied/', views.permission_denied, name='permission_denied'),
 ]

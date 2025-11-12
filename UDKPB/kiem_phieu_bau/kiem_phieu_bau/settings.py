@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'quan_ly_phieu_bau',
+    'api',  # API cho mobile app
 ]
 
 MIDDLEWARE = [
