@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from .models import APIToken
 from .authentication import require_api_token
-from quan_ly_phieu_bau.models import Poll, Ballot, Candidate
+from quan_ly_phieu_bau.models import Poll, Ballot, Candidate, PollMember
 
 
 # =====================================================
@@ -232,7 +232,30 @@ def api_poll_detail(request, poll_id):
         
         # Check permission
         user = request.api_user
-        if user.role != 'admin' and poll.created_by != user:
+        
+        # Kiểm tra quyền:
+        # 1. Admin toàn hệ thống
+        # 2. Người tạo poll
+        # 3. Thành viên của poll có role là 'admin' hoặc 'assistant'
+        has_permission = False
+        
+        if user.role == 'admin':
+            # Admin toàn hệ thống
+            has_permission = True
+        elif poll.created_by == user:
+            # Người tạo poll
+            has_permission = True
+        else:
+            # Kiểm tra xem user có phải là thành viên đã được duyệt của poll không
+            try:
+                poll_member = PollMember.objects.get(poll=poll, account=user, status='approved')
+                # Kiểm tra role của user trong Account model
+                if user.role in ['admin', 'assistant']:
+                    has_permission = True
+            except PollMember.DoesNotExist:
+                pass
+        
+        if not has_permission:
             return JsonResponse({
                 'success': False,
                 'error': 'Permission denied',
@@ -306,7 +329,30 @@ def api_upload_ballot(request, poll_id):
         
         # Check permission
         user = request.api_user
-        if user.role != 'admin' and poll.created_by != user:
+        
+        # Kiểm tra quyền:
+        # 1. Admin toàn hệ thống
+        # 2. Người tạo poll
+        # 3. Thành viên của poll có role là 'admin' hoặc 'operator'
+        has_permission = False
+        
+        if user.role == 'admin':
+            # Admin toàn hệ thống
+            has_permission = True
+        elif poll.created_by == user:
+            # Người tạo poll
+            has_permission = True
+        else:
+            # Kiểm tra xem user có phải là thành viên đã được duyệt của poll không
+            try:
+                poll_member = PollMember.objects.get(poll=poll, account=user, status='approved')
+                # Kiểm tra role của user trong Account model
+                if user.role in ['admin', 'operator']:
+                    has_permission = True
+            except PollMember.DoesNotExist:
+                pass
+        
+        if not has_permission:
             return JsonResponse({
                 'success': False,
                 'error': 'Permission denied',
@@ -394,6 +440,593 @@ def api_upload_ballot(request, poll_id):
         }, status=500)
 
 
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_join_poll(request):
+    """
+    Tham gia cuộc bỏ phiếu bằng access_code
+    
+    POST /api/polls/join/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "access_code": "ABC-123-XYZ"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Đã tham gia thành công" hoặc "Yêu cầu tham gia đã được gửi",
+        "poll": {...},
+        "status": "approved" hoặc "pending"
+    }
+    """
+    import json
+    
+    try:
+        data = json.loads(request.body)
+        access_code = data.get('access_code', '').strip().upper()
+        
+        if not access_code:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing access code',
+                'message': 'Vui lòng nhập mã tham gia'
+            }, status=400)
+        
+        # Tìm poll theo access_code
+        try:
+            poll = Poll.objects.get(access_code=access_code)
+        except Poll.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid access code',
+                'message': 'Mã tham gia không hợp lệ'
+            }, status=404)
+        
+        user = request.api_user
+        
+        # Kiểm tra xem user đã là thành viên chưa
+        existing_member = PollMember.objects.filter(poll=poll, account=user).first()
+        
+        if existing_member:
+            if existing_member.status == 'approved':
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Already member',
+                    'message': 'Bạn đã là thành viên của cuộc bỏ phiếu này'
+                }, status=400)
+            elif existing_member.status == 'pending':
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Request pending',
+                    'message': 'Yêu cầu tham gia của bạn đang chờ được duyệt'
+                }, status=400)
+            elif existing_member.status == 'rejected':
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Request rejected',
+                    'message': 'Yêu cầu tham gia của bạn đã bị từ chối'
+                }, status=403)
+        
+        # Tạo PollMember mới
+        with transaction.atomic():
+            # Xác định status dựa vào require_approval
+            if poll.require_approval:
+                status = 'pending'
+                message = 'Yêu cầu tham gia đã được gửi, chờ admin duyệt'
+            else:
+                status = 'approved'
+                message = 'Đã tham gia cuộc bỏ phiếu thành công'
+            
+            member = PollMember.objects.create(
+                poll=poll,
+                account=user,
+                status=status,
+                assigned_by=None  # Tự xin vào
+            )
+            
+            # Nếu tự động duyệt, ghi nhận thời gian duyệt
+            if status == 'approved':
+                member.approved_at = timezone.now()
+                member.approved_by = None  # Tự động duyệt
+                member.save(update_fields=['approved_at', 'approved_by'])
+        
+        return JsonResponse({
+            'success': True,
+            'message': message,
+            'status': status,
+            'poll': {
+                'poll_id': poll.poll_id,
+                'title': poll.title,
+                'description': poll.description,
+                'status': poll.status,
+                'require_approval': poll.require_approval
+            }
+        }, status=201)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_request_role_upgrade(request, poll_id):
+    """
+    Yêu cầu nâng cấp role trong cuộc bỏ phiếu
+    
+    POST /api/polls/<poll_id>/request-role/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "requested_role": "operator" hoặc "assistant"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Yêu cầu nâng cấp role đã được gửi"
+    }
+    """
+    import json
+    
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        data = json.loads(request.body)
+        requested_role = data.get('requested_role', '').lower()
+        
+        # Validate requested role
+        if requested_role not in ['operator', 'assistant']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid role',
+                'message': 'Role yêu cầu phải là "operator" hoặc "assistant"'
+            }, status=400)
+        
+        # Kiểm tra user đã là thành viên chưa
+        try:
+            member = PollMember.objects.get(poll=poll, account=user, status='approved')
+        except PollMember.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Not a member',
+                'message': 'Bạn chưa là thành viên của cuộc bỏ phiếu này'
+            }, status=403)
+        
+        # Kiểm tra role hiện tại của user trong Account
+        current_account_role = user.role
+        
+        # Nếu đã là admin thì không cần nâng cấp
+        if current_account_role == 'admin':
+            return JsonResponse({
+                'success': False,
+                'error': 'Already admin',
+                'message': 'Bạn đã có quyền admin, không cần nâng cấp'
+            }, status=400)
+        
+        # Nếu role hiện tại đã cao hơn hoặc bằng role yêu cầu
+        role_hierarchy = {'user': 0, 'operator': 1, 'assistant': 2, 'admin': 3}
+        if role_hierarchy.get(current_account_role, 0) >= role_hierarchy.get(requested_role, 0):
+            return JsonResponse({
+                'success': False,
+                'error': 'Role already sufficient',
+                'message': f'Role hiện tại của bạn ({current_account_role}) đã đủ hoặc cao hơn role yêu cầu'
+            }, status=400)
+        
+        # Kiểm tra xem đã có yêu cầu nâng cấp chưa
+        if member.requested_role_change:
+            return JsonResponse({
+                'success': False,
+                'error': 'Request pending',
+                'message': f'Bạn đã có yêu cầu nâng cấp lên {member.requested_role_change} đang chờ duyệt'
+            }, status=400)
+        
+        # Cập nhật yêu cầu nâng cấp role (GIỮ NGUYÊN status='approved')
+        with transaction.atomic():
+            member.requested_role_change = requested_role
+            member.save(update_fields=['requested_role_change'])
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Yêu cầu nâng cấp lên role {requested_role} đã được gửi, chờ admin duyệt',
+            'requested_role': requested_role
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_approve_role_request(request, poll_id, member_id):
+    """
+    Duyệt/từ chối yêu cầu nâng cấp role (chỉ admin/người tạo poll)
+    
+    POST /api/polls/<poll_id>/members/<member_id>/approve-role/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "action": "approve" hoặc "reject"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Đã duyệt yêu cầu nâng cấp role"
+    }
+    """
+    import json
+    
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: chỉ admin toàn hệ thống hoặc người tạo poll
+        if user.role != 'admin' and poll.created_by != user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Chỉ admin hoặc người tạo poll mới có quyền duyệt yêu cầu'
+            }, status=403)
+        
+        # Lấy thông tin member
+        try:
+            member = PollMember.objects.select_related('account').get(
+                member_id=member_id,
+                poll=poll
+            )
+        except PollMember.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Member not found',
+                'message': 'Không tìm thấy thành viên này trong cuộc bỏ phiếu'
+            }, status=404)
+        
+        # Kiểm tra có yêu cầu nâng cấp không
+        if not member.requested_role_change:
+            return JsonResponse({
+                'success': False,
+                'error': 'No request',
+                'message': 'Thành viên này không có yêu cầu nâng cấp role'
+            }, status=400)
+        
+        data = json.loads(request.body)
+        action = data.get('action', '').lower()
+        
+        if action not in ['approve', 'reject']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid action',
+                'message': 'Action phải là "approve" hoặc "reject"'
+            }, status=400)
+        
+        with transaction.atomic():
+            if action == 'approve':
+                # Nâng cấp role trong Account
+                requested_role = member.requested_role_change
+                member.account.role = requested_role
+                member.account.save(update_fields=['role'])
+                
+                # Xóa yêu cầu và ghi nhận thông tin duyệt
+                member.requested_role_change = None
+                member.approved_at = timezone.now()
+                member.approved_by = user
+                member.save(update_fields=['requested_role_change', 'approved_at', 'approved_by'])
+                
+                message = f'Đã duyệt yêu cầu nâng cấp lên role {requested_role}'
+                
+            else:  # reject
+                # Chỉ xóa yêu cầu, không thay đổi role
+                requested_role = member.requested_role_change
+                member.requested_role_change = None
+                member.save(update_fields=['requested_role_change'])
+                
+                message = f'Đã từ chối yêu cầu nâng cấp lên role {requested_role}'
+        
+        return JsonResponse({
+            'success': True,
+            'message': message,
+            'action': action,
+            'member': {
+                'member_id': member.member_id,
+                'username': member.account.username,
+                'current_role': member.account.role
+            }
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_get_role_requests(request, poll_id):
+    """
+    Lấy danh sách yêu cầu nâng cấp role (chỉ admin/người tạo poll)
+    
+    GET /api/polls/<poll_id>/role-requests/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "requests": [...]
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: chỉ admin toàn hệ thống hoặc người tạo poll
+        if user.role != 'admin' and poll.created_by != user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Chỉ admin hoặc người tạo poll mới có quyền xem yêu cầu'
+            }, status=403)
+        
+        # Lấy danh sách member có yêu cầu nâng cấp role
+        members = PollMember.objects.filter(
+            poll=poll,
+            status='approved',
+            requested_role_change__isnull=False
+        ).select_related('account').order_by('-assigned_at')
+        
+        requests = []
+        for member in members:
+            requests.append({
+                'member_id': member.member_id,
+                'username': member.account.username,
+                'full_name': member.account.last_name or member.account.username,
+                'current_role': member.account.role,
+                'requested_role': member.requested_role_change,
+                'assigned_at': member.assigned_at.isoformat() if member.assigned_at else None
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'count': len(requests),
+            'requests': requests
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_get_join_requests(request, poll_id):
+    """
+    Lấy danh sách yêu cầu tham gia cuộc bỏ phiếu (chỉ admin/người tạo poll)
+    
+    GET /api/polls/<poll_id>/join-requests/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "requests": [...]
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: chỉ admin toàn hệ thống hoặc người tạo poll
+        if user.role != 'admin' and poll.created_by != user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Chỉ admin hoặc người tạo poll mới có quyền xem yêu cầu'
+            }, status=403)
+        
+        # Lấy danh sách member đang chờ duyệt
+        members = PollMember.objects.filter(
+            poll=poll,
+            status='pending'
+        ).select_related('account').order_by('-assigned_at')
+        
+        requests = []
+        for member in members:
+            requests.append({
+                'member_id': member.member_id,
+                'username': member.account.username,
+                'full_name': member.account.last_name or member.account.username,
+                'email': member.account.email or '',
+                'role': member.account.role,
+                'assigned_at': member.assigned_at.isoformat() if member.assigned_at else None
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'count': len(requests),
+            'requests': requests
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_approve_join_request(request, poll_id, member_id):
+    """
+    Duyệt/từ chối yêu cầu tham gia cuộc bỏ phiếu (chỉ admin/người tạo poll)
+    
+    POST /api/polls/<poll_id>/members/<member_id>/approve-join/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "action": "approve" hoặc "reject"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Đã duyệt yêu cầu tham gia"
+    }
+    """
+    import json
+    
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: chỉ admin toàn hệ thống hoặc người tạo poll
+        if user.role != 'admin' and poll.created_by != user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Chỉ admin hoặc người tạo poll mới có quyền duyệt yêu cầu'
+            }, status=403)
+        
+        # Lấy thông tin member
+        try:
+            member = PollMember.objects.select_related('account').get(
+                member_id=member_id,
+                poll=poll
+            )
+        except PollMember.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Member not found',
+                'message': 'Không tìm thấy thành viên này trong cuộc bỏ phiếu'
+            }, status=404)
+        
+        # Kiểm tra trạng thái phải là pending
+        if member.status != 'pending':
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid status',
+                'message': f'Thành viên này đang ở trạng thái {member.status}, không thể duyệt'
+            }, status=400)
+        
+        data = json.loads(request.body)
+        action = data.get('action', '').lower()
+        
+        if action not in ['approve', 'reject']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid action',
+                'message': 'Action phải là "approve" hoặc "reject"'
+            }, status=400)
+        
+        with transaction.atomic():
+            if action == 'approve':
+                # Duyệt tham gia
+                member.status = 'approved'
+                member.approved_at = timezone.now()
+                member.approved_by = user
+                member.save(update_fields=['status', 'approved_at', 'approved_by'])
+                
+                message = f'Đã duyệt {member.account.username} tham gia cuộc bỏ phiếu'
+                
+            else:  # reject
+                # Từ chối tham gia
+                member.status = 'rejected'
+                member.save(update_fields=['status'])
+                
+                message = f'Đã từ chối {member.account.username} tham gia cuộc bỏ phiếu'
+        
+        return JsonResponse({
+            'success': True,
+            'message': message,
+            'action': action,
+            'member': {
+                'member_id': member.member_id,
+                'username': member.account.username,
+                'status': member.status
+            }
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
 @require_api_token
 @require_http_methods(["GET"])
 def api_ballot_list(request, poll_id):
@@ -412,10 +1045,34 @@ def api_ballot_list(request, poll_id):
         
         # Check permission
         user = request.api_user
-        if user.role != 'admin' and poll.created_by != user:
+        
+        # Kiểm tra quyền:
+        # 1. Admin toàn hệ thống
+        # 2. Người tạo poll
+        # 3. Thành viên của poll có role là 'admin' hoặc 'assistant'
+        has_permission = False
+        
+        if user.role == 'admin':
+            # Admin toàn hệ thống
+            has_permission = True
+        elif poll.created_by == user:
+            # Người tạo poll
+            has_permission = True
+        else:
+            # Kiểm tra xem user có phải là thành viên đã được duyệt của poll không
+            try:
+                poll_member = PollMember.objects.get(poll=poll, account=user, status='approved')
+                # Kiểm tra role của user trong Account model
+                if user.role in ['admin', 'assistant']:
+                    has_permission = True
+            except PollMember.DoesNotExist:
+                pass
+        
+        if not has_permission:
             return JsonResponse({
                 'success': False,
-                'error': 'Permission denied'
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xem danh sách phiếu bầu của cuộc bỏ phiếu này'
             }, status=403)
         
         # Pagination

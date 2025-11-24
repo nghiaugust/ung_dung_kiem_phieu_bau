@@ -35,18 +35,21 @@
           class="btn btn-info btn-sm"
           >Chi tiết</a
         >
+        {% if row.first_ballot_id %}
         <a
           href="{% url 'hau_kiem_ballot' row.first_ballot_id %}"
           class="btn btn-warning btn-sm ms-1"
-          {%
-          if
-          not
-          row.first_ballot_id
-          %}disabled{%
-          endif
-          %}
           >Hậu kiểm</a
         >
+        {% else %}
+        <button
+          class="btn btn-warning btn-sm ms-1"
+          disabled
+          title="Chưa có phiếu bầu nào"
+        >
+          Hậu kiểm
+        </button>
+        {% endif %}
       </td>
     </tr>
     {% empty %}
