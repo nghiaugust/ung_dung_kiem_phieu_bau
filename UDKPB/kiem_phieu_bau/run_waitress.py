@@ -2,8 +2,25 @@
 Waitress WSGI Server Configuration for Windows
 Thay thế Gunicorn trên Windows
 """
+import os
+import sys
+import logging
 from waitress import serve
+
+# Setup Django before importing application
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kiem_phieu_bau.settings')
+import django
+django.setup()
+
 from kiem_phieu_bau.wsgi import application
+
+# Configure logging to show requests
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+    datefmt='%d/%b/%Y %H:%M:%S',
+    stream=sys.stdout
+)
 
 if __name__ == '__main__':
     import socket
@@ -27,6 +44,9 @@ if __name__ == '__main__':
     print("📱 Mobile App Configuration:")
     print(f"   Base URL: http://{local_ip}:8000")
     print(f"   API Endpoint: http://{local_ip}:8000/api/")
+    print("=" * 60)
+    print("✅ Static files: Served by Django (DEBUG=True)")
+    print("✅ Request logging: Enabled")
     print("=" * 60)
     print("⚠️  Đảm bảo Firewall cho phép port 8000")
     print("⚠️  Mobile và PC phải cùng mạng WiFi")

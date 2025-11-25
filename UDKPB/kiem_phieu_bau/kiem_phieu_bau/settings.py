@@ -50,6 +50,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'quan_ly_phieu_bau.middleware.LoginRequiredMessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'kiem_phieu_bau.request_logging_middleware.RequestLoggingMiddleware',  # Request logging
 ]
 
 ROOT_URLCONF = 'kiem_phieu_bau.urls'
@@ -144,3 +145,50 @@ AUTH_USER_MODEL = 'quan_ly_phieu_bau.Account'
 LOGIN_URL = '/login/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, os.getenv('STATIC_ROOT', 'staticfiles'))
+
+# Logging Configuration - Show requests like runserver
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name} {message}',
+            'style': '{',
+            'datefmt': '%d/%b/%Y %H:%M:%S',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'api': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'quan_ly_phieu_bau': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
