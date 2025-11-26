@@ -28,6 +28,9 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()] if os.getenv('ALLOWED_HOSTS') else []
 CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if h.strip()] if os.getenv('CSRF_TRUSTED_ORIGINS') else []
 
+# Tắt APPEND_SLASH cho API (mobile app có thể gọi với hoặc không có trailing slash)
+# APPEND_SLASH = False
+
 # Application definition
 
 INSTALLED_APPS = [

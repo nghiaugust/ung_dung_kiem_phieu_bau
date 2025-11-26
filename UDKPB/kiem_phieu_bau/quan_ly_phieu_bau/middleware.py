@@ -9,8 +9,13 @@ from django.utils.deprecation import MiddlewareMixin
 class LoginRequiredMessageMiddleware(MiddlewareMixin):
     """
     Middleware: Nếu chưa đăng nhập và truy cập view cần đăng nhập, sẽ redirect về login kèm message.
+    CHỈ áp dụng cho web views, KHÔNG áp dụng cho API endpoints.
     """
     def process_view(self, request, view_func, view_args, view_kwargs):
+        # KHÔNG áp dụng cho API endpoints (API tự xử lý authentication)
+        if request.path.startswith('/api/'):
+            return None
+        
         # Không áp dụng cho các view login, register, static, media, home
         login_url = settings.LOGIN_URL if hasattr(settings, 'LOGIN_URL') else '/login/'
         allowed_names = ['login_view', 'login', 'register_view', 'register', 'logout_view', 'logout', 'home']
