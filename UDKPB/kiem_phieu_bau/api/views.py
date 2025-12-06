@@ -14,7 +14,8 @@ from django.utils import timezone
 
 from .models import APIToken
 from .authentication import require_api_token
-from quan_ly_phieu_bau.models import Poll, Ballot, Candidate, PollMember
+from poll.models import Poll, Candidate, PollMember
+from ballot.models import Ballot
 
 
 # =====================================================

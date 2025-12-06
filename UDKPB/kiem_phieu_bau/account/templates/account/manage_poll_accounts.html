@@ -1,0 +1,374 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Quản lý tài khoản
+cuộc bỏ phiếu{% endblock %} {% block content %}
+<div class="container-fluid">
+  <h2 class="mb-4">Quản lý tài khoản theo cuộc bỏ phiếu</h2>
+
+  {% if messages %} {% for message in messages %}
+  <div
+    class="alert alert-{{ message.tags }} alert-dismissible fade show"
+    role="alert"
+  >
+    {{ message }}
+    <button
+      type="button"
+      class="btn-close"
+      data-bs-dismiss="alert"
+      aria-label="Close"
+    ></button>
+  </div>
+  {% endfor %} {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <table class="table table-bordered table-hover">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 50px"></th>
+            <th style="width: 80px">ID</th>
+            <th>Tên cuộc bỏ phiếu</th>
+            <th style="width: 150px">Trạng thái</th>
+            <th style="width: 120px">Số thành viên</th>
+            <th style="width: 200px">Người tạo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in poll_data %}
+          <tr class="poll-row" data-poll-id="{{ item.poll.poll_id }}">
+            <td class="text-center">
+              <button
+                class="btn btn-sm btn-link toggle-members p-0"
+                data-poll-id="{{ item.poll.poll_id }}"
+                title="Xem thành viên"
+              >
+                <i class="bi bi-chevron-right" style="font-size: 1.2rem"></i>
+              </button>
+            </td>
+            <td>{{ item.poll.poll_id }}</td>
+            <td><strong>{{ item.poll.title }}</strong></td>
+            <td>
+              {% if item.poll.status == 'counted' %}
+              <span class="badge bg-success">Đã kiểm</span>
+              {% elif item.poll.status == 'counting' %}
+              <span class="badge bg-warning">Đang kiểm</span>
+              {% elif item.poll.status == 'ongoing' %}
+              <span class="badge bg-primary">Đang diễn ra</span>
+              {% else %}
+              <span class="badge bg-secondary"
+                >{{ item.poll.status|default:"Chưa xác định" }}</span>{% endif %}
+            </td>
+            <td class="text-center">
+              <span class="badge bg-info">{{ item.members|length }}</span>
+            </td>
+            <td>{{ item.poll.created_by.username|default:"N/A" }}</td>
+          </tr>
+          <!-- Nested row for members -->
+          <tr
+            class="members-row"
+            id="members-{{ item.poll.poll_id }}"
+            style="display: none"
+          >
+            <td colspan="6" class="p-0" style="background-color: #f8f9fa">
+              <div class="p-3">
+                <h6 class="mb-3">
+                  <i class="bi bi-people-fill"></i>
+                  Danh sách thành viên của "{{ item.poll.title }}"
+                </h6>
+
+                {% if item.members %}
+                <table
+                  class="table table-sm table-bordered mb-3"
+                  style="background-color: white"
+                >
+                  <thead class="table-secondary">
+                    <tr>
+                      <th style="width: 80px">ID</th>
+                      <th>Tên đăng nhập</th>
+                      <th>Họ tên</th>
+                      <th style="width: 150px">Vai trò</th>
+                      <th style="width: 180px">Thời gian thêm</th>
+                      <th style="width: 150px">Người thêm</th>
+                      <th style="width: 100px" class="text-center">
+                        Hành động
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for member in item.members %}
+                    <tr>
+                      <td>{{ member.account.id }}</td>
+                      <td>{{ member.account.username }}</td>
+                      <td>{{ member.account.last_name|default:"-" }}</td>
+                      <td>
+                        {% if member.account.role == 'admin' %}
+                        <span class="badge bg-danger">Admin</span>
+                        {% elif member.account.role == 'assistant' %}
+                        <span class="badge bg-warning">Assistant</span>
+                        {% elif member.account.role == 'operator' %}
+                        <span class="badge bg-info">Operator</span>
+                        {% else %}
+                        <span class="badge bg-secondary">User</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ member.assigned_at|date:"d/m/Y H:i" }}</td>
+                      <td>{{ member.assigned_by.username|default:"-" }}</td>
+                      <td class="text-center">
+                        <button
+                          class="btn btn-danger btn-sm delete-member"
+                          data-member-id="{{ member.member_id }}"
+                          data-username="{{ member.account.username }}"
+                          title="Xóa thành viên"
+                        >
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted mb-3">
+                  <i class="bi bi-info-circle"></i> Chưa có thành viên nào trong
+                  cuộc bỏ phiếu này.
+                </p>
+                {% endif %}
+
+                <!-- Form thêm thành viên -->
+                <div class="add-member-section mt-3 pt-3 border-top">
+                  <form
+                    class="add-member-form"
+                    data-poll-id="{{ item.poll.poll_id }}"
+                  >
+                    {% csrf_token %}
+                    <div class="row align-items-end">
+                      <div class="col-md-8">
+                        <label
+                          for="account-select-{{ item.poll.poll_id }}"
+                          class="form-label"
+                        >
+                          <i class="bi bi-person-plus"></i> Thêm thành viên mới
+                        </label>
+                        <select
+                          class="form-select"
+                          id="account-select-{{ item.poll.poll_id }}"
+                          name="account_id"
+                          required
+                        >
+                          <option value="">-- Chọn tài khoản --</option>
+                          {% for account in all_accounts %} 
+                          {% if account.id not in item.member_account_ids %}
+                          <option value="{{ account.id }}">
+                            {{ account.username }} - 
+                            {{ account.last_name|default:account.username }} 
+                            ({{ account.role }})
+                          </option>
+                          {% endif %} {% endfor %}
+                        </select>
+                      </div>
+                      <div class="col-md-4">
+                        <button type="submit" class="btn btn-success w-100">
+                          <i class="bi bi-plus-circle"></i> Thêm
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted">
+              Không có cuộc bỏ phiếu nào.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <a href="{% url 'account:tai_khoan' %}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Quay lại
+    </a>
+  </div>
+</div>
+
+<!-- Modal xác nhận xóa -->
+<div
+  class="modal fade"
+  id="deleteModal"
+  tabindex="-1"
+  aria-labelledby="deleteModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteModalLabel">Xác nhận xóa</h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body">
+        Bạn có chắc chắn muốn xóa thành viên
+        <strong id="delete-username"></strong> khỏi cuộc bỏ phiếu này?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          Hủy
+        </button>
+        <button type="button" class="btn btn-danger" id="confirm-delete">
+          Xóa
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .toggle-members {
+    transition: transform 0.3s ease;
+    color: #333;
+    text-decoration: none;
+  }
+
+  .toggle-members.expanded i {
+    transform: rotate(90deg);
+  }
+
+  .poll-row {
+    cursor: pointer;
+  }
+
+  .poll-row:hover {
+    background-color: #f5f5f5;
+  }
+
+  .members-row td {
+    border-top: none !important;
+  }
+
+  .add-member-section {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    padding: 15px;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Toggle members display
+    document.querySelectorAll(".toggle-members").forEach((button) => {
+      button.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const pollId = this.dataset.pollId;
+        const membersRow = document.getElementById(`members-${pollId}`);
+        const icon = this.querySelector("i");
+
+        if (membersRow.style.display === "none") {
+          membersRow.style.display = "table-row";
+          icon.classList.remove("bi-chevron-right");
+          icon.classList.add("bi-chevron-down");
+          this.classList.add("expanded");
+        } else {
+          membersRow.style.display = "none";
+          icon.classList.remove("bi-chevron-down");
+          icon.classList.add("bi-chevron-right");
+          this.classList.remove("expanded");
+        }
+      });
+    });
+
+    // Handle add member form submission
+    document.querySelectorAll(".add-member-form").forEach((form) => {
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const pollId = this.dataset.pollId;
+        const formData = new FormData(this);
+        const accountId = formData.get("account_id");
+
+        if (!accountId) {
+          alert("Vui lòng chọn tài khoản!");
+          return;
+        }
+
+        fetch(`/poll/${pollId}/members/add/`, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRFToken": formData.get("csrfmiddlewaretoken"),
+          },
+          body: formData,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              alert(data.message);
+              window.location.reload();
+            } else {
+              alert(data.message || "Có lỗi xảy ra!");
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            alert("Có lỗi xảy ra khi thêm thành viên!");
+          });
+      });
+    });
+
+    // Handle delete member
+    let memberIdToDelete = null;
+    const deleteModal = new bootstrap.Modal(
+      document.getElementById("deleteModal")
+    );
+
+    document.querySelectorAll(".delete-member").forEach((button) => {
+      button.addEventListener("click", function () {
+        memberIdToDelete = this.dataset.memberId;
+        const username = this.dataset.username;
+        document.getElementById("delete-username").textContent = username;
+        deleteModal.show();
+      });
+    });
+
+    document
+      .getElementById("confirm-delete")
+      .addEventListener("click", function () {
+        if (!memberIdToDelete) return;
+
+        fetch(`/poll_member/delete/${memberIdToDelete}/`, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]")
+              .value,
+          },
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              alert(data.message);
+              deleteModal.hide();
+              window.location.reload();
+            } else {
+              alert(data.message || "Có lỗi xảy ra!");
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            alert("Có lỗi xảy ra khi xóa thành viên!");
+          });
+      });
+  });
+</script>
+
+<!-- Bootstrap Icons CDN (nếu chưa có) -->
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+/>
+{% endblock %}

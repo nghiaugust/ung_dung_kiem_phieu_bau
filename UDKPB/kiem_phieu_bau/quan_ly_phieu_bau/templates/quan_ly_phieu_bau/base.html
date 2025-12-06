@@ -94,18 +94,18 @@
         </div>
       </div>
       <nav class="nav-menu">
-        <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Home</a>
-        <a href="/tao_cuoc_bo_phieu/" {% if request.path == '/tao_cuoc_bo_phieu/' %}class="active"{% endif %}>Tạo cuộc bỏ phiếu</a>
-        <a href="/danh_sach_cuoc_bo_phieu/" {% if request.path == '/danh_sach_cuoc_bo_phieu/' %}class="active"{% endif %}>Danh sách cuộc bỏ phiếu</a>
-        <a href="/thong_ke/" {% if request.path == '/thong_ke/' %}class="active"{% endif %}>Thống kê</a>
+        <a href="{% url 'home' %}" {% if request.path == '/' %}class="active"{% endif %}>Home</a>
+        <a href="{% url 'poll:tao_cuoc_bo_phieu' %}" {% if 'tao_cuoc_bo_phieu' in request.path %}class="active"{% endif %}>Tạo cuộc bỏ phiếu</a>
+        <a href="{% url 'poll:danh_sach_cuoc_bo_phieu' %}" {% if 'danh_sach_cuoc_bo_phieu' in request.path %}class="active"{% endif %}>Danh sách cuộc bỏ phiếu</a>
+        <a href="{% url 'poll:thong_ke' %}" {% if 'thong_ke' in request.path %}class="active"{% endif %}>Thống kê</a>
         {% if request.user.is_authenticated %}
-          {% if request.user.role == 'admin' %}
-            <a href="/tai_khoan/" {% if request.path == '/tai_khoan/' %}class="active"{% endif %}>{{ request.user.username }}</a>
+          {% if request.user.is_superuser %}
+            <a href="{% url 'account:tai_khoan' %}" {% if 'tai_khoan' in request.path %}class="active"{% endif %}>{{ request.user.username }}</a>
           {% else %}
-            <a href="/account/profile/" {% if request.path == '/account/profile/' %}class="active"{% endif %}>{{ request.user.username }}</a>
+            <a href="{% url 'account:account_profile' %}" {% if 'profile' in request.path %}class="active"{% endif %}>{{ request.user.username }}</a>
           {% endif %}
         {% else %}
-          <a href="/tai_khoan/" {% if request.path == '/tai_khoan/' %}class="active"{% endif %}>Tài khoản</a>
+          <a href="{% url 'account:tai_khoan' %}" {% if 'tai_khoan' in request.path %}class="active"{% endif %}>Tài khoản</a>
         {% endif %}
       </nav>
     </div>

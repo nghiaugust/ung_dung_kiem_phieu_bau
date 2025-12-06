@@ -40,8 +40,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'account',  # Account models
+    'poll',  # Poll, PollMember, Candidate, Voter models
+    'ballot',  # Ballot, BallotSelection models
     'quan_ly_phieu_bau',
     'api',  # API cho mobile app
+    'security',  # Cryptographic operations for QR code verification
 ]
 
 MIDDLEWARE = [
@@ -142,10 +146,10 @@ MEDIA_ROOT = os.path.join(BASE_DIR, os.getenv('MEDIA_ROOT', 'media'))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Sử dụng Account làm user model mặc định
-AUTH_USER_MODEL = 'quan_ly_phieu_bau.Account'
+AUTH_USER_MODEL = 'account.Account'
 
 # Đường dẫn login cho login_required
-LOGIN_URL = '/login/'
+LOGIN_URL = '/account/login/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, os.getenv('STATIC_ROOT', 'staticfiles'))
 

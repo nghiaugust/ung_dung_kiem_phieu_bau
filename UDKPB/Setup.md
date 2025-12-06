@@ -25,14 +25,18 @@ python -c "from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoP
 ```
 
 ## 4. Cấu hình `settings.py`
+
 - thêm file .env trong UDKPB/kiem_phieu_bau
-cấu trúc:
+  cấu trúc:
+
 # Django settings
+
 SECRET_KEY=
 ALLOWED_HOSTS=
 CSRF_TRUSTED_ORIGINS=
 
 # Database settings
+
 DB_ENGINE=
 DB_NAME=
 DB_USER=
@@ -41,26 +45,26 @@ DB_HOST=
 DB_PORT=
 
 # Static & Media
+
 STATIC_URL=
 STATIC_ROOT=
 MEDIA_URL=
 MEDIA_ROOT=
 
-
 - Tạo database udkpb và đổi password
-DATABASES = {
+  DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'udkpb',
-        'USER': 'root',
-        'PASSWORD': 'root',
-        'HOST': 'localhost',
-        'PORT': '3306',
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
-    }
-}
+    'ENGINE': 'django.db.backends.mysql',
+    'NAME': 'udkpb',
+    'USER': 'root',
+    'PASSWORD': 'root',
+    'HOST': 'localhost',
+    'PORT': '3306',
+    'OPTIONS': {
+      'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+      },
+    } 
+  }
 
 - Đổi `DEBUG = False` khi chạy production.
 - Sửa `ALLOWED_HOSTS` thành domain hoặc IP server thật.
@@ -83,12 +87,14 @@ python manage.py migrate
 cd UDKPB/kiem_phieu_bau
 python manage.py collectstatic
 ```
+
 ## 7. Tạo tài khoản admin
 
 ```powershell
 cd UDKPB/kiem_phieu_bau
-python manage.py shell -c "from quan_ly_phieu_bau.models import Account; Account.objects.create_user('admin', password='1', role='admin')"
+python manage.py shell -c "from account.models import Account; Account.objects.create_superuser('admin', email='admin@example.com', password='1')"
 ```
+
 ## 8. Chạy server
 
 - Dev:

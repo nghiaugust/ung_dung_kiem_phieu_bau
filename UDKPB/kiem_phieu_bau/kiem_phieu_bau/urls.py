@@ -22,6 +22,10 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),  # API endpoints cho mobile
+    path('security/', include('security.urls')),  # Cryptographic operations
+    path('account/', include('account.urls')),  # Account management
+    path('ballot/', include('ballot.urls')),  # Ballot management
+    path('poll/', include('poll.urls')),  # Poll management
     path('', include('quan_ly_phieu_bau.urls')),
 ]
 
