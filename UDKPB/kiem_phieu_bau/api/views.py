@@ -549,26 +549,11 @@ def api_upload_ballot(request, poll_id):
         
         # Save file
         with transaction.atomic():
-            # Create directory
-            poll_dir = os.path.join(settings.MEDIA_ROOT, str(poll_id))
-            os.makedirs(poll_dir, exist_ok=True)
-            
-            # Generate unique filename
-            unique_id = uuid.uuid4().hex[:8]
-            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"ballot_{timestamp}_{unique_id}.{file_ext}"
-            file_path = os.path.join(poll_dir, filename)
-            
-            # Write file
-            with open(file_path, 'wb+') as destination:
-                for chunk in uploaded_file.chunks():
-                    destination.write(chunk)
-            
-            # Create Ballot record
-            rel_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
+            # Create Ballot record with ImageField
             ballot = Ballot.objects.create(
                 poll=poll,
-                ballot_file_path=rel_path,
+                ballot_image=uploaded_file,
+                input_by=user,
                 timestamp=timezone.now(),
                 metadata={
                     'uploaded_by': user.username,
@@ -580,7 +565,7 @@ def api_upload_ballot(request, poll_id):
             return JsonResponse({
                 'success': True,
                 'ballot_id': ballot.ballot_id,
-                'filename': filename,
+                'filename': uploaded_file.name,
                 'message': 'Upload phiếu bầu thành công'
             }, status=201)
         
@@ -688,10 +673,6 @@ def api_upload_ballots_batch(request, poll_id):
         succeeded = 0
         failed = 0
         
-        # Create directory
-        poll_dir = os.path.join(settings.MEDIA_ROOT, str(poll_id))
-        os.makedirs(poll_dir, exist_ok=True)
-        
         for uploaded_file in uploaded_files:
             result = {
                 'filename': uploaded_file.name,
@@ -717,22 +698,11 @@ def api_upload_ballots_batch(request, poll_id):
                 
                 # Save file
                 with transaction.atomic():
-                    # Generate unique filename
-                    unique_id = uuid.uuid4().hex[:8]
-                    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S_%f')
-                    filename = f"ballot_{timestamp}_{unique_id}.{file_ext}"
-                    file_path = os.path.join(poll_dir, filename)
-                    
-                    # Write file
-                    with open(file_path, 'wb+') as destination:
-                        for chunk in uploaded_file.chunks():
-                            destination.write(chunk)
-                    
-                    # Create Ballot record
-                    rel_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
+                    # Create Ballot record with ImageField
                     ballot = Ballot.objects.create(
                         poll=poll,
-                        ballot_file_path=rel_path,
+                        ballot_image=uploaded_file,
+                        input_by=user,
                         timestamp=timezone.now(),
                         metadata={
                             'uploaded_by': user.username,
@@ -1471,7 +1441,7 @@ def api_ballot_list(request, poll_id):
                 'timestamp': ballot.timestamp.isoformat() if ballot.timestamp else None,
                 'is_checked': ballot.is_checked,
                 'is_valid': ballot.is_valid,
-                'file_url': f"{settings.MEDIA_URL}{ballot.ballot_file_path}" if ballot.ballot_file_path else None
+                'image_url': ballot.ballot_image.url if ballot.ballot_image else None
             })
         
         return JsonResponse({

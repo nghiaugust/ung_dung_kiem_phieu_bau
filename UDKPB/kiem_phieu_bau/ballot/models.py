@@ -1,6 +1,25 @@
+import uuid
+import os
 from django.db import models
 from account.models import Account
 from poll.models import Poll, Candidate
+
+
+def ballot_image_upload_path(instance, filename):
+	"""
+	Tạo đường dẫn upload unique cho ballot image
+	Format: ballots/<poll_id>/<YYYY>/<MM>/<DD>/ballot_<timestamp>_<uuid>.<ext>
+	"""
+	ext = filename.split('.')[-1].lower()
+	from django.utils import timezone
+	now = timezone.now()
+	unique_id = uuid.uuid4().hex[:8]
+	new_filename = f"ballot_{now.strftime('%Y%m%d_%H%M%S')}_{unique_id}.{ext}"
+	
+	# Tổ chức theo poll_id và ngày tháng năm
+	poll_id = instance.poll.poll_id if instance.poll else 'no_poll'
+	return os.path.join('ballots', str(poll_id), now.strftime('%Y/%m/%d'), new_filename)
+
 
 class Ballot(models.Model): # phiếu bầu
 	ballot_id = models.AutoField(primary_key=True)  # Mã lá phiếu
@@ -12,7 +31,7 @@ class Ballot(models.Model): # phiếu bầu
 	timestamp = models.DateTimeField(null=True)  # Thời gian bỏ phiếu
 	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
-	ballot_image = models.ImageField(upload_to='ballots/%Y/%m/%d/', null=True, blank=True)
+	ballot_image = models.ImageField(upload_to=ballot_image_upload_path, null=True, blank=True)
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
 	metadata = models.JSONField(null=True)  # Thông tin mở rộng
 	
