@@ -8,6 +8,7 @@ app_name = 'api'
 
 urlpatterns = [
     # Authentication
+    path('register/', views.api_register, name='register'),
     path('login/', views.api_login, name='login'),
     path('logout/', views.api_logout, name='logout'),
     path('me/', views.api_me, name='me'),
@@ -19,6 +20,7 @@ urlpatterns = [
     
     # Ballots
     path('polls/<int:poll_id>/upload/', views.api_upload_ballot, name='upload_ballot'),
+    path('polls/<int:poll_id>/upload-batch/', views.api_upload_ballots_batch, name='upload_ballots_batch'),
     path('polls/<int:poll_id>/ballots/', views.api_ballot_list, name='ballot_list'),
     
     # Poll Member Management
