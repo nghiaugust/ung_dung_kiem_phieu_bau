@@ -333,6 +333,52 @@ def api_poll_list(request):
 
 @require_api_token
 @require_http_methods(["GET"])
+def api_my_poll_memberships(request):
+    """
+    Danh sách tất cả các poll mà user là thành viên (tất cả status)
+    
+    GET /api/my-poll-memberships/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "memberships": [
+            {
+                "poll_id": 1,
+                "title": "...",
+                "description": "...",
+                "member_status": "active" | "pending" | "rejected"
+            }
+        ]
+    }
+    """
+    user = request.api_user
+    
+    # Lấy tất cả các PollMember của user (tất cả status)
+    memberships = PollMember.objects.filter(
+        account=user
+    ).select_related('poll').order_by('-assigned_at')
+    
+    membership_list = []
+    for membership in memberships:
+        poll = membership.poll
+        membership_list.append({
+            'poll_id': poll.poll_id,
+            'title': poll.title,
+            'description': poll.description,
+            'member_status': membership.status
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'count': len(membership_list),
+        'memberships': membership_list
+    })
+
+
+@require_api_token
+@require_http_methods(["GET"])
 def api_poll_detail(request, poll_id):
     """
     Chi tiết cuộc bỏ phiếu
@@ -1447,3 +1493,170 @@ def api_ballot_list(request, poll_id):
             'success': False,
             'error': 'Invalid pagination parameters'
         }, status=400)
+
+
+# =====================================================
+# STATISTICS APIs
+# =====================================================
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_statistics(request):
+    """
+    Thống kê kết quả các cuộc bỏ phiếu
+    
+    GET /api/statistics/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "statistics": [
+            {
+                "poll_id": 1,
+                "poll_title": "...",
+                "top_candidate": "Nguyễn Văn A",
+                "top_count": 150,
+                "status": "counted",
+                "first_ballot_id": 123
+            }
+        ]
+    }
+    """
+    user = request.api_user
+    
+    # Lấy các cuộc bỏ phiếu dựa trên quyền
+    if user.is_superuser:
+        # Superuser xem được tất cả các cuộc bỏ phiếu
+        polls = Poll.objects.all()
+    else:
+        # User khác chỉ xem được các cuộc bỏ phiếu mà họ là thành viên active
+        polls = Poll.objects.filter(
+            members__account=user,
+            members__status='active'
+        ).distinct()
+    
+    statistics_data = []
+    for poll in polls:
+        # Annotate số lượt chọn cho từng ứng viên thuộc poll này
+        from django.db.models import Count
+        candidates = Candidate.objects.filter(poll=poll).annotate(
+            num_selected=Count('ballotselection')
+        )
+        
+        # Tìm ứng viên được chọn nhiều nhất
+        top_candidate = candidates.order_by('-num_selected', 'name').first()
+        
+        # Lấy ID của ballot đầu tiên trong poll này
+        first_ballot = Ballot.objects.filter(poll=poll).order_by('ballot_id').first()
+        first_ballot_id = first_ballot.ballot_id if first_ballot else None
+        
+        statistics_data.append({
+            'poll_id': poll.poll_id,
+            'poll_title': poll.title,
+            'top_candidate': top_candidate.name if top_candidate else None,
+            'top_count': top_candidate.num_selected if top_candidate else 0,
+            'status': poll.status,
+            'first_ballot_id': first_ballot_id,
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'count': len(statistics_data),
+        'statistics': statistics_data
+    })
+
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_statistics_detail(request, poll_id):
+    """
+    Thống kê chi tiết cho một cuộc bỏ phiếu
+    
+    GET /api/polls/<poll_id>/statistics/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "poll": {
+            "poll_id": 1,
+            "title": "...",
+            "status": "counted"
+        },
+        "total_ballots": 100,
+        "candidate_stats": [
+            {
+                "name": "Nguyễn Văn A",
+                "count": 50
+            },
+            {
+                "name": "Trần Thị B",
+                "count": 30
+            }
+        ]
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền
+        has_permission = False
+        
+        if user.is_superuser:
+            has_permission = True
+        elif poll.created_by == user:
+            has_permission = True
+        else:
+            # Kiểm tra xem user có phải là thành viên active của poll không
+            try:
+                poll_member = PollMember.objects.get(poll=poll, account=user, status='active')
+                has_permission = True
+            except PollMember.DoesNotExist:
+                pass
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xem thống kê của cuộc bỏ phiếu này'
+            }, status=403)
+        
+        # Lấy danh sách ứng cử viên và số lượt được chọn
+        from django.db.models import Count
+        candidate_stats = Candidate.objects.filter(poll=poll).annotate(
+            count=Count('ballotselection')
+        ).values('name', 'count').order_by('-count', 'name')
+        
+        # Đếm số phiếu hợp lệ đã kiểm
+        valid_checked_ballots = Ballot.objects.filter(
+            poll=poll,
+            is_valid=True,
+            is_checked=True
+        ).count()
+        
+        return JsonResponse({
+            'success': True,
+            'poll': {
+                'poll_id': poll.poll_id,
+                'title': poll.title,
+                'description': poll.description,
+                'status': poll.status
+            },
+            'total_ballots': valid_checked_ballots,
+            'candidate_stats': list(candidate_stats)
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
