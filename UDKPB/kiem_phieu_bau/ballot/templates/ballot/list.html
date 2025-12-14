@@ -77,13 +77,13 @@ bầu {% endblock %} {% block content %}
       <td>
         <div class="d-flex gap-1">
           <a
-            href="{% url 'ballot_detail' ballot.ballot_id %}"
+            href="{% url 'ballot:ballot_detail' ballot.ballot_id %}"
             class="btn btn-info btn-sm px-2 py-1"
             style="font-size: 0.85rem"
             >Chỉnh sửa</a
           >
           <a
-            href="{% url 'delete_ballot' ballot.ballot_id %}"
+            href="{% url 'ballot:delete_ballot' ballot.ballot_id %}"
             class="btn btn-danger btn-sm px-2 py-1"
             style="font-size: 0.85rem"
             onclick="return confirm('Bạn có chắc muốn xoá phiếu bầu này?');"
