@@ -109,3 +109,6 @@ python manage.py shell -c "from account.models import Account; Account.objects.c
 
 - Nếu server không cài được `mysqlclient`, có thể thay bằng `pymysql` (và sửa settings).
 - Đảm bảo đã mở port 8000 trên server hoặc cấu hình nginx reverse proxy.
+
+
+pip install qrcode[pil]

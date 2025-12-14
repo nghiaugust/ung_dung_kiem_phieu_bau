@@ -18,10 +18,11 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	status = models.CharField(max_length=32, null=True)  # Trạng thái
 	require_approval = models.BooleanField(default=True)  # Yêu cầu phê duyệt thành viên mới = true, không yc phê duyệt = false
 	
-	# Cryptographic fields for QR code verification
-	private_key = models.TextField(null=True, blank=True)  # RSA Private Key (Base64 encoded, encrypted)
-	public_key = models.TextField(null=True, blank=True)   # RSA Public Key (Base64 encoded)
-	key_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo key pair
+	# Cryptographic fields for HMAC-based QR code verification
+	private_key = models.TextField(null=True, blank=True)  # RSA Private Key (DEPRECATED - kept for backward compatibility)
+	public_key = models.TextField(null=True, blank=True)   # RSA Public Key (DEPRECATED - kept for backward compatibility)
+	hmac_secret_key = models.TextField(null=True, blank=True)  # HMAC Secret Key (encrypted with Fernet)
+	key_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo HMAC key
 	
 	def save(self, *args, **kwargs):
 		# Tự động sinh mã tham gia nếu chưa có

@@ -35,10 +35,12 @@ class Ballot(models.Model): # phiếu bầu
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
 	metadata = models.JSONField(null=True)  # Thông tin mở rộng
 	
-	# QR Code cryptographic fields
-	qr_signature = models.CharField(max_length=1024, null=True, blank=True)  # RSA Signature (Base64 encoded)
-	qr_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo QR signature
-	qr_payload = models.JSONField(null=True, blank=True)  # Payload gốc đã sign (để verify)
+	# QR Code HMAC fields
+	qr_hmac = models.CharField(max_length=64, null=True, blank=True)  # HMAC signature (hex string)
+	qr_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo QR HMAC
+	# Legacy fields (kept for backward compatibility)
+	qr_signature = models.CharField(max_length=1024, null=True, blank=True)  # RSA Signature (DEPRECATED)
+	qr_payload = models.JSONField(null=True, blank=True)  # RSA Payload (DEPRECATED)
 
 # Bảng lưu lựa chọn của từng phiếu bầu
 class BallotSelection(models.Model):

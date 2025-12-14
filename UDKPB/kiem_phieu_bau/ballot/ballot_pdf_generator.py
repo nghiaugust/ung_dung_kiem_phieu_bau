@@ -47,8 +47,8 @@ class BallotPDFGenerator:
     ```
     """
     
-    def __init__(self, title="PHIẾU BẦU CỬ", header_info=None, footer_text=None, 
-                 page_size=A4, font_path=None, add_aruco_markers=False, aruco_size=1.5):
+    def __init__(self, title="PHIẾU BẦU CỬU", header_info=None, footer_text=None, 
+                 page_size=A4, font_path=None, add_aruco_markers=True, aruco_size=1.0, qr_marker_size=2.5):
         """
         Khởi tạo BallotPDFGenerator
         
@@ -58,8 +58,9 @@ class BallotPDFGenerator:
             footer_text (str): Text chân trang
             page_size: Kích thước trang (mặc định A4)
             font_path (str): Đường dẫn đến file font Unicode (nếu cần)
-            add_aruco_markers (bool): Thêm ArUco markers vào 4 góc phiếu
+            add_aruco_markers (bool): Thêm ArUco markers vào 4 góc phiếu (mặc định True)
             aruco_size (float): Kích thước ArUco marker (đơn vị: cm)
+            qr_marker_size (float): Kích thước QR code marker 0 (đơn vị: cm)
         """
         self.title = title
         self.header_info = header_info or {}
@@ -67,7 +68,9 @@ class BallotPDFGenerator:
         self.page_size = page_size
         self.add_aruco_markers = add_aruco_markers
         self.aruco_size = aruco_size * cm
+        self.qr_marker_size = qr_marker_size * cm  # Kích thước riêng cho QR marker 0
         self.content_height = 0  # Sẽ được tính toán khi build
+        self.qr_signature = None  # QR signature data cho marker 0
         
         # Cấu hình bảng mặc định
         self.columns = ["STT", "Họ và tên", "Chọn"]
@@ -285,24 +288,54 @@ class BallotPDFGenerator:
         
         return elements
     
-    def _generate_aruco_marker(self, marker_id, size_px=200):
+    def _generate_aruco_marker(self, marker_id, size_px=200, qr_data=None):
         """
-        Tạo ArUco marker image
+        Tạo ArUco marker hoặc QR code (cho marker 0 khi có signature)
         
         Args:
             marker_id (int): ID của marker (0-3 cho 4 góc)
             size_px (int): Kích thước marker tính bằng pixel
+            qr_data (dict): Dữ liệu để tạo QR code (cho marker 0)
             
         Returns:
             str: Đường dẫn đến file ảnh marker tạm thời
         """
-        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-        marker_img = cv2.aruco.generateImageMarker(aruco_dict, marker_id, size_px)
+        import qrcode
+        import json
         
-        # Lưu marker vào file tạm
-        temp_path = f"temp_aruco_{marker_id}.png"
-        cv2.imwrite(temp_path, marker_img)
-        return temp_path
+        if marker_id == 0 and qr_data:
+            # Marker 0 (Top-left): Tạo QR code chứa dữ liệu đã truyền vào
+            # qr_data đã bao gồm marker_id, ballot_id, và hmac
+            
+            # Tạo QR code với error correction thấp để giảm mật độ
+            qr = qrcode.QRCode(
+                version=None,  # Auto size
+                error_correction=qrcode.constants.ERROR_CORRECT_L,  # Low error correction (7% recovery) - QR ít ô hơn
+                box_size=10,
+                border=2,
+            )
+            qr.add_data(qr_data)  # qr_data đã là chuỗi JSON hoàn chỉnh
+            qr.make(fit=True)
+            
+            # Tạo image
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert PIL image to numpy array và resize
+            qr_array = np.array(qr_img.convert('L'))
+            qr_resized = cv2.resize(qr_array, (size_px, size_px))
+            
+            temp_path = f"temp_qr_{marker_id}.png"
+            cv2.imwrite(temp_path, qr_resized)
+            return temp_path
+        else:
+            # Các marker khác (1, 2, 3): ArUco thuần
+            aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+            marker_img = cv2.aruco.generateImageMarker(aruco_dict, marker_id, size_px)
+            
+            # Lưu marker vào file tạm
+            temp_path = f"temp_aruco_{marker_id}.png"
+            cv2.imwrite(temp_path, marker_img)
+            return temp_path
     
     def _add_aruco_markers_to_canvas(self, c, doc):
         """
@@ -345,12 +378,28 @@ class BallotPDFGenerator:
         ]
         
         for marker_id, x_pos, y_pos in marker_positions:
-            # Tạo marker image
-            marker_path = self._generate_aruco_marker(marker_id, size_px=200)
+            # Tạo marker image (marker 0 sẽ chứa QR signature nếu có)
+            qr_data = self.qr_signature if marker_id == 0 else None
+            marker_path = self._generate_aruco_marker(marker_id, size_px=200, qr_data=qr_data)
+            
+            # Sử dụng kích thước riêng cho QR marker 0
+            marker_size = self.qr_marker_size if marker_id == 0 and qr_data else self.aruco_size
+            
+            # Điều chỉnh vị trí nếu là QR marker 0 (to hơn)
+            # Giữ nguyên khoảng cách viền trên và trái, chỉ mở rộng về phía trong
+            final_x = x_pos
+            final_y = y_pos
+            
+            if marker_id == 0 and qr_data and marker_size > self.aruco_size:
+                # Điều chỉnh y để viền trên cùng mức với các marker khác
+                # Trong PDF, y tăng lên từ dưới lên trên
+                # Nếu marker to hơn, cần dịch xuống để viền trên thẳng hàng
+                size_diff = marker_size - self.aruco_size
+                final_y = y_pos - size_diff  # Dịch xuống để viền trên cùng vị trí
             
             # Vẽ marker lên canvas
-            c.drawImage(marker_path, x_pos, y_pos, 
-                       width=self.aruco_size, height=self.aruco_size,
+            c.drawImage(marker_path, final_x, final_y, 
+                       width=marker_size, height=marker_size,
                        preserveAspectRatio=True, mask='auto')
             
             # Xóa file tạm
@@ -359,7 +408,7 @@ class BallotPDFGenerator:
             except:
                 pass
     
-    def generate(self, data, output_path=None, add_logo=None):
+    def generate(self, data, output_path=None, add_logo=None, qr_signature=None):
         """
         Tạo file PDF phiếu bầu
         
@@ -367,10 +416,14 @@ class BallotPDFGenerator:
             data (list): Dữ liệu bảng (không bao gồm header)
             output_path (str): Đường dẫn lưu file. Nếu None, trả về BytesIO
             add_logo (str): Đường dẫn đến file logo (nếu có)
+            qr_signature (str): QR signature data để nhúng vào ArUco marker 0
         
         Returns:
             BytesIO hoặc None: Buffer chứa PDF nếu output_path là None
         """
+        # Lưu qr_signature để sử dụng khi tạo markers
+        self.qr_signature = qr_signature
+        
         # Tạo buffer hoặc file
         if output_path:
             pdf_file = output_path

@@ -446,7 +446,8 @@ def api_poll_detail(request, poll_id):
                 'end_time': poll.end_time.isoformat() if poll.end_time else None,
                 'total_ballots': total_ballots,
                 'checked_ballots': checked_ballots,
-                'candidates': candidate_list
+                'candidates': candidate_list,
+                'role': poll_member.role if 'poll_member' in locals() else 'user'
             }
         })
         

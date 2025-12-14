@@ -33,11 +33,7 @@ def tao_cuoc_bo_phieu(request):
 		status = request.POST.get('status')
 		created_by = request.user if request.user.is_authenticated else None
 		
-		# Tạo RSA key pair cho cuộc bỏ phiếu (để ký QR code)
-		from security.crypto_utils import generate_keys
-		from django.utils import timezone
-		private_key_b64, public_key_b64 = generate_keys()
-		
+		# Tạo Poll trước
 		poll = Poll.objects.create(
 			title=title,
 			description=description,
@@ -46,12 +42,12 @@ def tao_cuoc_bo_phieu(request):
 			counting_start_time=counting_start_time or None,
 			counting_end_time=counting_end_time or None,
 			status=status,
-			created_by=created_by,
-			# Lưu key pair ngay khi tạo poll
-			private_key=private_key_b64,
-			public_key=public_key_b64,
-			key_generated_at=timezone.now()
+			created_by=created_by
 		)
+		
+		# Khởi tạo HMAC secret key cho poll (mã hóa và lưu vào DB)
+		from security.hmac_utils import initialize_poll_hmac_key
+		initialize_poll_hmac_key(poll)
 		
 		# Thêm người tạo vào làm manager
 		if created_by:

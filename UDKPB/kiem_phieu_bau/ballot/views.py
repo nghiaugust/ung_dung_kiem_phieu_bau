@@ -562,18 +562,14 @@ def apply_form_ballot(request, form_id):
 				'message': 'Số lượng phiếu trong form phải lớn hơn 0!'
 			})
 		
-		# Import crypto utils
-		from security.crypto_utils import sign_ballot, generate_keys
+		# Import HMAC utils
+		from security.hmac_utils import initialize_poll_hmac_key, create_ballot_with_hmac, decrypt_hmac_key, create_ballot_hmac
 		from django.utils import timezone
 		
 		with transaction.atomic():
-			# 1. Tạo hoặc lấy key pair cho poll
-			if not poll.private_key or not poll.public_key:
-				private_key, public_key = generate_keys()
-				poll.private_key = private_key
-				poll.public_key = public_key
-				poll.key_generated_at = timezone.now()
-				poll.save(update_fields=['private_key', 'public_key', 'key_generated_at'])
+			# 1. Khởi tạo HMAC key cho poll nếu chưa có
+			if not poll.hmac_secret_key:
+				initialize_poll_hmac_key(poll)
 			
 			# 2. Tạo candidates từ table_config
 			table_config = form_ballot.get_table_config()
@@ -591,7 +587,7 @@ def apply_form_ballot(request, form_id):
 					)
 					created_candidates.append(candidate)
 			
-			# 3. Tạo ballots với QR signatures
+			# 3. Tạo ballots với HMAC signatures
 			# Xóa ballots cũ của poll (nếu có)
 			Ballot.objects.filter(poll=poll).delete()
 			
@@ -601,21 +597,12 @@ def apply_form_ballot(request, form_id):
 				ballot = Ballot.objects.create(
 					poll=poll,
 					is_checked=False,
-					is_valid=True
+					is_valid=True,
+					timestamp=timezone.now()
 				)
 				
-				# Tạo QR signature cho ballot
-				signature, payload, qr_data = sign_ballot(
-					poll_id=poll.poll_id,
-					ballot_id=ballot.ballot_id,
-					private_key_b64=poll.private_key
-				)
-				
-				# Lưu thông tin QR vào ballot
-				ballot.qr_signature = signature
-				ballot.qr_payload = payload
-				ballot.qr_generated_at = timezone.now()
-				ballot.save(update_fields=['qr_signature', 'qr_payload', 'qr_generated_at'])
+				# Tạo HMAC signature cho ballot
+				hmac_signature = create_ballot_with_hmac(ballot, save=True)
 				
 				created_ballots.append(ballot)
 		
@@ -687,3 +674,113 @@ def delete_form_ballot(request, form_id):
 		})
 	
 	return redirect('ballot:list_form_ballot', poll_id=poll_id)
+
+@login_required
+def export_form_ballot_pdf(request, form_id):
+	"""
+	View để xuất form phiếu bầu thành file PDF
+	"""
+	form_ballot = get_object_or_404(FormBallot, form_id=form_id)
+	poll = form_ballot.poll
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+		return JsonResponse({
+			'success': False,
+			'message': 'Bạn không có quyền truy cập chức năng này!'
+		}, status=403)
+	
+	try:
+		from .ballot_pdf_generator import BallotPDFGenerator
+		from reportlab.lib.units import cm
+		from django.core.files.base import ContentFile
+		
+		# Lấy cấu hình từ FormBallot
+		table_config = form_ballot.get_table_config()
+		
+		# Khởi tạo PDF Generator
+		generator = BallotPDFGenerator(
+			title=form_ballot.title,
+			header_info=form_ballot.header_info or {},
+			footer_text=form_ballot.footer_text or "Phiếu này chỉ có giá trị khi có chữ ký của Ban Kiểm phiếu",
+			add_aruco_markers=True,
+		)
+		
+		# Cấu hình bảng
+		columns = table_config.get('columns', ["STT", "Họ và tên", "Chọn"])
+		column_widths = table_config.get('column_widths')
+		
+		# Nếu không có column_widths, tính toán tự động
+		if not column_widths:
+			num_columns = len(columns)
+			# Chia đều độ rộng, tổng khoảng 16cm (A4 width - margins)
+			total_width = 16 * cm
+			column_widths = [total_width / num_columns] * num_columns
+		else:
+			# Chuyển đổi từ list numbers sang cm units
+			column_widths = [w * cm for w in column_widths]
+		
+		generator.set_table_config(
+			columns=columns,
+			column_widths=column_widths
+		)
+		
+		# Tạo dữ liệu bảng từ danh sách ứng cử viên
+		candidates = table_config.get('candidates', [])
+		data = []
+		
+		for idx, candidate_name in enumerate(candidates, start=1):
+			# Tạo row tùy theo số cột
+			row = []
+			for col_idx, col_name in enumerate(columns):
+				if col_idx == 0:  # Cột STT
+					row.append(str(idx))
+				elif col_idx == 1:  # Cột tên (giả sử cột thứ 2 là tên)
+					row.append(candidate_name)
+				else:  # Các cột khác (checkbox, etc.)
+					row.append("")
+			data.append(row)
+		
+		# Lấy HMAC signature từ ballot đầu tiên của poll (nếu có)
+		qr_signature = None
+		sample_ballot = Ballot.objects.filter(poll=poll, qr_hmac__isnull=False).first()
+		if sample_ballot and sample_ballot.qr_hmac:
+			# Tạo chuỗi QR data định dạng "marker_id:ballot_id:hmac"
+			from security.hmac_utils import generate_qr_data
+			qr_signature = generate_qr_data(
+				ballot_id=sample_ballot.ballot_id,
+				hmac_signature=sample_ballot.qr_hmac,
+				marker_id=0
+			)
+		
+		# Generate PDF với QR signature
+		pdf_buffer = generator.generate(data, qr_signature=qr_signature)
+        
+        # Lưu PDF vào model FormBallot
+		filename = f"Form_Phieu_Bau_{form_ballot.form_count}.pdf"		# Xóa file cũ nếu có
+		if form_ballot.pdf_file:
+			try:
+				if os.path.exists(form_ballot.pdf_file.path):
+					os.remove(form_ballot.pdf_file.path)
+			except Exception:
+				pass
+		
+		# Lưu file PDF mới
+		form_ballot.pdf_file.save(
+			filename,
+			ContentFile(pdf_buffer.getvalue()),
+			save=True
+		)
+		
+		# Tạo response
+		response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+		response['Content-Disposition'] = f'inline; filename="{filename}"'
+		
+		return response
+		
+	except Exception as e:
+		return JsonResponse({
+			'success': False,
+			'message': f'Lỗi khi tạo PDF: {str(e)}'
+		}, status=500)

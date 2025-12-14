@@ -23,4 +23,5 @@ urlpatterns = [
     path('form/detail/<int:form_id>/', views.detail_form_ballot, name='detail_form_ballot'),
     path('form/apply/<int:form_id>/', views.apply_form_ballot, name='apply_form_ballot'),
     path('form/delete/<int:form_id>/', views.delete_form_ballot, name='delete_form_ballot'),
+    path('form/export-pdf/<int:form_id>/', views.export_form_ballot_pdf, name='export_form_ballot_pdf'),
 ]
