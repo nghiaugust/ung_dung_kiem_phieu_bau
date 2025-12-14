@@ -602,10 +602,28 @@ def counting_stream_generator(poll_id):
 		return
 
 	try:
-		# Đường dẫn input/output
-		input_dir = os.path.join(settings.MEDIA_ROOT, str(poll_id))
-		output_dir = input_dir  # theo yêu cầu
-		ket_qua_dir = os.path.join(input_dir, f"ket_qua_{poll_id}")
+		# Thư mục gốc chứa các thư mục con theo ngày tháng
+		base_dir = os.path.join(settings.MEDIA_ROOT, 'ballots', str(poll_id))
+		
+		# Tìm tất cả file ảnh trong các thư mục con (theo cấu trúc yyyy/mm/dd/)
+		image_files = []
+		for root, dirs, files in os.walk(base_dir):
+			for file in files:
+				if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+					# Bỏ qua file trong thư mục ket_qua
+					if 'ket_qua' not in root:
+						image_files.append(os.path.join(root, file))
+		
+		if not image_files:
+			error_data = {'message': f'Lỗi: Không tìm thấy ảnh nào trong {base_dir}!', 'progress': -1}
+			yield f"data: {json.dumps(error_data)}\n\n"
+			return
+		
+		print(f"Tìm thấy {len(image_files)} ảnh phiếu bầu")
+		
+		# Đường dẫn output và kết quả
+		output_dir = base_dir  # lưu kết quả vào cùng thư mục gốc
+		ket_qua_dir = os.path.join(base_dir, f"ket_qua_{poll_id}")
 
 		# Xóa thư mục ket_qua cũ nếu có (nếu muốn làm sạch)
 		if os.path.exists(ket_qua_dir):
@@ -617,10 +635,11 @@ def counting_stream_generator(poll_id):
 		yield f"data: {json.dumps(update_data)}\n\n"
 
 		# Chạy lệnh kiểm phiếu bằng subprocess (không chờ hoàn thành)
+		# Truyền base_dir để script tìm tất cả file trong thư mục con
 		cmd = [
 			'python',
 			'-m', 'processors.trocr_yolo',
-			'--input_dir', input_dir,
+			'--input_dir', base_dir,
 			'--output_dir', output_dir
 		]
 		# Xác định đường dẫn tuyệt đối tới ballot_processing_system
@@ -672,8 +691,8 @@ def counting_stream_generator(poll_id):
 		cmd = [
 			'python',
 			'-m', 'processors.yolo_detection',
-			'--input_dir', input_dir,
-			'--output_dir', input_dir
+			'--input_dir', base_dir,
+			'--output_dir', base_dir
 		]
 		# Xác định đường dẫn tuyệt đối tới ballot_processing_system
 		ballot_processing_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../ballot_processing_system'))
@@ -724,9 +743,11 @@ def luu_thong_tin_kiem_phieu(poll_id):
 	ballot_name_list = []
 	for ballot in ballots:
 		ballot_id_list.append(ballot.ballot_id)
-		# Lấy tên gốc từ ballot_image, ví dụ: '1/ballot_1.jpg' -> 'ballot_1'
+		# Lấy tên gốc từ ballot_image
+		# Ví dụ: 'ballots/1/ballot_20251213_170754_2b35f357.jpg' -> 'ballot_20251213_170754_2b35f357'
 		if ballot.ballot_image:
-			base = os.path.basename(ballot.ballot_image)
+			# Lấy tên file từ đường dẫn đầy đủ
+			base = os.path.basename(str(ballot.ballot_image))
 			name, _ = os.path.splitext(base)
 			ballot_name_list.append(name)
 		else:
@@ -737,9 +758,15 @@ def luu_thong_tin_kiem_phieu(poll_id):
 	candidate_info_list = [(c.candidate_id, c.name.upper() if c.name else "") for c in candidates]
 
 	# Đường dẫn kết quả kiểm phiếu
-	ket_qua_dir = os.path.join('media', str(poll_id), f'ket_qua_{poll_id}')
+	ket_qua_dir = os.path.join(settings.MEDIA_ROOT, 'ballots', str(poll_id), f'ket_qua_{poll_id}')
+	
+	# Kiểm tra xem thư mục có tồn tại không
+	if not os.path.exists(ket_qua_dir):
+		print(f"Thư mục kết quả không tồn tại: {ket_qua_dir}")
+		return ballot_id_list, ballot_name_list, candidate_info_list
 	
 	json_files = glob.glob(os.path.join(ket_qua_dir, '*.json'))
+	print(f"Tìm thấy {len(json_files)} file JSON trong {ket_qua_dir}")
 
 	for json_path in json_files:
 		file_name = os.path.basename(json_path)
@@ -777,11 +804,16 @@ def luu_thong_tin_kiem_phieu(poll_id):
 								BallotSelection.objects.create(ballot=ballot, candidate_id=best_cid)
 					# Đánh dấu đã kiểm phiếu
 					ballot.is_checked = True
-					ballot.save(update_fields=['is_checked'])
+					ballot.is_valid = True
+					ballot.save(update_fields=['is_checked', 'is_valid'])
 			except Exception as e:
 				# Nếu có lỗi, rollback transaction, không tạo gì cho ballot này
+				print(f"Lỗi khi xử lý phiếu {ballot_id}: {str(e)}")
 				ballot.is_valid = False
-				ballot.save(update_fields=['is_valid'])
+				ballot.is_checked = True
+				ballot.save(update_fields=['is_valid', 'is_checked'])
 				continue
+		else:
+			print(f"Không tìm thấy ballot tương ứng cho file: {name_no_ext}")
 	# Trả về các danh sách nếu cần debug
 	return ballot_id_list, ballot_name_list, candidate_info_list

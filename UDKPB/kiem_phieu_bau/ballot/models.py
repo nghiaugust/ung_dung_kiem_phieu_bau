@@ -8,7 +8,7 @@ from poll.models import Poll, Candidate
 def ballot_image_upload_path(instance, filename):
 	"""
 	Tạo đường dẫn upload unique cho ballot image
-	Format: ballots/<poll_id>/<YYYY>/<MM>/<DD>/ballot_<timestamp>_<uuid>.<ext>
+	Format: ballots/<poll_id>/ballot_<timestamp>_<uuid>.<ext>
 	"""
 	ext = filename.split('.')[-1].lower()
 	from django.utils import timezone
@@ -16,9 +16,9 @@ def ballot_image_upload_path(instance, filename):
 	unique_id = uuid.uuid4().hex[:8]
 	new_filename = f"ballot_{now.strftime('%Y%m%d_%H%M%S')}_{unique_id}.{ext}"
 	
-	# Tổ chức theo poll_id và ngày tháng năm
+	# Tổ chức theo poll_id
 	poll_id = instance.poll.poll_id if instance.poll else 'no_poll'
-	return os.path.join('ballots', str(poll_id), now.strftime('%Y/%m/%d'), new_filename)
+	return os.path.join('ballots', str(poll_id), new_filename)
 
 
 class Ballot(models.Model): # phiếu bầu
