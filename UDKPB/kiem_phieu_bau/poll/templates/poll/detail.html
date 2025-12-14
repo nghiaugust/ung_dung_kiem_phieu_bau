@@ -225,6 +225,11 @@ phiếu{% endblock %} {% block content %}
   <a href="{% url 'poll:manage_members' poll.poll_id %}" class="btn btn-primary ms-2"
     ><i class="bi bi-people-fill"></i> Thành viên</a
   >
+  <a
+    href="{% url 'poll:manage_voters' poll.poll_id %}"
+    class="btn btn-info ms-2"
+    ><i class="bi bi-person-vcard"></i> Cử tri</a
+  >
 </div>
 
 {% block scripts %}

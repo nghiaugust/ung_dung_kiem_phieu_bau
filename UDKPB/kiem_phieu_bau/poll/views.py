@@ -945,3 +945,162 @@ def remove_member(request, poll_id, member_id):
 		'success': True, 
 		'message': f'Đã xóa thành viên {username} khỏi cuộc bỏ phiếu'
 	})
+
+# ==================== VOTER MANAGEMENT ====================
+
+@login_required
+def manage_voters(request, poll_id):
+	"""View to manage voters - only accessible by superuser and managers"""
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Check permission: only superuser or manager can access
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		messages.error(request, 'Bạn không có quyền truy cập chức năng này!')
+		return redirect('poll:poll_detail', poll_id=poll_id)
+	
+	# Get all voters of this poll
+	voters = Voter.objects.filter(poll=poll).select_related('check_in_by').order_by('full_name')
+	
+	context = {
+		'poll': poll,
+		'voters': voters,
+	}
+	
+	return render(request, 'poll/voters.html', context)
+
+@login_required
+def add_voter(request, poll_id):
+	"""AJAX endpoint to add a new voter"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Invalid request method'})
+	
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		return JsonResponse({'success': False, 'message': 'Bạn không có quyền thực hiện thao tác này!'})
+	
+	# Get form data
+	full_name = request.POST.get('full_name', '').strip()
+	email = request.POST.get('email', '').strip()
+	code_id = request.POST.get('code_id', '').strip()
+	
+	# Validate required fields
+	if not full_name or not code_id:
+		return JsonResponse({'success': False, 'message': 'Họ tên và mã cử tri là bắt buộc!'})
+	
+	# Check if code_id already exists in this poll
+	if Voter.objects.filter(poll=poll, code_id=code_id).exists():
+		return JsonResponse({'success': False, 'message': f'Mã cử tri "{code_id}" đã tồn tại trong cuộc bỏ phiếu này!'})
+	
+	# Check if email already exists in this poll (if provided)
+	if email and Voter.objects.filter(poll=poll, email=email).exists():
+		return JsonResponse({'success': False, 'message': f'Email "{email}" đã tồn tại trong cuộc bỏ phiếu này!'})
+	
+	# Create new voter
+	try:
+		voter = Voter.objects.create(
+			poll=poll,
+			full_name=full_name,
+			email=email if email else None,
+			code_id=code_id
+		)
+		return JsonResponse({
+			'success': True, 
+			'message': f'Đã thêm cử tri "{full_name}" thành công!'
+		})
+	except Exception as e:
+		return JsonResponse({'success': False, 'message': f'Lỗi: {str(e)}'})
+
+@login_required
+def update_voter(request, poll_id, voter_id):
+	"""AJAX endpoint to update voter information"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Invalid request method'})
+	
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	voter = get_object_or_404(Voter, voter_id=voter_id, poll=poll)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		return JsonResponse({'success': False, 'message': 'Bạn không có quyền thực hiện thao tác này!'})
+	
+	# Get form data
+	full_name = request.POST.get('full_name', '').strip()
+	email = request.POST.get('email', '').strip()
+	code_id = request.POST.get('code_id', '').strip()
+	
+	# Validate required fields
+	if not full_name or not code_id:
+		return JsonResponse({'success': False, 'message': 'Họ tên và mã cử tri là bắt buộc!'})
+	
+	# Check if code_id already exists in this poll (excluding current voter)
+	if Voter.objects.filter(poll=poll, code_id=code_id).exclude(voter_id=voter_id).exists():
+		return JsonResponse({'success': False, 'message': f'Mã cử tri "{code_id}" đã tồn tại trong cuộc bỏ phiếu này!'})
+	
+	# Check if email already exists in this poll (excluding current voter, if provided)
+	if email and Voter.objects.filter(poll=poll, email=email).exclude(voter_id=voter_id).exists():
+		return JsonResponse({'success': False, 'message': f'Email "{email}" đã tồn tại trong cuộc bỏ phiếu này!'})
+	
+	# Update voter
+	try:
+		voter.full_name = full_name
+		voter.email = email if email else None
+		voter.code_id = code_id
+		voter.save()
+		
+		return JsonResponse({
+			'success': True, 
+			'message': f'Đã cập nhật thông tin cử tri "{full_name}"'
+		})
+	except Exception as e:
+		return JsonResponse({'success': False, 'message': f'Lỗi: {str(e)}'})
+
+@login_required
+def remove_voter(request, poll_id, voter_id):
+	"""AJAX endpoint to remove a voter"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Invalid request method'})
+	
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	voter = get_object_or_404(Voter, voter_id=voter_id, poll=poll)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		return JsonResponse({'success': False, 'message': 'Bạn không có quyền thực hiện thao tác này!'})
+	
+	full_name = voter.full_name
+	voter.delete()
+	
+	return JsonResponse({
+		'success': True, 
+		'message': f'Đã xóa cử tri "{full_name}" khỏi cuộc bỏ phiếu'
+	})

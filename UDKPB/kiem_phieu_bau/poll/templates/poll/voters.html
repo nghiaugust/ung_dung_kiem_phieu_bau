@@ -1,0 +1,434 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% block title %}Quản lý cử tri - {{ poll.title }}{% endblock %} {% block content %}
+<div class="container-fluid">
+  <h2 class="mb-4">
+    <i class="bi bi-person-vcard"></i>
+    Quản lý cử tri cuộc bỏ phiếu
+  </h2>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">{{ poll.title }}</h5>
+      <p class="card-text text-muted">
+        ID: {{ poll.poll_id }} | Mã tham gia: {{ poll.access_code }}
+      </p>
+    </div>
+  </div>
+
+  {% if messages %} {% for message in messages %}
+  <div
+    class="alert alert-{{ message.tags }} alert-dismissible fade show"
+    role="alert"
+  >
+    {{ message }}
+    <button
+      type="button"
+      class="btn-close"
+      data-bs-dismiss="alert"
+      aria-label="Close"
+    ></button>
+  </div>
+  {% endfor %} {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="card-title mb-0">Danh sách cử tri ({{ voters.count }})</h5>
+        <button
+          class="btn btn-success"
+          data-bs-toggle="modal"
+          data-bs-target="#addVoterModal"
+        >
+          <i class="bi bi-plus-lg"></i> Thêm cử tri
+        </button>
+      </div>
+
+      {% if voters %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 60px">STT</th>
+              <th>Họ tên</th>
+              <th>Email</th>
+              <th>Mã cử tri</th>
+              <th style="width: 120px">Đã check-in</th>
+              <th style="width: 160px">Thời gian check-in</th>
+              <th>Người phát phiếu</th>
+              <th style="width: 150px">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for voter in voters %}
+            <tr id="voter-row-{{ voter.voter_id }}">
+              <td class="text-center">{{ forloop.counter }}</td>
+              <td>
+                <strong>{{ voter.full_name|default:"N/A" }}</strong>
+              </td>
+              <td>{{ voter.email|default:"N/A" }}</td>
+              <td>
+                <code>{{ voter.code_id|default:"N/A" }}</code>
+              </td>
+              <td class="text-center">
+                {% if voter.has_checked_in %}
+                <span class="badge bg-success">
+                  <i class="bi bi-check-circle"></i> Đã check-in
+                </span>
+                {% else %}
+                <span class="badge bg-secondary">
+                  <i class="bi bi-x-circle"></i> Chưa check-in
+                </span>
+                {% endif %}
+              </td>
+              <td class="text-center small">
+                {% if voter.check_in_time %} {{ voter.check_in_time|date:"d/m/Y H:i:s" }} {% else %}
+                <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if voter.check_in_by %} {{ voter.check_in_by.username }} {% else %}
+                <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <button
+                  class="btn btn-warning btn-sm edit-voter"
+                  data-voter-id="{{ voter.voter_id }}"
+                  data-full-name="{{ voter.full_name }}"
+                  data-email="{{ voter.email }}"
+                  data-code-id="{{ voter.code_id }}"
+                >
+                  <i class="bi bi-pencil"></i> Sửa
+                </button>
+                <button
+                  class="btn btn-danger btn-sm remove-voter"
+                  data-voter-id="{{ voter.voter_id }}"
+                  data-full-name="{{ voter.full_name }}"
+                >
+                  <i class="bi bi-trash"></i> Xóa
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Chưa có cử tri nào trong cuộc bỏ phiếu
+        này.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <a
+      href="{% url 'poll:poll_detail' poll.poll_id %}"
+      class="btn btn-secondary"
+    >
+      <i class="bi bi-arrow-left"></i> Quay lại
+    </a>
+  </div>
+</div>
+
+<!-- Add Voter Modal -->
+<div
+  class="modal fade"
+  id="addVoterModal"
+  tabindex="-1"
+  aria-labelledby="addVoterModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addVoterModalLabel">Thêm cử tri mới</h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <form id="addVoterForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="add_full_name" class="form-label"
+              >Họ tên <span class="text-danger">*</span></label
+            >
+            <input
+              type="text"
+              class="form-control"
+              id="add_full_name"
+              name="full_name"
+              required
+            />
+          </div>
+          <div class="mb-3">
+            <label for="add_email" class="form-label">Email</label>
+            <input
+              type="email"
+              class="form-control"
+              id="add_email"
+              name="email"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="add_code_id" class="form-label"
+              >Mã cử tri <span class="text-danger">*</span></label
+            >
+            <input
+              type="text"
+              class="form-control"
+              id="add_code_id"
+              name="code_id"
+              required
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Hủy
+          </button>
+          <button type="submit" class="btn btn-success">Thêm cử tri</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Voter Modal -->
+<div
+  class="modal fade"
+  id="editVoterModal"
+  tabindex="-1"
+  aria-labelledby="editVoterModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editVoterModalLabel">Chỉnh sửa cử tri</h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <form id="editVoterForm">
+        <input type="hidden" id="edit_voter_id" name="voter_id" />
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="edit_full_name" class="form-label"
+              >Họ tên <span class="text-danger">*</span></label
+            >
+            <input
+              type="text"
+              class="form-control"
+              id="edit_full_name"
+              name="full_name"
+              required
+            />
+          </div>
+          <div class="mb-3">
+            <label for="edit_email" class="form-label">Email</label>
+            <input
+              type="email"
+              class="form-control"
+              id="edit_email"
+              name="email"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="edit_code_id" class="form-label"
+              >Mã cử tri <span class="text-danger">*</span></label
+            >
+            <input
+              type="text"
+              class="form-control"
+              id="edit_code_id"
+              name="code_id"
+              required
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Hủy
+          </button>
+          <button type="submit" class="btn btn-warning">Cập nhật</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Add voter form submission
+    document
+      .getElementById("addVoterForm")
+      .addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+
+        fetch(`{% url 'poll:add_voter' poll.poll_id %}`, {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": "{{ csrf_token }}",
+          },
+          body: formData,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              showAlert("success", data.message || "Thêm cử tri thành công!");
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              showAlert("danger", data.message || "Có lỗi xảy ra!");
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            showAlert("danger", "Có lỗi xảy ra khi thêm cử tri!");
+          });
+      });
+
+    // Edit voter button click
+    document.querySelectorAll(".edit-voter").forEach((button) => {
+      button.addEventListener("click", function () {
+        const voterId = this.dataset.voterId;
+        const fullName = this.dataset.fullName;
+        const email = this.dataset.email;
+        const codeId = this.dataset.codeId;
+
+        document.getElementById("edit_voter_id").value = voterId;
+        document.getElementById("edit_full_name").value = fullName;
+        document.getElementById("edit_email").value = email || "";
+        document.getElementById("edit_code_id").value = codeId;
+
+        const editModal = new bootstrap.Modal(
+          document.getElementById("editVoterModal")
+        );
+        editModal.show();
+      });
+    });
+
+    // Edit voter form submission
+    document
+      .getElementById("editVoterForm")
+      .addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const voterId = document.getElementById("edit_voter_id").value;
+        const formData = new FormData(this);
+
+        fetch(
+          `{% url 'poll:update_voter' poll.poll_id 0 %}`.replace(
+            "/0/",
+            `/${voterId}/`
+          ),
+          {
+            method: "POST",
+            headers: {
+              "X-CSRFToken": "{{ csrf_token }}",
+            },
+            body: formData,
+          }
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              showAlert(
+                "success",
+                data.message || "Cập nhật cử tri thành công!"
+              );
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              showAlert("danger", data.message || "Có lỗi xảy ra!");
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            showAlert("danger", "Có lỗi xảy ra khi cập nhật cử tri!");
+          });
+      });
+
+    // Remove voter
+    document.querySelectorAll(".remove-voter").forEach((button) => {
+      button.addEventListener("click", function () {
+        const voterId = this.dataset.voterId;
+        const fullName = this.dataset.fullName;
+
+        if (!confirm(`Bạn có chắc muốn xóa cử tri "${fullName}"?`)) {
+          return;
+        }
+
+        fetch(
+          `{% url 'poll:remove_voter' poll.poll_id 0 %}`.replace(
+            "/0/",
+            `/${voterId}/`
+          ),
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-CSRFToken": "{{ csrf_token }}",
+            },
+          }
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              const row = document.getElementById(`voter-row-${voterId}`);
+              if (row) {
+                row.remove();
+              }
+              showAlert("success", data.message || "Xóa cử tri thành công!");
+            } else {
+              showAlert("danger", data.message || "Có lỗi xảy ra!");
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            showAlert("danger", "Có lỗi xảy ra khi xóa cử tri!");
+          });
+      });
+    });
+
+    // Helper function to show alert
+    function showAlert(type, message) {
+      const alertDiv = document.createElement("div");
+      alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+      alertDiv.role = "alert";
+      alertDiv.innerHTML = `
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+
+      const container = document.querySelector(".container-fluid");
+      container.insertBefore(alertDiv, container.firstChild);
+
+      // Auto dismiss after 3 seconds
+      setTimeout(() => {
+        alertDiv.remove();
+      }, 3000);
+    }
+  });
+</script>
+{% endblock %} {% endblock %}
