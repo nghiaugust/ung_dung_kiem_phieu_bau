@@ -34,4 +34,12 @@ urlpatterns = [
     # Statistics
     path('statistics/', views.api_statistics, name='statistics'),
     path('polls/<int:poll_id>/statistics/', views.api_statistics_detail, name='statistics_detail'),
+    
+    # Voter Management
+    path('polls/<int:poll_id>/voters/', views.api_voter_list, name='voter_list'),
+    path('polls/<int:poll_id>/voters/create/', views.api_voter_create, name='voter_create'),
+    path('polls/<int:poll_id>/voters/<int:voter_id>/', views.api_voter_update, name='voter_update'),
+    path('polls/<int:poll_id>/voters/<int:voter_id>/delete/', views.api_voter_delete, name='voter_delete'),
+    path('polls/<int:poll_id>/voters/<int:voter_id>/checkin/', views.api_voter_checkin, name='voter_checkin'),
+    path('polls/<int:poll_id>/voters/<int:voter_id>/undo-checkin/', views.api_voter_undo_checkin, name='voter_undo_checkin'),
 ]

@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from .models import APIToken
 from .authentication import require_api_token
-from poll.models import Poll, Candidate, PollMember
+from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot
 
 User = get_user_model()
@@ -1613,6 +1613,654 @@ def api_statistics_detail(request, poll_id):
             },
             'total_ballots': valid_checked_ballots,
             'candidate_stats': list(candidate_stats)
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+# =====================================================
+# VOTER MANAGEMENT APIs
+# =====================================================
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_voter_list(request, poll_id):
+    """
+    Danh sách cử tri của cuộc bỏ phiếu
+    
+    GET /api/polls/<poll_id>/voters/
+    Header: Authorization: Bearer <token>
+    
+    Query params:
+        - limit: số lượng (default 50)
+        - offset: vị trí bắt đầu (default 0)
+        - search: tìm kiếm theo tên hoặc code_id
+        - checked_in: filter theo trạng thái check-in (true/false)
+    
+    Response:
+    {
+        "success": true,
+        "count": 100,
+        "voters": [...]
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, hoặc thành viên active của poll
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active'
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xem danh sách cử tri của cuộc bỏ phiếu này'
+            }, status=403)
+        
+        # Parse query params
+        limit = int(request.GET.get('limit', 50))
+        offset = int(request.GET.get('offset', 0))
+        search = request.GET.get('search', '').strip()
+        checked_in_filter = request.GET.get('checked_in', '').lower()
+        
+        # Query voters
+        from django.db.models import Q
+        voters = Voter.objects.filter(poll=poll)
+        
+        # Apply search filter
+        if search:
+            voters = voters.filter(
+                Q(full_name__icontains=search) | 
+                Q(code_id__icontains=search) |
+                Q(email__icontains=search)
+            )
+        
+        # Apply check-in filter
+        if checked_in_filter == 'true':
+            voters = voters.filter(has_checked_in=True)
+        elif checked_in_filter == 'false':
+            voters = voters.filter(has_checked_in=False)
+        
+        total_count = voters.count()
+        voters = voters.order_by('-voter_id')[offset:offset + limit]
+        
+        voter_list = []
+        for voter in voters:
+            voter_list.append({
+                'voter_id': voter.voter_id,
+                'full_name': voter.full_name,
+                'email': voter.email or '',
+                'code_id': voter.code_id,
+                'has_checked_in': voter.has_checked_in,
+                'check_in_time': voter.check_in_time.isoformat() if voter.check_in_time else None,
+                'check_in_by': voter.check_in_by.username if voter.check_in_by else None
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'count': total_count,
+            'limit': limit,
+            'offset': offset,
+            'voters': voter_list
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except ValueError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid parameters',
+            'message': 'Tham số không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_voter_create(request, poll_id):
+    """
+    Thêm cử tri mới vào cuộc bỏ phiếu
+    
+    POST /api/polls/<poll_id>/voters/create/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "full_name": "Nguyễn Văn A",
+        "email": "email@example.com" (optional),
+        "code_id": "CV001"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "voter": {...}
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, manager hoặc checkin
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active',
+                role__in=['manager', 'checkin']
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền thêm cử tri. Chỉ superuser, người tạo poll, manager hoặc checkin mới có quyền này'
+            }, status=403)
+        
+        data = json.loads(request.body)
+        full_name = data.get('full_name', '').strip()
+        email = data.get('email', '').strip()
+        code_id = data.get('code_id', '').strip()
+        
+        # Validate input
+        if not full_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid input',
+                'message': 'Họ tên không được để trống'
+            }, status=400)
+        
+        if not code_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid input',
+                'message': 'Mã cử tri không được để trống'
+            }, status=400)
+        
+        # Check duplicate code_id in this poll
+        if Voter.objects.filter(poll=poll, code_id=code_id).exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'Duplicate code_id',
+                'message': f'Mã cử tri {code_id} đã tồn tại trong cuộc bỏ phiếu này'
+            }, status=400)
+        
+        # Check duplicate email in this poll (if provided)
+        if email and Voter.objects.filter(poll=poll, email=email).exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'Duplicate email',
+                'message': f'Email {email} đã tồn tại trong cuộc bỏ phiếu này'
+            }, status=400)
+        
+        # Create voter
+        with transaction.atomic():
+            voter = Voter.objects.create(
+                poll=poll,
+                full_name=full_name,
+                email=email if email else None,
+                code_id=code_id,
+                has_checked_in=False
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Thêm cử tri thành công',
+            'voter': {
+                'voter_id': voter.voter_id,
+                'full_name': voter.full_name,
+                'email': voter.email or '',
+                'code_id': voter.code_id,
+                'has_checked_in': voter.has_checked_in
+            }
+        }, status=201)
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["PUT"])
+def api_voter_update(request, poll_id, voter_id):
+    """
+    Cập nhật thông tin cử tri
+    
+    PUT /api/polls/<poll_id>/voters/<voter_id>/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "full_name": "Nguyễn Văn A",
+        "email": "email@example.com",
+        "code_id": "CV001"
+    }
+    
+    Note: Không cập nhật has_checked_in, check_in_time, check_in_by (dùng API check-in riêng)
+    
+    Response:
+    {
+        "success": true,
+        "voter": {...}
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, manager hoặc checkin
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active',
+                role__in=['manager', 'checkin']
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền sửa thông tin cử tri. Chỉ superuser, người tạo poll, manager hoặc checkin mới có quyền này'
+            }, status=403)
+        
+        # Get voter
+        try:
+            voter = Voter.objects.get(voter_id=voter_id, poll=poll)
+        except Voter.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Voter not found',
+                'message': 'Không tìm thấy cử tri'
+            }, status=404)
+        
+        data = json.loads(request.body)
+        full_name = data.get('full_name', '').strip()
+        email = data.get('email', '').strip()
+        code_id = data.get('code_id', '').strip()
+        
+        # Validate input
+        if not full_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid input',
+                'message': 'Họ tên không được để trống'
+            }, status=400)
+        
+        if not code_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid input',
+                'message': 'Mã cử tri không được để trống'
+            }, status=400)
+        
+        # Check duplicate code_id (exclude current voter)
+        if Voter.objects.filter(poll=poll, code_id=code_id).exclude(voter_id=voter_id).exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'Duplicate code_id',
+                'message': f'Mã cử tri {code_id} đã tồn tại trong cuộc bỏ phiếu này'
+            }, status=400)
+        
+        # Check duplicate email (exclude current voter)
+        if email and Voter.objects.filter(poll=poll, email=email).exclude(voter_id=voter_id).exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'Duplicate email',
+                'message': f'Email {email} đã tồn tại trong cuộc bỏ phiếu này'
+            }, status=400)
+        
+        # Update voter (không cập nhật has_checked_in, check_in_time, check_in_by)
+        with transaction.atomic():
+            voter.full_name = full_name
+            voter.email = email if email else None
+            voter.code_id = code_id
+            voter.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Cập nhật thông tin cử tri thành công',
+            'voter': {
+                'voter_id': voter.voter_id,
+                'full_name': voter.full_name,
+                'email': voter.email or '',
+                'code_id': voter.code_id,
+                'has_checked_in': voter.has_checked_in,
+                'check_in_time': voter.check_in_time.isoformat() if voter.check_in_time else None,
+                'check_in_by': voter.check_in_by.username if voter.check_in_by else None
+            }
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["DELETE"])
+def api_voter_delete(request, poll_id, voter_id):
+    """
+    Xóa cử tri
+    
+    DELETE /api/polls/<poll_id>/voters/<voter_id>/delete/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "message": "Xóa cử tri thành công"
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, manager hoặc checkin
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active',
+                role__in=['manager', 'checkin']
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xóa cử tri. Chỉ superuser, người tạo poll, manager hoặc checkin mới có quyền này'
+            }, status=403)
+        
+        # Get and delete voter
+        try:
+            voter = Voter.objects.get(voter_id=voter_id, poll=poll)
+            voter_name = voter.full_name
+            with transaction.atomic():
+                voter.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Đã xóa cử tri {voter_name} thành công'
+            })
+        except Voter.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Voter not found',
+                'message': 'Không tìm thấy cử tri'
+            }, status=404)
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_voter_checkin(request, poll_id, voter_id):
+    """
+    Check-in cử tri (đánh dấu đã nhận phiếu)
+    
+    POST /api/polls/<poll_id>/voters/<voter_id>/checkin/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "message": "Check-in thành công",
+        "voter": {...}
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, manager hoặc checkin
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active',
+                role__in=['manager', 'checkin']
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền check-in cử tri. Chỉ superuser, người tạo poll, manager hoặc checkin mới có quyền này'
+            }, status=403)
+        
+        # Get voter
+        try:
+            voter = Voter.objects.get(voter_id=voter_id, poll=poll)
+        except Voter.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Voter not found',
+                'message': 'Không tìm thấy cử tri'
+            }, status=404)
+        
+        # Check if already checked in
+        if voter.has_checked_in:
+            return JsonResponse({
+                'success': False,
+                'error': 'Already checked in',
+                'message': f'Cử tri {voter.full_name} đã check-in lúc {voter.check_in_time.strftime("%H:%M %d/%m/%Y")}',
+                'voter': {
+                    'voter_id': voter.voter_id,
+                    'full_name': voter.full_name,
+                    'has_checked_in': voter.has_checked_in,
+                    'check_in_time': voter.check_in_time.isoformat() if voter.check_in_time else None,
+                    'check_in_by': voter.check_in_by.username if voter.check_in_by else None
+                }
+            }, status=400)
+        
+        # Perform check-in
+        with transaction.atomic():
+            voter.has_checked_in = True
+            voter.check_in_time = timezone.now()
+            voter.check_in_by = user
+            voter.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Check-in thành công cho cử tri {voter.full_name}',
+            'voter': {
+                'voter_id': voter.voter_id,
+                'full_name': voter.full_name,
+                'email': voter.email or '',
+                'code_id': voter.code_id,
+                'has_checked_in': voter.has_checked_in,
+                'check_in_time': voter.check_in_time.isoformat() if voter.check_in_time else None,
+                'check_in_by': voter.check_in_by.username if voter.check_in_by else None
+            }
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_voter_undo_checkin(request, poll_id, voter_id):
+    """
+    Hủy check-in cử tri (trường hợp check-in nhầm)
+    
+    POST /api/polls/<poll_id>/voters/<voter_id>/undo-checkin/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "message": "Đã hủy check-in",
+        "voter": {...}
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, manager hoặc checkin
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active',
+                role__in=['manager', 'checkin']
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền hủy check-in. Chỉ superuser, người tạo poll, manager hoặc checkin mới có quyền này'
+            }, status=403)
+        
+        # Get voter
+        try:
+            voter = Voter.objects.get(voter_id=voter_id, poll=poll)
+        except Voter.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Voter not found',
+                'message': 'Không tìm thấy cử tri'
+            }, status=404)
+        
+        # Check if not checked in
+        if not voter.has_checked_in:
+            return JsonResponse({
+                'success': False,
+                'error': 'Not checked in',
+                'message': f'Cử tri {voter.full_name} chưa check-in'
+            }, status=400)
+        
+        # Undo check-in
+        with transaction.atomic():
+            voter.has_checked_in = False
+            voter.check_in_time = None
+            voter.check_in_by = None
+            voter.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Đã hủy check-in cho cử tri {voter.full_name}',
+            'voter': {
+                'voter_id': voter.voter_id,
+                'full_name': voter.full_name,
+                'email': voter.email or '',
+                'code_id': voter.code_id,
+                'has_checked_in': voter.has_checked_in,
+                'check_in_time': None,
+                'check_in_by': None
+            }
         })
         
     except Poll.DoesNotExist:
