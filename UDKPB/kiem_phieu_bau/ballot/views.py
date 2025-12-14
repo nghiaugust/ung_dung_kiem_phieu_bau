@@ -754,10 +754,48 @@ def export_form_ballot_pdf(request, form_id):
 				marker_id=0
 			)
 		
-		# Generate PDF với QR signature
-		pdf_buffer = generator.generate(data, qr_signature=qr_signature)
+		# Lấy danh sách ballots của poll này (đã được tạo từ apply_form_ballot)
+		ballots = Ballot.objects.filter(poll=poll, qr_hmac__isnull=False).order_by('ballot_id')
+		
+		# Kiểm tra số lượng ballots có đủ không
+		available_ballots = ballots.count()
+		if available_ballots < form_ballot.quantity:
+			return JsonResponse({
+				'success': False,
+				'message': f'Chỉ có {available_ballots} phiếu bầu với HMAC trong database, nhưng form yêu cầu {form_ballot.quantity} phiếu. Vui lòng chạy "Áp dụng form" trước!'
+			}, status=400)
+		
+		# Tạo danh sách QR signatures cho từng ballot
+		from security.hmac_utils import generate_qr_data
+		qr_signatures = []
+		
+		# Lấy CHÍNH XÁC số lượng ballots theo quantity
+		ballot_list = list(ballots[:form_ballot.quantity])
+		
+		for ballot in ballot_list:
+			qr_sig = generate_qr_data(
+				ballot_id=ballot.ballot_id,
+				hmac_signature=ballot.qr_hmac,
+				marker_id=0
+			)
+			qr_signatures.append(qr_sig)
+		
+		# Kiểm tra số lượng QR signatures
+		if len(qr_signatures) != form_ballot.quantity:
+			return JsonResponse({
+				'success': False,
+				'message': f'Lỗi: Chỉ tạo được {len(qr_signatures)} QR signatures thay vì {form_ballot.quantity}!'
+			}, status=500)
+		
+		# Sử dụng generate_multiple_ballots với ballot_qr_data
+		pdf_buffer = generator.generate_multiple_ballots(
+			data=data,
+			ballot_qr_data=qr_signatures,
+			ballots_per_page=form_ballot.quantity,
+			output_path=None
+		)
         
-        # Lưu PDF vào model FormBallot
+		# Lưu PDF vào model FormBallot
 		filename = f"Form_Phieu_Bau_{form_ballot.form_count}.pdf"		# Xóa file cũ nếu có
 		if form_ballot.pdf_file:
 			try:

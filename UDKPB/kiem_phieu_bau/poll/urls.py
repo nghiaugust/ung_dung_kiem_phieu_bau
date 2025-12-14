@@ -24,6 +24,11 @@ urlpatterns = [
     path('<int:poll_id>/members/add/', views.add_poll_member, name='add_poll_member'),
     path('poll_member/delete/<int:member_id>/', views.delete_poll_member, name='delete_poll_member'),
     
+    # Member management (new)
+    path('<int:poll_id>/manage-members/', views.manage_members, name='manage_members'),
+    path('<int:poll_id>/update-member/<int:member_id>/', views.update_member, name='update_member'),
+    path('<int:poll_id>/remove-member/<int:member_id>/', views.remove_member, name='remove_member'),
+    
     # Statistics
     path('thong_ke/', views.thong_ke, name='thong_ke'),
     path('thong_ke/<int:poll_id>/', views.thong_ke_detail, name='thong_ke_detail'),

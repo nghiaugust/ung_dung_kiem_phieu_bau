@@ -1,0 +1,312 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% block title %}Quản lý thành viên - {{ poll.title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <h2 class="mb-4">
+    <i class="bi bi-people-fill"></i>
+    Quản lý thành viên cuộc bỏ phiếu
+  </h2>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">{{ poll.title }}</h5>
+      <p class="card-text text-muted">ID: {{ poll.poll_id }} | Mã tham gia: {{ poll.access_code }}</p>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Filter buttons -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6 class="card-subtitle mb-3 text-muted">Lọc danh sách thành viên</h6>
+      <div class="btn-group" role="group">
+        <a href="{% url 'poll:manage_members' poll.poll_id %}?filter=all" 
+           class="btn btn-outline-primary {% if filter_type == 'all' %}active{% endif %}">
+          <i class="bi bi-people"></i> Tất cả ({{ total_count }})
+        </a>
+        <a href="{% url 'poll:manage_members' poll.poll_id %}?filter=pending" 
+           class="btn btn-outline-warning {% if filter_type == 'pending' %}active{% endif %}">
+          <i class="bi bi-clock-history"></i> Chờ duyệt ({{ pending_count }})
+        </a>
+        <a href="{% url 'poll:manage_members' poll.poll_id %}?filter=requested" 
+           class="btn btn-outline-info {% if filter_type == 'requested' %}active{% endif %}">
+          <i class="bi bi-arrow-up-circle"></i> Yêu cầu thay đổi vai trò ({{ requested_count }})
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title mb-3">
+        Danh sách thành viên 
+        {% if filter_type == 'all' %}
+          ({{ total_count }})
+        {% elif filter_type == 'pending' %}
+          - Chờ duyệt ({{ pending_count }})
+        {% elif filter_type == 'requested' %}
+          - Yêu cầu thay đổi vai trò ({{ requested_count }})
+        {% endif %}
+      </h5>
+      
+      {% if members %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 60px">STT</th>
+              <th>Tên tài khoản</th>
+              <th>Email</th>
+              <th style="width: 150px">Vai trò</th>
+              <th style="width: 150px">Trạng thái</th>
+              <th style="width: 150px">Yêu cầu thay đổi</th>
+              <th style="width: 180px">Thời gian tham gia</th>
+              <th style="width: 150px">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in members %}
+            <tr id="member-row-{{ member.member_id }}">
+              <td class="text-center">{{ forloop.counter }}</td>
+              <td>
+                <strong>{{ member.account.username }}</strong>
+                {% if member.account.is_superuser %}
+                <span class="badge bg-danger ms-1">Superuser</span>
+                {% endif %}
+              </td>
+              <td>{{ member.account.email|default:"N/A" }}</td>
+              <td>
+                <select 
+                  class="form-select form-select-sm role-select" 
+                  data-member-id="{{ member.member_id }}"
+                  {% if member.account.is_superuser %}disabled{% endif %}
+                >
+                  <option value="manager" {% if member.role == 'manager' %}selected{% endif %}>Trưởng ban</option>
+                  <option value="operator" {% if member.role == 'operator' %}selected{% endif %}>Tổ nhập liệu</option>
+                  <option value="checkin" {% if member.role == 'checkin' %}selected{% endif %}>Tổ phát phiếu</option>
+                  <option value="user" {% if member.role == 'user' %}selected{% endif %}>Người xem</option>
+                </select>
+              </td>
+              <td>
+                <select 
+                  class="form-select form-select-sm status-select" 
+                  data-member-id="{{ member.member_id }}"
+                  {% if member.account.is_superuser %}disabled{% endif %}
+                >
+                  <option value="pending" {% if member.status == 'pending' %}selected{% endif %}>Chờ duyệt</option>
+                  <option value="active" {% if member.status == 'active' %}selected{% endif %}>Đang hoạt động</option>
+                  <option value="rejected" {% if member.status == 'rejected' %}selected{% endif %}>Từ chối</option>
+                  <option value="banned" {% if member.status == 'banned' %}selected{% endif %}>Bị chặn</option>
+                </select>
+              </td>
+              <td class="text-center small">
+                {% if member.requested_role_change %}
+                  <span class="badge bg-info">
+                    {% if member.requested_role_change == 'manager' %}Trưởng ban
+                    {% elif member.requested_role_change == 'operator' %}Tổ nhập liệu
+                    {% elif member.requested_role_change == 'checkin' %}Tổ phát phiếu
+                    {% endif %}
+                  </span>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td class="text-center small">
+                {{ member.assigned_at|date:"d/m/Y H:i" }}
+              </td>
+              <td class="text-center">
+                {% if not member.account.is_superuser %}
+                <button 
+                  class="btn btn-success btn-sm save-changes" 
+                  data-member-id="{{ member.member_id }}"
+                  style="display: none;"
+                >
+                  <i class="bi bi-check-lg"></i> Lưu
+                </button>
+                <button 
+                  class="btn btn-danger btn-sm remove-member" 
+                  data-member-id="{{ member.member_id }}"
+                  data-username="{{ member.account.username }}"
+                >
+                  <i class="bi bi-trash"></i> Xóa
+                </button>
+                {% else %}
+                <span class="text-muted small">Không thể sửa</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Chưa có thành viên nào trong cuộc bỏ phiếu này.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <a href="{% url 'poll:poll_detail' poll.poll_id %}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Quay lại
+    </a>
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const roleSelects = document.querySelectorAll('.role-select');
+  const statusSelects = document.querySelectorAll('.status-select');
+  
+  // Track original values
+  const originalValues = {};
+  
+  // Store original values
+  roleSelects.forEach(select => {
+    const memberId = select.dataset.memberId;
+    if (!originalValues[memberId]) originalValues[memberId] = {};
+    originalValues[memberId].role = select.value;
+  });
+  
+  statusSelects.forEach(select => {
+    const memberId = select.dataset.memberId;
+    if (!originalValues[memberId]) originalValues[memberId] = {};
+    originalValues[memberId].status = select.value;
+  });
+  
+  // Handle role change
+  roleSelects.forEach(select => {
+    select.addEventListener('change', function() {
+      const memberId = this.dataset.memberId;
+      const saveButton = document.querySelector(`.save-changes[data-member-id="${memberId}"]`);
+      if (saveButton) {
+        saveButton.style.display = 'inline-block';
+      }
+    });
+  });
+  
+  // Handle status change
+  statusSelects.forEach(select => {
+    select.addEventListener('change', function() {
+      const memberId = this.dataset.memberId;
+      const saveButton = document.querySelector(`.save-changes[data-member-id="${memberId}"]`);
+      if (saveButton) {
+        saveButton.style.display = 'inline-block';
+      }
+    });
+  });
+  
+  // Handle save changes
+  document.querySelectorAll('.save-changes').forEach(button => {
+    button.addEventListener('click', function() {
+      const memberId = this.dataset.memberId;
+      const roleSelect = document.querySelector(`.role-select[data-member-id="${memberId}"]`);
+      const statusSelect = document.querySelector(`.status-select[data-member-id="${memberId}"]`);
+      
+      const newRole = roleSelect.value;
+      const newStatus = statusSelect.value;
+      
+      // Send AJAX request
+      fetch(`{% url 'poll:update_member' poll.poll_id 0 %}`.replace('/0/', `/${memberId}/`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `role=${newRole}&status=${newStatus}`
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Update original values
+          originalValues[memberId].role = newRole;
+          originalValues[memberId].status = newStatus;
+          
+          // Hide save button
+          this.style.display = 'none';
+          
+          // Show success message
+          showAlert('success', data.message || 'Cập nhật thành công!');
+        } else {
+          showAlert('danger', data.message || 'Có lỗi xảy ra!');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'Có lỗi xảy ra khi cập nhật!');
+      });
+    });
+  });
+  
+  // Handle remove member
+  document.querySelectorAll('.remove-member').forEach(button => {
+    button.addEventListener('click', function() {
+      const memberId = this.dataset.memberId;
+      const username = this.dataset.username;
+      
+      if (!confirm(`Bạn có chắc muốn xóa thành viên "${username}" khỏi cuộc bỏ phiếu?`)) {
+        return;
+      }
+      
+      // Send AJAX request
+      fetch(`{% url 'poll:remove_member' poll.poll_id 0 %}`.replace('/0/', `/${memberId}/`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Remove row from table
+          const row = document.getElementById(`member-row-${memberId}`);
+          if (row) {
+            row.remove();
+          }
+          showAlert('success', data.message || 'Xóa thành viên thành công!');
+        } else {
+          showAlert('danger', data.message || 'Có lỗi xảy ra!');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'Có lỗi xảy ra khi xóa thành viên!');
+      });
+    });
+  });
+  
+  // Helper function to show alert
+  function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.role = 'alert';
+    alertDiv.innerHTML = `
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto dismiss after 3 seconds
+    setTimeout(() => {
+      alertDiv.remove();
+    }, 3000);
+  }
+});
+</script>
+{% endblock %}
+
+{% endblock %}

@@ -118,7 +118,6 @@ class BallotPDFGenerator:
                         if font_name not in pdfmetrics.getRegisteredFontNames():
                             pdfmetrics.registerFont(TTFont(font_name, font_file))
                         self.font_name = font_name
-                        print(f"Đã load font: {font_name}")
                         return
                     except Exception as e:
                         continue
@@ -302,6 +301,8 @@ class BallotPDFGenerator:
         """
         import qrcode
         import json
+        import time
+        import random
         
         if marker_id == 0 and qr_data:
             # Marker 0 (Top-left): Tạo QR code chứa dữ liệu đã truyền vào
@@ -324,7 +325,9 @@ class BallotPDFGenerator:
             qr_array = np.array(qr_img.convert('L'))
             qr_resized = cv2.resize(qr_array, (size_px, size_px))
             
-            temp_path = f"temp_qr_{marker_id}.png"
+            # Tạo tên file UNIQUE cho mỗi QR code để tránh ghi đè
+            unique_id = f"{int(time.time() * 1000000)}_{random.randint(1000, 9999)}"
+            temp_path = f"temp_qr_{marker_id}_{unique_id}.png"
             cv2.imwrite(temp_path, qr_resized)
             return temp_path
         else:
@@ -332,18 +335,20 @@ class BallotPDFGenerator:
             aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
             marker_img = cv2.aruco.generateImageMarker(aruco_dict, marker_id, size_px)
             
-            # Lưu marker vào file tạm
-            temp_path = f"temp_aruco_{marker_id}.png"
+            # Tạo tên file unique cho ArUco markers
+            unique_id = f"{int(time.time() * 1000000)}_{random.randint(1000, 9999)}"
+            temp_path = f"temp_aruco_{marker_id}_{unique_id}.png"
             cv2.imwrite(temp_path, marker_img)
             return temp_path
     
-    def _add_aruco_markers_to_canvas(self, c, doc):
+    def _add_aruco_markers_to_canvas(self, c, doc, qr_signature_override=None):
         """
         Thêm 4 ArUco markers vào 4 góc của nội dung phiếu bầu
         
         Args:
             c: Canvas object từ reportlab
             doc: Document object để lấy thông tin về nội dung
+            qr_signature_override: QR signature cụ thể cho trang này (ưu tiên hơn self.qr_signature)
         """
         # Lấy kích thước trang và vùng nội dung
         page_width, page_height = self.page_size
@@ -377,9 +382,12 @@ class BallotPDFGenerator:
             (3, left_x, bottom_y)     # Marker 3: Bottom-left
         ]
         
+        # Sử dụng qr_signature_override nếu có, nếu không dùng self.qr_signature
+        qr_sig_to_use = qr_signature_override if qr_signature_override is not None else self.qr_signature
+        
         for marker_id, x_pos, y_pos in marker_positions:
             # Tạo marker image (marker 0 sẽ chứa QR signature nếu có)
-            qr_data = self.qr_signature if marker_id == 0 else None
+            qr_data = qr_sig_to_use if marker_id == 0 else None
             marker_path = self._generate_aruco_marker(marker_id, size_px=200, qr_data=qr_data)
             
             # Sử dụng kích thước riêng cho QR marker 0
@@ -482,17 +490,30 @@ class BallotPDFGenerator:
         """Callback để thêm ArUco markers vào mỗi trang"""
         self._add_aruco_markers_to_canvas(canvas_obj, doc)
     
-    def generate_multiple_ballots(self, data, ballots_per_page=1, output_path=None):
+    def generate_multiple_ballots(self, data, ballot_qr_data=None, ballots_per_page=1, output_path=None):
         """
-        Tạo nhiều phiếu bầu trên cùng một file PDF
+        Tạo nhiều phiếu bầu trên cùng một file PDF với QR signature riêng cho mỗi phiếu
         
         Args:
             data (list): Dữ liệu bảng cho các phiếu bầu
+            ballot_qr_data (list): Danh sách QR signature cho từng phiếu (nếu None, dùng self.qr_signature cho tất cả)
             ballots_per_page (int): Số phiếu trên mỗi trang
             output_path (str): Đường dẫn lưu file
         
         Returns:
             BytesIO hoặc None: Buffer chứa PDF nếu output_path là None
+        
+        Example:
+            >>> # Tạo QR signatures riêng cho mỗi ballot
+            >>> qr_data_list = [
+            ...     generate_qr_data(ballot_id=1, hmac_signature="abc123", marker_id=0),
+            ...     generate_qr_data(ballot_id=2, hmac_signature="def456", marker_id=0),
+            ... ]
+            >>> pdf_buffer = generator.generate_multiple_ballots(
+            ...     data=candidate_data,
+            ...     ballot_qr_data=qr_data_list,
+            ...     ballots_per_page=2
+            ... )
         """
         if output_path:
             pdf_file = output_path
@@ -525,10 +546,25 @@ class BallotPDFGenerator:
             if i < ballots_per_page - 1:
                 elements.append(PageBreak())
         
-        # Build PDF
+        # Build PDF với ArUco markers và QR signatures riêng cho mỗi trang
         if self.add_aruco_markers:
-            doc.build(elements, onFirstPage=self._add_markers_callback, 
-                     onLaterPages=self._add_markers_callback)
+            def add_markers_with_qr(canvas_obj, doc_obj):
+                """Callback để thêm markers với QR signature riêng cho mỗi trang"""
+                # Sử dụng pageNumber từ canvas để xác định trang (bắt đầu từ 1)
+                page_num = canvas_obj.getPageNumber()
+                page_idx = page_num - 1  # Chuyển về index 0-based
+                
+                # Lấy QR signature cho trang hiện tại
+                current_qr_signature = None
+                if ballot_qr_data and page_idx < len(ballot_qr_data):
+                    current_qr_signature = ballot_qr_data[page_idx]
+                
+                # Thêm markers vào canvas - truyền QR signature trực tiếp
+                self._add_aruco_markers_to_canvas(canvas_obj, doc_obj, qr_signature_override=current_qr_signature)
+            
+            # Sử dụng callback cho cả first page và later pages
+            doc.build(elements, onFirstPage=add_markers_with_qr, 
+                     onLaterPages=add_markers_with_qr)
         else:
             doc.build(elements)
         

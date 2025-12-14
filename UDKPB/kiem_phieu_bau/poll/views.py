@@ -813,3 +813,135 @@ def luu_thong_tin_kiem_phieu(poll_id):
 			print(f"Không tìm thấy ballot tương ứng cho file: {name_no_ext}")
 	# Trả về các danh sách nếu cần debug
 	return ballot_id_list, ballot_name_list, candidate_info_list
+
+# ==================== MEMBER MANAGEMENT ====================
+
+@login_required
+def manage_members(request, poll_id):
+	"""View to manage poll members - only accessible by superuser and managers"""
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Check permission: only superuser or manager can access
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		messages.error(request, 'Bạn không có quyền truy cập chức năng này!')
+		return redirect('poll:detail', poll_id=poll_id)
+	
+	# Get filter parameters from request
+	filter_type = request.GET.get('filter', 'all')  # all, pending, requested
+	
+	# Start with all members of this poll
+	members = PollMember.objects.filter(poll=poll).select_related('account')
+	
+	# Apply filters
+	if filter_type == 'pending':
+		members = members.filter(status='pending')
+	elif filter_type == 'requested':
+		members = members.exclude(requested_role_change__isnull=True).exclude(requested_role_change='')
+	# else: filter_type == 'all', no additional filter needed
+	
+	# Order by assigned_at
+	members = members.order_by('-assigned_at')
+	
+	context = {
+		'poll': poll,
+		'members': members,
+		'filter_type': filter_type,
+		'total_count': PollMember.objects.filter(poll=poll).count(),
+		'pending_count': PollMember.objects.filter(poll=poll, status='pending').count(),
+		'requested_count': PollMember.objects.filter(poll=poll).exclude(requested_role_change__isnull=True).exclude(requested_role_change='').count(),
+	}
+	
+	return render(request, 'poll/members.html', context)
+
+@login_required
+def update_member(request, poll_id, member_id):
+	"""AJAX endpoint to update member role and status"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Invalid request method'})
+	
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	member = get_object_or_404(PollMember, member_id=member_id, poll=poll)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		return JsonResponse({'success': False, 'message': 'Bạn không có quyền thực hiện thao tác này!'})
+	
+	# Don't allow editing superuser accounts
+	if member.account.is_superuser:
+		return JsonResponse({'success': False, 'message': 'Không thể chỉnh sửa tài khoản superuser!'})
+	
+	# Update role and status
+	new_role = request.POST.get('role')
+	new_status = request.POST.get('status')
+	
+	if new_role and new_role in ['manager', 'operator', 'checkin', 'user']:
+		member.role = new_role
+	
+	if new_status and new_status in ['pending', 'active', 'rejected', 'banned']:
+		member.status = new_status
+	
+	member.save()
+	
+	return JsonResponse({
+		'success': True, 
+		'message': f'Đã cập nhật thông tin thành viên {member.account.username}'
+	})
+
+@login_required
+def remove_member(request, poll_id, member_id):
+	"""AJAX endpoint to remove a member from poll"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Invalid request method'})
+	
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	member = get_object_or_404(PollMember, member_id=member_id, poll=poll)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(
+		poll=poll, 
+		account=request.user, 
+		role='manager', 
+		status='active'
+	).exists()
+	
+	if not (request.user.is_superuser or is_manager):
+		return JsonResponse({'success': False, 'message': 'Bạn không có quyền thực hiện thao tác này!'})
+	
+	# Don't allow removing superuser accounts
+	if member.account.is_superuser:
+		return JsonResponse({'success': False, 'message': 'Không thể xóa tài khoản superuser!'})
+	
+	# Don't allow removing yourself if you're the only manager
+	if member.account == request.user and member.role == 'manager':
+		manager_count = PollMember.objects.filter(
+			poll=poll, 
+			role='manager', 
+			status='active'
+		).count()
+		if manager_count <= 1:
+			return JsonResponse({
+				'success': False, 
+				'message': 'Không thể xóa chính mình khi bạn là manager duy nhất!'
+			})
+	
+	username = member.account.username
+	member.delete()
+	
+	return JsonResponse({
+		'success': True, 
+		'message': f'Đã xóa thành viên {username} khỏi cuộc bỏ phiếu'
+	})

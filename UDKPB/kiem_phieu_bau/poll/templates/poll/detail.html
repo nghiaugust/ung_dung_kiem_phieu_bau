@@ -192,9 +192,9 @@ phiếu{% endblock %} {% block content %}
     <div class="mb-3{% if tutorial == 'true' %} tutorial-hint{% endif %}">
       {% if tutorial == 'true' %}<span class="tutorial-badge">1</span>{% endif %}
       <a
-        href="{% url 'ballot:upload_ballots' poll.poll_id %}"
+        href="{% url 'ballot:list_form_ballot' poll.poll_id %}"
         class="btn btn-info"
-        >Tải lên</a
+        >Form phiếu bầu</a
       >
       <a
         href="{% url 'ballot:ballot_list' poll.poll_id %}"
@@ -221,6 +221,9 @@ phiếu{% endblock %} {% block content %}
   >
   <a href="{% url 'poll:edit_poll' poll.poll_id %}" class="btn btn-warning ms-2"
     >Chỉnh sửa</a
+  >
+  <a href="{% url 'poll:manage_members' poll.poll_id %}" class="btn btn-primary ms-2"
+    ><i class="bi bi-people-fill"></i> Thành viên</a
   >
 </div>
 
