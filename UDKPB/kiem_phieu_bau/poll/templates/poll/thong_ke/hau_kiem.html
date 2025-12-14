@@ -1,6 +1,4 @@
-{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title
-%}Hậu kiểm - Phiếu bầu #{{ current_ballot.ballot_id }}{% endblock %} {% block
-content %}
+{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title %}Hậu kiểm - Phiếu bầu #{{ current_ballot.ballot_id }}{% endblock %} {% block content %}
 <style>
   .ballot-review-container {
     display: flex;
@@ -289,13 +287,7 @@ content %}
     class="nav-arrow nav-arrow-left"
     id="prev-ballot"
     onclick="navigateBallot('prev')"
-    {%
-    if
-    not
-    prev_ballot_id
-    %}disabled{%
-    endif
-    %}
+    {% if not prev_ballot_id %}disabled{% endif %}
   >
     <i class="bi bi-chevron-left"></i>
   </button>
@@ -304,13 +296,7 @@ content %}
     class="nav-arrow nav-arrow-right"
     id="next-ballot"
     onclick="navigateBallot('next')"
-    {%
-    if
-    not
-    next_ballot_id
-    %}disabled{%
-    endif
-    %}
+    {% if not next_ballot_id %}disabled{% endif %}
   >
     <i class="bi bi-chevron-right"></i>
   </button>
@@ -331,14 +317,12 @@ content %}
         <span
           class="badge bg-{% if current_ballot.is_valid %}success{% else %}danger{% endif %}"
         >
-          {% if current_ballot.is_valid %}Hợp lệ{% else %}Không hợp lệ{% endif
-          %}
+          {% if current_ballot.is_valid %}Hợp lệ{% else %}Không hợp lệ{% endif %}
         </span>
         <span
           class="badge bg-{% if current_ballot.is_checked %}info{% else %}secondary{% endif %}"
         >
-          {% if current_ballot.is_checked %}Đã kiểm{% else %}Chưa kiểm{% endif
-          %}
+          {% if current_ballot.is_checked %}Đã kiểm{% else %}Chưa kiểm{% endif %}
         </span>
       </div>
     </div>
@@ -371,12 +355,7 @@ content %}
                     class="vote-checkbox"
                     data-candidate-id="{{ result.candidate_id }}"
                     data-original-state="{{ result.voted|yesno:'true,false' }}"
-                    {%
-                    if
-                    result.voted
-                    %}checked{%
-                    endif
-                    %}
+                    {% if result.voted %}checked{% endif %}
                     onchange="markAsChanged(this)"
                   />
                   <span class="toggle-slider"></span>

@@ -42,8 +42,7 @@ bầu {% endblock %} {% block content %}
       <td>{{ forloop.counter }}</td>
       <!-- Tên phiếu bầu -->
       <td>
-        {% if ballot.ballot_name %} {{ ballot.ballot_name }} {% else %} - {%
-        endif %}
+        {% if ballot.ballot_name %} {{ ballot.ballot_name }} {% else %} - {% endif %}
       </td>
       <!-- Thời gian bỏ phiếu -->
       <td>{{ ballot.timestamp|default_if_none:'-' }}</td>
@@ -64,8 +63,7 @@ bầu {% endblock %} {% block content %}
       <td>{% if ballot.is_checked %}✅{% else %}❌{% endif %}</td>
       <!-- Trạng thái hợp lệ -->
       <td>
-        {% if ballot.is_valid %} ✅ {% elif ballot.is_valid == False %} ❌ {%
-        else %} - {% endif %}
+        {% if ballot.is_valid %} ✅ {% elif ballot.is_valid == False %} ❌ {% else %} - {% endif %}
       </td>
       <td>
         <a

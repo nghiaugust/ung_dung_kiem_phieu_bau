@@ -46,8 +46,7 @@ bầu{% endblock %} {% block content %}
     <tr>
       <th>Hợp lệ</th>
       <td>
-        {% if ballot.is_valid %}✅{% elif ballot.is_valid == False %}❌{% else
-        %}-{% endif %}
+        {% if ballot.is_valid %}✅{% elif ballot.is_valid == False %}❌{% else %}-{% endif %}
       </td>
     </tr>
   </table>

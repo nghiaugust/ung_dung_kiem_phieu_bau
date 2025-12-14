@@ -64,10 +64,13 @@ def ballot_list(request, poll_id):
 	def extract_ballot_name(ballot_image):
 		if not ballot_image:
 			return None
-		filename = os.path.basename(ballot_image)
+		# ImageFieldFile: dùng .name để lấy relative path
+		filename = os.path.basename(ballot_image.name)
 		for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
 			if filename.lower().endswith(ext):
 				return filename[:-len(ext)]
+		return os.path.splitext(filename)[0]
+		return os.path.splitext(filename)[0]
 		return os.path.splitext(filename)[0]
 
 	for ballot in ballots:
@@ -151,7 +154,8 @@ def delete_all_ballots(request, poll_id):
 	count = ballots.count()
 	for ballot in ballots:
 		if ballot.ballot_image:
-			file_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_image)
+			# ImageFieldFile: dùng .path để lấy absolute path
+			file_path = ballot.ballot_image.path
 			if os.path.exists(file_path):
 				try:
 					os.remove(file_path)
@@ -240,7 +244,8 @@ def delete_ballot(request, ballot_id):
 	poll_id = ballot.poll.poll_id
 	# Xoá file đã upload nếu có
 	if ballot.ballot_image:
-		file_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_image)
+		# ImageFieldFile: dùng .path để lấy absolute path
+		file_path = ballot.ballot_image.path
 		if os.path.exists(file_path):
 			try:
 				os.remove(file_path)
@@ -330,7 +335,8 @@ def hau_kiem_ballot(request, ballot_id):
 			'voted': candidate.candidate_id in selections
 		})
 	
-	original_path = ballot.ballot_image
+	# ImageFieldFile: dùng .name để lấy relative path
+	original_path = ballot.ballot_image.name if ballot.ballot_image else ''
 	folder, filename = os.path.split(original_path)
 	detect_filename = "detect_" + filename
 	detect_path = os.path.join(folder, detect_filename) if folder else detect_filename
@@ -348,7 +354,7 @@ def hau_kiem_ballot(request, ballot_id):
 		'detect_ballot_image': detect_path,
 	}
 	
-	return render(request, 'quan_ly_phieu_bau/thong_ke/hau_kiem.html', context)
+	return render(request, 'poll/thong_ke/hau_kiem.html', context)
 
 @login_required
 def save_hau_kiem(request, ballot_id):
