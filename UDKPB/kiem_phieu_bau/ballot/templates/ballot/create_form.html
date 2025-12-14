@@ -1,0 +1,386 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title %}
+Tạo Form Phiếu Bầu - {{ poll.title }}{% endblock %} {% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="text-center mb-2">Tạo Form Phiếu Bầu</h2>
+    <p class="text-center text-muted mb-4">
+      Cuộc bầu cử: <strong>{{ poll.title }}</strong>
+    </p>
+
+    <div class="alert alert-info">
+      <strong>Hướng dẫn:</strong> Nhập đầy đủ thông tin để tạo form phiếu bầu
+      mẫu. Form này sẽ được sử dụng để in phiếu bầu PDF.
+    </div>
+
+    <form method="post" id="createFormBallot">
+      {% csrf_token %}
+
+      <!-- Thông tin cơ bản -->
+      <h5 class="border-bottom border-primary pb-2 mb-3 mt-4">
+        1. Thông tin cơ bản
+      </h5>
+
+      <div class="mb-3">
+        <label for="ballot_type" class="form-label fw-bold"
+          >Loại phiếu bầu *</label
+        >
+        <select
+          name="ballot_type"
+          id="ballot_type"
+          class="form-select"
+          required
+        >
+          <option value="mark_x">Đánh dấu X</option>
+          <option value="mark_v">Đánh dấu V</option>
+          <option value="cross_name">Gạch tên</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label for="quantity" class="form-label fw-bold"
+          >Số lượng phiếu cần in *</label
+        >
+        <input
+          type="number"
+          name="quantity"
+          id="quantity"
+          class="form-control"
+          min="1"
+          value="1"
+          required
+        />
+        <div class="form-text">Số lượng phiếu bầu sẽ được tạo từ form này</div>
+      </div>
+
+      <!-- Cấu hình PDF -->
+      <h5 class="border-bottom border-primary pb-2 mb-3 mt-4">
+        2. Tiêu đề và nội dung phiếu
+      </h5>
+
+      <div class="mb-3">
+        <label for="title" class="form-label fw-bold"
+          >Tiêu đề phiếu bầu *</label
+        >
+        <input
+          type="text"
+          name="title"
+          id="title"
+          class="form-control"
+          value="PHIẾU BẦU CỬ"
+          required
+        />
+        <div class="form-text">
+          Ví dụ: PHIẾU BẦU CỬ ĐẠI BIỂU QUỐC HỘI KHÓA XV
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-bold">Thông tin Header</label>
+        <div class="bg-light p-3 rounded mb-2" id="headerInfoGroup">
+          <!-- Header items will be added here dynamically -->
+        </div>
+        <button
+          type="button"
+          class="btn btn-success btn-sm"
+          onclick="addHeaderInfo()"
+        >
+          <i class="bi bi-plus-circle"></i> Thêm thông tin Header
+        </button>
+        <div class="form-text">
+          Các thông tin sẽ hiển thị ở đầu phiếu (Đơn vị bầu cử, Kỳ bầu cử, Ngày
+          bầu cử...)
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="footer_text" class="form-label fw-bold"
+          >Ghi chú chân trang</label
+        >
+        <textarea
+          name="footer_text"
+          id="footer_text"
+          class="form-control"
+          rows="3"
+        >
+Phiếu này chỉ có giá trị khi có chữ ký của Ban Kiểm phiếu</textarea
+        >
+        <div class="form-text">Ghi chú sẽ hiển thị ở cuối phiếu bầu</div>
+      </div>
+
+      <!-- Cấu hình bảng -->
+      <h5 class="border-bottom border-primary pb-2 mb-3 mt-4">
+        3. Cấu hình bảng dữ liệu
+      </h5>
+
+      <div class="mb-3">
+        <label for="num_columns" class="form-label fw-bold"
+          >Số cột trong bảng *</label
+        >
+        <input
+          type="number"
+          name="num_columns"
+          id="num_columns"
+          class="form-control"
+          min="2"
+          max="10"
+          value="4"
+          required
+          onchange="generateColumnInputs()"
+        />
+        <div class="form-text">
+          Số lượng cột trong bảng ứng cử viên (từ 2 đến 10 cột)
+        </div>
+      </div>
+
+      <div
+        class="bg-light p-3 rounded mb-3"
+        id="columnConfig"
+        style="display: none"
+      >
+        <label class="form-label fw-bold">Tên các cột *</label>
+        <div class="row g-3" id="columnInputGroup">
+          <!-- Column inputs will be generated here -->
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="num_rows" class="form-label fw-bold"
+          >Số hàng (số ứng cử viên) *</label
+        >
+        <input
+          type="number"
+          name="num_rows"
+          id="num_rows"
+          class="form-control"
+          min="1"
+          max="50"
+          value="5"
+          required
+          onchange="generateCandidateInputs()"
+        />
+        <div class="form-text">
+          Số lượng ứng cử viên trong phiếu bầu (từ 1 đến 50 hàng)
+        </div>
+      </div>
+
+      <div
+        class="bg-light p-3 rounded mb-3"
+        id="candidateConfig"
+        style="display: none"
+      >
+        <label class="form-label fw-bold">Thông tin ứng cử viên *</label>
+        <div class="form-text mb-3">
+          Nhập tên từng ứng cử viên sẽ hiển thị trong phiếu bầu
+        </div>
+        <div class="row g-3" id="candidateInputGroup">
+          <!-- Candidate inputs will be generated here -->
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="text-center mt-4">
+        <button type="submit" class="btn btn-primary btn-lg px-4">
+          Tạo Form Phiếu Bầu
+        </button>
+        <a
+          href="{% url 'poll:poll_detail' poll.poll_id %}"
+          class="btn btn-secondary btn-lg px-4 ms-2"
+          >Hủy</a
+        >
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Khởi tạo với 2 header info mặc định
+  document.addEventListener("DOMContentLoaded", function () {
+    addHeaderInfo("Đơn vị bầu cử", "");
+    addHeaderInfo("Ngày bầu cử", "");
+    generateColumnInputs();
+    generateCandidateInputs();
+  });
+
+  function addHeaderInfo(key = "", value = "") {
+    const container = document.getElementById("headerInfoGroup");
+    const index = container.children.length;
+
+    const div = document.createElement("div");
+    div.className = "row g-2 mb-2";
+    div.innerHTML = `
+        <div class="col-md-5">
+            <input type="text" name="header_key_${index}" class="form-control" placeholder="Tên trường (VD: Đơn vị bầu cử)" value="${key}">
+        </div>
+        <div class="col-md-6">
+            <input type="text" name="header_value_${index}" class="form-control" placeholder="Giá trị (VD: Trường Đại học ABC)" value="${value}">
+        </div>
+        <div class="col-md-1">
+            <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeHeaderInfo(this)">Xóa</button>
+        </div>
+    `;
+    container.appendChild(div);
+  }
+
+  function removeHeaderInfo(button) {
+    button.closest(".row").remove();
+  }
+
+  function generateColumnInputs() {
+    const numColumns = parseInt(document.getElementById("num_columns").value);
+    const container = document.getElementById("columnInputGroup");
+    const config = document.getElementById("columnConfig");
+
+    if (numColumns < 2 || numColumns > 10) {
+      config.style.display = "none";
+      return;
+    }
+
+    config.style.display = "block";
+    container.innerHTML = "";
+
+    // Default column names
+    const defaultNames = [
+      "STT",
+      "Họ và tên",
+      "Năm sinh",
+      "Đơn vị công tác",
+      "Chọn",
+      "Ghi chú",
+      "Đồng ý",
+      "Không đồng ý",
+      "Bỏ phiếu trắng",
+    ];
+
+    for (let i = 0; i < numColumns; i++) {
+      const div = document.createElement("div");
+      div.className = "col-md-6 col-lg-4";
+      div.innerHTML = `
+            <label class="form-label small">Cột ${i + 1}</label>
+            <input type="text" name="column_${i}" class="form-control" placeholder="Tên cột ${
+        i + 1
+      }" value="${defaultNames[i] || ""}" required>
+        `;
+      container.appendChild(div);
+    }
+  }
+
+  function generateCandidateInputs() {
+    const numRows = parseInt(document.getElementById("num_rows").value);
+    const container = document.getElementById("candidateInputGroup");
+    const config = document.getElementById("candidateConfig");
+
+    if (numRows < 1 || numRows > 50) {
+      config.style.display = "none";
+      return;
+    }
+
+    config.style.display = "block";
+    container.innerHTML = "";
+
+    for (let i = 0; i < numRows; i++) {
+      const div = document.createElement("div");
+      div.className = "col-md-6 col-lg-4";
+      div.innerHTML = `
+            <label class="form-label small">Ứng cử viên ${i + 1}</label>
+            <input type="text" name="candidate_${i}" class="form-control" placeholder="Họ và tên ứng cử viên ${
+        i + 1
+      }" required>
+        `;
+      container.appendChild(div);
+    }
+  }
+
+  // Form submission handler
+  document
+    .getElementById("createFormBallot")
+    .addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      // Create FormData from form
+      const formData = new FormData(this);
+
+      // Collect header info
+      const headerInfo = {};
+      const headerContainer = document.getElementById("headerInfoGroup");
+      const headerRows = headerContainer.querySelectorAll(".row");
+
+      headerRows.forEach((row, index) => {
+        // Tìm tất cả input trong row này (không filter theo type)
+        const allInputs = row.querySelectorAll("input");
+
+        // Filter chỉ lấy input không phải là button
+        const inputs = Array.from(allInputs).filter(
+          (inp) => inp.type !== "button"
+        );
+
+        if (inputs.length >= 2) {
+          const keyInput = inputs[0];
+          const valueInput = inputs[1];
+          const key = keyInput.value.trim();
+          const value = valueInput.value.trim();
+
+          if (key) {
+            headerInfo[key] = value;
+          }
+        }
+      });
+
+      // Collect columns
+      const numColumns = parseInt(document.getElementById("num_columns").value);
+      const columns = [];
+      for (let i = 0; i < numColumns; i++) {
+        const columnInput = document.querySelector(`input[name="column_${i}"]`);
+        if (columnInput) {
+          const columnName = columnInput.value.trim();
+          if (columnName) {
+            columns.push(columnName);
+          }
+        }
+      }
+
+      // Collect candidates
+      const numRows = parseInt(document.getElementById("num_rows").value);
+      const candidates = [];
+      for (let i = 0; i < numRows; i++) {
+        const candidateInput = document.querySelector(
+          `input[name="candidate_${i}"]`
+        );
+        if (candidateInput) {
+          const candidateName = candidateInput.value.trim();
+          if (candidateName) {
+            candidates.push(candidateName);
+          }
+        }
+      }
+
+      // Append JSON data to FormData
+      formData.append("header_info_json", JSON.stringify(headerInfo));
+      formData.append("columns_json", JSON.stringify(columns));
+      formData.append("candidates_json", JSON.stringify(candidates));
+
+      // Submit via AJAX
+      fetch(this.action, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.success) {
+            alert(data.message || "Tạo form phiếu bầu thành công!");
+            if (data.redirect_url) {
+              window.location.href = data.redirect_url;
+            }
+          } else {
+            alert(data.message || "Có lỗi xảy ra!");
+          }
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+          alert("Có lỗi xảy ra khi tạo form!");
+        });
+    });
+</script>
+{% endblock %}

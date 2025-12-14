@@ -1,0 +1,134 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title %}Danh sách Form Phiếu Bầu - {{ poll.title }}{% endblock %} {% block content %}
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="mb-2">Danh sách Form Phiếu Bầu</h2>
+    <p class="text-muted">Cuộc bầu cử: <strong>{{ poll.title }}</strong></p>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a
+    href="{% url 'ballot:create_form_ballot' poll.poll_id %}"
+    class="btn btn-success"
+  >
+    <i class="bi bi-plus-circle"></i> Tạo Form Mới
+  </a>
+  <a href="{% url 'poll:poll_detail' poll.poll_id %}" class="btn btn-secondary"
+    >Quay lại</a
+  >
+</div>
+
+{% if forms %}
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+  {% for form in forms %}
+  <div class="col">
+    <div class="card h-100 shadow-sm hover-shadow">
+      <div class="card-header bg-primary text-white">
+        <h5 class="card-title mb-1">{{ form.title }}</h5>
+        <div>
+          <span class="badge bg-light text-dark"
+            >{{ form.get_ballot_type_display }}</span
+          >
+          <span class="badge bg-success">Form #{{ form.form_count }}</span>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <ul class="list-unstyled mb-0">
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="fw-bold">Số lượng:</span>
+            <span>{{ form.quantity }} phiếu</span>
+          </li>
+
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="fw-bold">Số cột:</span>
+            <span>
+              {% if form.table_config %} 
+              {{ form.table_config.num_columns|default:"N/A" }} cột {% else %} N/A
+              {% endif %}
+            </span>
+          </li>
+
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="fw-bold">Số ứng cử viên:</span>
+            <span>
+              {% if form.table_config %} 
+              {{ form.table_config.num_rows|default:"N/A" }} người {% else %} N/A
+              {% endif %}
+            </span>
+          </li>
+
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="fw-bold">Người tạo:</span>
+            <span>{{ form.created_by.username|default:"N/A" }}</span>
+          </li>
+
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="fw-bold">Ngày tạo:</span>
+            <span>{{ form.created_at|date:"d/m/Y H:i" }}</span>
+          </li>
+
+          {% if form.pdf_file %}
+          <li class="d-flex justify-content-between py-2">
+            <span class="fw-bold">PDF:</span>
+            <span class="badge bg-success">✓ Đã tạo</span>
+          </li>
+          {% endif %}
+        </ul>
+      </div>
+
+      <div class="card-footer bg-white d-flex gap-2">
+        <a
+          href="{% url 'ballot:detail_form_ballot' form.form_id %}"
+          class="btn btn-primary flex-fill"
+        >
+          <i class="bi bi-eye"></i> Xem chi tiết
+        </a>
+        <button onclick="deleteForm({{ form.form_id }})" class="btn btn-danger">
+          <i class="bi bi-trash"></i> Xoá
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card shadow-sm text-center py-5">
+  <div class="card-body">
+    <h3 class="text-muted">Chưa có form phiếu bầu nào</h3>
+    <p class="text-muted">
+      Nhấn nút "Tạo Form Mới" để bắt đầu tạo form phiếu bầu.
+    </p>
+  </div>
+</div>
+{% endif %}
+
+<script>
+  function deleteForm(formId) {
+    if (!confirm("Bạn có chắc chắn muốn xóa form này?")) {
+      return;
+    }
+
+    fetch(`/ballot/form/delete/${formId}/`, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": "{{ csrf_token }}",
+      },
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success) {
+          alert(data.message || "Xóa form thành công!");
+          location.reload();
+        } else {
+          alert(data.message || "Có lỗi xảy ra!");
+        }
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+        alert("Có lỗi xảy ra khi xóa form!");
+      });
+  }
+</script>
+{% endblock %}

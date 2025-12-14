@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.db import transaction
 from account.models import Account
 from poll.models import Poll, Candidate, PollMember
-from .models import Ballot, BallotSelection
+from .models import Ballot, BallotSelection, FormBallot
 
 @login_required
 def upload_ballots(request, poll_id):
@@ -401,3 +401,289 @@ def save_hau_kiem(request, ballot_id):
 			'success': False,
 			'message': str(e)
 		}, status=500)
+
+@login_required
+def create_form_ballot(request, poll_id):
+	"""
+	View để tạo form phiếu bầu mới
+	"""
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+			return JsonResponse({
+				'success': False,
+				'redirect_url': reverse('permission_denied'),
+				'message': 'Bạn không có quyền truy cập chức năng này!'
+			})
+		return redirect('permission_denied')
+	
+	if request.method == 'POST':
+		try:
+			# Lấy dữ liệu từ form
+			ballot_type = request.POST.get('ballot_type')
+			quantity = int(request.POST.get('quantity', 0))
+			title = request.POST.get('title', 'PHIẾU BẦU CỬ')
+			footer_text = request.POST.get('footer_text', '')
+			
+			# Parse header_info từ JSON
+			header_info_json = request.POST.get('header_info_json', '{}')
+			header_info = json.loads(header_info_json)
+			
+			# Parse columns từ JSON
+			columns_json = request.POST.get('columns_json', '[]')
+			columns = json.loads(columns_json)
+			
+			# Parse candidates từ JSON
+			candidates_json = request.POST.get('candidates_json', '[]')
+			candidates = json.loads(candidates_json)
+			
+			# Lấy số cột và số hàng
+			num_columns = int(request.POST.get('num_columns', len(columns)))
+			num_rows = int(request.POST.get('num_rows', len(candidates)))
+			
+			# Tạo table_config
+			table_config = {
+				'num_columns': num_columns,
+				'num_rows': num_rows,
+				'columns': columns,
+				'column_widths': None,  # None = tự động chia đều
+				'candidates': candidates  # Danh sách tên ứng cử viên
+			}
+			
+			# Sử dụng transaction để đảm bảo tính toàn vẹn khi tính form_count
+			with transaction.atomic():
+				# Tính form_count (số thứ tự form) - đếm lại từ đầu
+				existing_forms = FormBallot.objects.filter(poll=poll).order_by('form_count')
+				form_count = existing_forms.count() + 1
+				
+				# Tạo FormBallot
+				form_ballot = FormBallot.objects.create(
+					poll=poll,
+					ballot_type=ballot_type,
+					form_count=form_count,
+					quantity=quantity,
+					title=title,
+					header_info=header_info,
+					footer_text=footer_text,
+					table_config=table_config,
+					created_by=request.user
+				)
+			
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': True,
+					'redirect_url': reverse('ballot:list_form_ballot', kwargs={'poll_id': poll_id}),
+					'message': f'Tạo form phiếu bầu thành công! (Form #{form_count})'
+				})
+			
+			return redirect('ballot:list_form_ballot', poll_id=poll_id)
+			
+		except Exception as e:
+			if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+				return JsonResponse({
+					'success': False,
+					'message': f'Có lỗi xảy ra: {str(e)}'
+				})
+			return render(request, 'ballot/create_form.html', {
+				'poll': poll,
+				'error': str(e)
+			})
+	
+	return render(request, 'ballot/create_form.html', {
+		'poll': poll
+	})
+
+@login_required
+def list_form_ballot(request, poll_id):
+	"""
+	View để xem danh sách các form phiếu bầu đã tạo
+	"""
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+		return redirect('permission_denied')
+	
+	forms = FormBallot.objects.filter(poll=poll).order_by('-created_at')
+	
+	return render(request, 'ballot/list_form.html', {
+		'poll': poll,
+		'forms': forms
+	})
+
+@login_required
+def detail_form_ballot(request, form_id):
+	"""
+	View để xem chi tiết form phiếu bầu
+	"""
+	form_ballot = get_object_or_404(FormBallot, form_id=form_id)
+	poll = form_ballot.poll
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+		return redirect('permission_denied')
+	
+	return render(request, 'ballot/detail_form.html', {
+		'poll': poll,
+		'form': form_ballot
+	})
+
+@login_required
+def apply_form_ballot(request, form_id):
+	"""
+	View để áp dụng form phiếu bầu - tạo candidates và ballots với QR signatures
+	"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+	
+	form_ballot = get_object_or_404(FormBallot, form_id=form_id)
+	poll = form_ballot.poll
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+		return JsonResponse({
+			'success': False,
+			'message': 'Bạn không có quyền truy cập chức năng này!'
+		}, status=403)
+	
+	try:
+		# Sử dụng quantity từ form_ballot
+		quantity = form_ballot.quantity
+		
+		if quantity <= 0:
+			return JsonResponse({
+				'success': False,
+				'message': 'Số lượng phiếu trong form phải lớn hơn 0!'
+			})
+		
+		# Import crypto utils
+		from security.crypto_utils import sign_ballot, generate_keys
+		from django.utils import timezone
+		
+		with transaction.atomic():
+			# 1. Tạo hoặc lấy key pair cho poll
+			if not poll.private_key or not poll.public_key:
+				private_key, public_key = generate_keys()
+				poll.private_key = private_key
+				poll.public_key = public_key
+				poll.key_generated_at = timezone.now()
+				poll.save(update_fields=['private_key', 'public_key', 'key_generated_at'])
+			
+			# 2. Tạo candidates từ table_config
+			table_config = form_ballot.get_table_config()
+			candidates_data = table_config.get('candidates', [])
+			
+			# Xóa candidates cũ của poll (nếu có)
+			Candidate.objects.filter(poll=poll).delete()
+			
+			created_candidates = []
+			for idx, candidate_name in enumerate(candidates_data, start=1):
+				if candidate_name.strip():
+					candidate = Candidate.objects.create(
+						poll=poll,
+						name=candidate_name.strip()
+					)
+					created_candidates.append(candidate)
+			
+			# 3. Tạo ballots với QR signatures
+			# Xóa ballots cũ của poll (nếu có)
+			Ballot.objects.filter(poll=poll).delete()
+			
+			created_ballots = []
+			for i in range(quantity):
+				# Tạo ballot trống
+				ballot = Ballot.objects.create(
+					poll=poll,
+					is_checked=False,
+					is_valid=True
+				)
+				
+				# Tạo QR signature cho ballot
+				signature, payload, qr_data = sign_ballot(
+					poll_id=poll.poll_id,
+					ballot_id=ballot.ballot_id,
+					private_key_b64=poll.private_key
+				)
+				
+				# Lưu thông tin QR vào ballot
+				ballot.qr_signature = signature
+				ballot.qr_payload = payload
+				ballot.qr_generated_at = timezone.now()
+				ballot.save(update_fields=['qr_signature', 'qr_payload', 'qr_generated_at'])
+				
+				created_ballots.append(ballot)
+		
+		return JsonResponse({
+			'success': True,
+			'message': f'Đã tạo {len(created_candidates)} ứng cử viên và {len(created_ballots)} phiếu bầu thành công!',
+			'data': {
+				'candidates_count': len(created_candidates),
+				'ballots_count': len(created_ballots)
+			}
+		})
+		
+	except Exception as e:
+		return JsonResponse({
+			'success': False,
+			'message': f'Có lỗi xảy ra: {str(e)}'
+		}, status=500)
+
+@login_required
+def delete_form_ballot(request, form_id):
+	"""
+	View để xóa form phiếu bầu
+	"""
+	form_ballot = get_object_or_404(FormBallot, form_id=form_id)
+	poll = form_ballot.poll
+	
+	# Check permission
+	is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+			return JsonResponse({
+				'success': False,
+				'redirect_url': reverse('permission_denied'),
+				'message': 'Bạn không có quyền truy cập chức năng này!'
+			})
+		return redirect('permission_denied')
+	
+	poll_id = poll.poll_id
+	deleted_form_count = form_ballot.form_count
+	
+	# Sử dụng transaction để đảm bảo tính toàn vẹn khi xóa và cập nhật form_count
+	with transaction.atomic():
+		# Xóa PDF file nếu có
+		if form_ballot.pdf_file:
+			file_path = form_ballot.pdf_file.path
+			if os.path.exists(file_path):
+				try:
+					os.remove(file_path)
+				except Exception:
+					pass
+		
+		# Xóa form ballot
+		form_ballot.delete()
+		
+		# Cập nhật lại form_count cho các form sau form bị xóa
+		forms_after = FormBallot.objects.filter(
+			poll=poll,
+			form_count__gt=deleted_form_count
+		).order_by('form_count')
+		
+		for form in forms_after:
+			form.form_count -= 1
+			form.save(update_fields=['form_count'])
+	
+	if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+		return JsonResponse({
+			'success': True,
+			'message': 'Đã xóa form phiếu bầu thành công!'
+		})
+	
+	return redirect('ballot:list_form_ballot', poll_id=poll_id)
