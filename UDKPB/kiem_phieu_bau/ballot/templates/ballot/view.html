@@ -5,7 +5,9 @@ bầu {% endblock %} {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <a href="{% url 'poll:poll_detail' poll.poll_id %}" class="btn btn-secondary"
+    <a
+      href="{% url 'poll:poll_detail' poll.poll_id %}"
+      class="btn btn-secondary"
       >Quay lại</a
     >
     <a
@@ -40,17 +42,18 @@ bầu {% endblock %} {% block content %}
       <td>{{ forloop.counter }}</td>
       <!-- Tên phiếu bầu -->
       <td>
-        {% if ballot.ballot_name %} {{ ballot.ballot_name }} {% else %} - {% endif %}
+        {% if ballot.ballot_name %} {{ ballot.ballot_name }} {% else %} - {%
+        endif %}
       </td>
       <!-- Thời gian bỏ phiếu -->
       <td>{{ ballot.timestamp|default_if_none:'-' }}</td>
 
       <!-- Ảnh phiếu bầu -->
       <td>
-        {% if ballot.ballot_file_path %}
-        <a href="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}" target="_blank">
+        {% if ballot.ballot_image %}
+        <a href="{{ MEDIA_URL }}{{ ballot.ballot_image }}" target="_blank">
           <img
-            src="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}"
+            src="{{ MEDIA_URL }}{{ ballot.ballot_image }}"
             alt="Ảnh phiếu"
             style="max-width: 80px; max-height: 80px; object-fit: contain"
           />
@@ -61,7 +64,8 @@ bầu {% endblock %} {% block content %}
       <td>{% if ballot.is_checked %}✅{% else %}❌{% endif %}</td>
       <!-- Trạng thái hợp lệ -->
       <td>
-        {% if ballot.is_valid %} ✅ {% elif ballot.is_valid == False %} ❌ {% else %} - {% endif %}
+        {% if ballot.is_valid %} ✅ {% elif ballot.is_valid == False %} ❌ {%
+        else %} - {% endif %}
       </td>
       <td>
         <a

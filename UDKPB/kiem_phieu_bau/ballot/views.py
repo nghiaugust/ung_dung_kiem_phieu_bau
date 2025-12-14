@@ -38,7 +38,7 @@ def upload_ballots(request, poll_id):
 				for chunk in f.chunks():
 					destination.write(chunk)
 			rel_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
-			Ballot.objects.create(poll=poll, ballot_file_path=rel_path)
+			Ballot.objects.create(poll=poll, ballot_image=rel_path)
 			count += 1
 		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
 			redirect_url = reverse('poll_detail', kwargs={'poll_id': poll_id})
@@ -61,17 +61,17 @@ def ballot_list(request, poll_id):
 		ballots = ballots.filter(is_valid=False)
 
 	# Add ballot_name property to each ballot
-	def extract_ballot_name(ballot_file_path):
-		if not ballot_file_path:
+	def extract_ballot_name(ballot_image):
+		if not ballot_image:
 			return None
-		filename = os.path.basename(ballot_file_path)
+		filename = os.path.basename(ballot_image)
 		for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
 			if filename.lower().endswith(ext):
 				return filename[:-len(ext)]
 		return os.path.splitext(filename)[0]
 
 	for ballot in ballots:
-		ballot.ballot_name = extract_ballot_name(ballot.ballot_file_path)
+		ballot.ballot_name = extract_ballot_name(ballot.ballot_image)
 
 	return render(request, 'ballot/list.html', {
 		'poll': poll,
@@ -89,16 +89,16 @@ def ballot_view(request, poll_id):
 	elif filter_type == 'invalid':
 		ballots = ballots.filter(is_valid=False)
 	# Add ballot_name property to each ballot (reuse logic from ballot_list)
-	def extract_ballot_name(ballot_file_path):
-		if not ballot_file_path:
+	def extract_ballot_name(ballot_image):
+		if not ballot_image:
 			return None
-		filename = os.path.basename(ballot_file_path)
+		filename = os.path.basename(ballot_image)
 		for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
 			if filename.lower().endswith(ext):
 				return filename[:-len(ext)]
 		return os.path.splitext(filename)[0]
 	for ballot in ballots:
-		ballot.ballot_name = extract_ballot_name(ballot.ballot_file_path)
+		ballot.ballot_name = extract_ballot_name(ballot.ballot_image)
 	return render(request, 'ballot/view.html', {
 		'poll': poll,
 		'ballots': ballots,
@@ -109,15 +109,15 @@ def ballot_view(request, poll_id):
 def ballot_view_detail(request, ballot_id):
 	ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
 	# Add ballot_name property for display
-	def extract_ballot_name(ballot_file_path):
-		if not ballot_file_path:
+	def extract_ballot_name(ballot_image):
+		if not ballot_image:
 			return None
-		filename = os.path.basename(ballot_file_path)
+		filename = os.path.basename(ballot_image)
 		for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
 			if filename.lower().endswith(ext):
 				return filename[:-len(ext)]
 		return os.path.splitext(filename)[0]
-	ballot.ballot_name = extract_ballot_name(ballot.ballot_file_path)
+	ballot.ballot_name = extract_ballot_name(ballot.ballot_image)
 	return render(request, 'ballot/view_detail.html', {
 		'ballot': ballot,
 		'MEDIA_URL': settings.MEDIA_URL,
@@ -150,8 +150,8 @@ def delete_all_ballots(request, poll_id):
 	ballots = poll.ballot_set.all()
 	count = ballots.count()
 	for ballot in ballots:
-		if ballot.ballot_file_path:
-			file_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_file_path)
+		if ballot.ballot_image:
+			file_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_image)
 			if os.path.exists(file_path):
 				try:
 					os.remove(file_path)
@@ -207,7 +207,7 @@ def ballot_detail(request, ballot_id):
 				for chunk in f.chunks():
 					destination.write(chunk)
 			rel_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
-			ballot.ballot_file_path = rel_path
+			ballot.ballot_image = rel_path
 		ballot.save()
 		if request.headers.get('x-requested-with') == 'XMLHttpRequest':
 			return JsonResponse({
@@ -239,8 +239,8 @@ def delete_ballot(request, ballot_id):
 	
 	poll_id = ballot.poll.poll_id
 	# Xoá file đã upload nếu có
-	if ballot.ballot_file_path:
-		file_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_file_path)
+	if ballot.ballot_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_image)
 		if os.path.exists(file_path):
 			try:
 				os.remove(file_path)
@@ -330,7 +330,7 @@ def hau_kiem_ballot(request, ballot_id):
 			'voted': candidate.candidate_id in selections
 		})
 	
-	original_path = ballot.ballot_file_path
+	original_path = ballot.ballot_image
 	folder, filename = os.path.split(original_path)
 	detect_filename = "detect_" + filename
 	detect_path = os.path.join(folder, detect_filename) if folder else detect_filename
@@ -345,7 +345,7 @@ def hau_kiem_ballot(request, ballot_id):
 		'next_ballot_id': next_ballot_id,
 		'prev_ballot_url': prev_ballot_url,
 		'next_ballot_url': next_ballot_url,
-		'detect_ballot_file_path': detect_path,
+		'detect_ballot_image': detect_path,
 	}
 	
 	return render(request, 'quan_ly_phieu_bau/thong_ke/hau_kiem.html', context)

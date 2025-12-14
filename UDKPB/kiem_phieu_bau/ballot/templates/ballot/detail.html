@@ -26,10 +26,10 @@ bầu{% endblock %} {% block content %}
     <tr>
       <th>Ảnh phiếu bầu</th>
       <td>
-        {% if ballot.ballot_file_path %}
-        <a href="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}" target="_blank">
+        {% if ballot.ballot_image %}
+        <a href="{{ MEDIA_URL }}{{ ballot.ballot_image }}" target="_blank">
           <img
-            src="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}"
+            src="{{ MEDIA_URL }}{{ ballot.ballot_image }}"
             alt="Ảnh phiếu"
             style="max-width: 200px; max-height: 200px; object-fit: contain"
           />
@@ -46,7 +46,8 @@ bầu{% endblock %} {% block content %}
     <tr>
       <th>Hợp lệ</th>
       <td>
-        {% if ballot.is_valid %}✅{% elif ballot.is_valid == False %}❌{% else %}-{% endif %}
+        {% if ballot.is_valid %}✅{% elif ballot.is_valid == False %}❌{% else
+        %}-{% endif %}
       </td>
     </tr>
   </table>

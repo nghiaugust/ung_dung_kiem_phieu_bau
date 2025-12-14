@@ -21,10 +21,10 @@ bầu{% endblock %} {% block content %}
 </div>
 <div class="mb-3">
   <label class="form-label">Ảnh phiếu bầu</label><br />
-  {% if ballot.ballot_file_path %}
-  <a href="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}" target="_blank">
+  {% if ballot.ballot_image %}
+  <a href="{{ MEDIA_URL }}{{ ballot.ballot_image }}" target="_blank">
     <img
-      src="{{ MEDIA_URL }}{{ ballot.ballot_file_path }}"
+      src="{{ MEDIA_URL }}{{ ballot.ballot_image }}"
       alt="Ảnh phiếu"
       style="max-width: 200px; max-height: 200px; object-fit: contain"
     />

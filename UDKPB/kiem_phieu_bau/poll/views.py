@@ -724,9 +724,9 @@ def luu_thong_tin_kiem_phieu(poll_id):
 	ballot_name_list = []
 	for ballot in ballots:
 		ballot_id_list.append(ballot.ballot_id)
-		# Lấy tên gốc từ ballot_file_path, ví dụ: '1/ballot_1.jpg' -> 'ballot_1'
-		if ballot.ballot_file_path:
-			base = os.path.basename(ballot.ballot_file_path)
+		# Lấy tên gốc từ ballot_image, ví dụ: '1/ballot_1.jpg' -> 'ballot_1'
+		if ballot.ballot_image:
+			base = os.path.basename(ballot.ballot_image)
 			name, _ = os.path.splitext(base)
 			ballot_name_list.append(name)
 		else:
