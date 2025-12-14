@@ -819,18 +819,15 @@ def api_join_poll(request):
             # Xác định status dựa vào require_approval
             if poll.require_approval:
                 status = 'pending'
-                role = None  # Chưa có role khi pending
                 message = 'Yêu cầu tham gia đã được gửi, chờ admin duyệt'
             else:
                 status = 'active'
-                role = 'user'  # Role mặc định khi tự động duyệt
                 message = 'Đã tham gia cuộc bỏ phiếu thành công'
             
             member = PollMember.objects.create(
                 poll=poll,
                 account=user,
                 status=status,
-                role=role,
                 assigned_by=None  # Tự xin vào
             )
             
