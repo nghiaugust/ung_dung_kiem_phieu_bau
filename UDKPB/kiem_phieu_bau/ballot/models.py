@@ -28,7 +28,7 @@ class Ballot(models.Model): # phiếu bầu
 	#Không link với Voter (để bảo mật), mà link với người NHẬP LIỆU
 	input_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, related_name='input_ballots')
 
-	timestamp = models.DateTimeField(null=True)  # Thời gian bỏ phiếu
+	timestamp = models.DateTimeField(auto_now_add=True)  # Thời gian tạo phiếu (chỉ set khi tạo, không thay đổi sau đó)
 	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
 	ballot_image = models.ImageField(upload_to=ballot_image_upload_path, null=True, blank=True)

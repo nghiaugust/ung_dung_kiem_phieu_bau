@@ -51,7 +51,7 @@ def detect_aruco_markers(image):
 
 def detect_qr_codes(image):
     """
-    Detect QR codes trong ảnh
+    Detect QR codes trong ảnh với xử lý thông minh (tự động thử nhiều kỹ thuật)
     
     Args:
         image: Ảnh đầu vào (numpy array)
@@ -60,40 +60,107 @@ def detect_qr_codes(image):
         list: Danh sách thông tin QR codes tìm thấy
     """
     qr_codes = []
+    found_data = set()  # Tránh trùng lặp
     
-    # Decode QR codes
+    # Thử decode trực tiếp trước
     decoded_objects = pyzbar.decode(image)
     
     for obj in decoded_objects:
-        # Lấy dữ liệu
         data = obj.data.decode('utf-8')
-        
-        # Lấy vị trí
-        rect = obj.rect
-        polygon = obj.polygon
-        
-        qr_info = {
-            'type': obj.type,
-            'data': data,
-            'rect': {
-                'left': rect.left,
-                'top': rect.top,
-                'width': rect.width,
-                'height': rect.height
-            },
-            'polygon': [(p.x, p.y) for p in polygon]
-        }
-        
-        # Thử parse JSON nếu có thể
-        try:
-            parsed_data = json.loads(data)
-            qr_info['parsed_data'] = parsed_data
-        except:
-            pass
-        
-        qr_codes.append(qr_info)
+        if data not in found_data:
+            found_data.add(data)
+            qr_codes.append(_create_qr_info(obj, data))
     
-    return qr_codes
+    if qr_codes:
+        return qr_codes
+    
+    # Step 2: Thử với ảnh được upscale 2x
+    if not qr_codes:
+        upscaled_2x = cv2.resize(image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        decoded_objects = pyzbar.decode(upscaled_2x)
+        for obj in decoded_objects:
+            data = obj.data.decode('utf-8')
+            if data not in found_data:
+                found_data.add(data)
+                # Điều chỉnh tọa độ về kích thước gốc
+                qr_info = _create_qr_info(obj, data)
+                qr_info['rect'] = {k: v // 2 for k, v in qr_info['rect'].items()}
+                qr_info['polygon'] = [(x // 2, y // 2) for x, y in qr_info['polygon']]
+                qr_codes.append(qr_info)
+        
+        if qr_codes:
+            return qr_codes
+        
+        # Step 3: Thử với ảnh được upscale 3x
+        if not qr_codes:
+            upscaled_3x = cv2.resize(image, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+            decoded_objects = pyzbar.decode(upscaled_3x)
+            for obj in decoded_objects:
+                data = obj.data.decode('utf-8')
+                if data not in found_data:
+                    found_data.add(data)
+                    # Điều chỉnh tọa độ về kích thước gốc
+                    qr_info = _create_qr_info(obj, data)
+                    qr_info['rect'] = {k: v // 3 for k, v in qr_info['rect'].items()}
+                    qr_info['polygon'] = [(x // 3, y // 3) for x, y in qr_info['polygon']]
+                    qr_codes.append(qr_info)
+        
+        if qr_codes:
+            return qr_codes
+        
+        # Step 4: Thử kết hợp sharpen + upscale 3x
+        if not qr_codes:
+            # Sharpen trước
+            kernel_sharpen = np.array([[-1,-1,-1],
+                                       [-1, 9,-1],
+                                       [-1,-1,-1]])
+            sharpened = cv2.filter2D(image, -1, kernel_sharpen)
+            # Sau đó upscale 3x
+            upscaled_sharp_3x = cv2.resize(sharpened, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+            decoded_objects = pyzbar.decode(upscaled_sharp_3x)
+            for obj in decoded_objects:
+                data = obj.data.decode('utf-8')
+                if data not in found_data:
+                    found_data.add(data)
+                    # Điều chỉnh tọa độ về kích thước gốc
+                    qr_info = _create_qr_info(obj, data)
+                    qr_info['rect'] = {k: v // 3 for k, v in qr_info['rect'].items()}
+                    qr_info['polygon'] = [(x // 3, y // 3) for x, y in qr_info['polygon']]
+                    qr_codes.append(qr_info)
+def _create_qr_info(obj, data):
+    """
+    Tạo dictionary thông tin QR code từ decoded object
+    
+    Args:
+        obj: Decoded object từ pyzbar
+        data: Dữ liệu đã decode (string)
+    
+    Returns:
+        dict: Thông tin QR code
+    """
+    rect = obj.rect
+    polygon = obj.polygon
+    
+    qr_info = {
+        'type': obj.type,
+        'data': data,
+        'rect': {
+            'left': rect.left,
+            'top': rect.top,
+            'width': rect.width,
+            'height': rect.height
+        },
+        'polygon': [(p.x, p.y) for p in polygon]
+    }
+    
+    # Thử parse JSON nếu có thể
+    try:
+        parsed_data = json.loads(data)
+        qr_info['parsed_data'] = parsed_data
+    except:
+        pass
+    
+    return qr_info
 
 
 def read_qr_code_only(image_path):

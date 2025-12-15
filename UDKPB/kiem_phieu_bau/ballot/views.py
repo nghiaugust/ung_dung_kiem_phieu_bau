@@ -182,18 +182,6 @@ def ballot_detail(request, ballot_id):
 		return redirect('permission_denied')
 	
 	if request.method == 'POST':
-		# Update timestamp
-		timestamp = request.POST.get('timestamp')
-		if timestamp:
-			from django.utils.dateparse import parse_datetime
-			import datetime
-			# Convert from HTML5 datetime-local to Python datetime
-			if 'T' in timestamp:
-				timestamp = timestamp.replace('T', ' ')
-			try:
-				ballot.timestamp = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M')
-			except Exception:
-				pass
 		# Update is_checked
 		is_checked = request.POST.get('is_checked')
 		ballot.is_checked = (is_checked == 'True')
@@ -597,8 +585,7 @@ def apply_form_ballot(request, form_id):
 				ballot = Ballot.objects.create(
 					poll=poll,
 					is_checked=False,
-					is_valid=True,
-					timestamp=timezone.now()
+					is_valid=True
 				)
 				
 				# Tạo HMAC signature cho ballot

@@ -53,7 +53,7 @@ bầu {% endblock %} {% block content %}
       <td>
         {% if ballot.ballot_name %} {{ ballot.ballot_name }} {% else %} - {% endif %}
       </td>
-      <!-- Thời gian bỏ phiếu -->
+      <!-- Thời gian tạo phiếu -->
       <td>{{ ballot.timestamp|default_if_none:'-' }}</td>
 
       <!-- Ảnh phiếu bầu -->
