@@ -96,6 +96,51 @@ def detect_qr_codes(image):
     return qr_codes
 
 
+def read_qr_code_only(image_path):
+    """
+    Chỉ đọc QR code từ ảnh phiếu bầu (không đọc ArUco markers)
+    
+    Args:
+        image_path (str): Đường dẫn đến file ảnh
+    
+    Returns:
+        dict: Thông tin QR codes
+        {
+            'success': bool,
+            'qr_count': int,
+            'qr_codes': list,
+            'error': str (optional)
+        }
+    """
+    # Đọc ảnh
+    image = cv2.imread(image_path)
+    
+    if image is None:
+        return {
+            'success': False,
+            'error': f'Không thể đọc ảnh từ: {image_path}',
+            'qr_count': 0,
+            'qr_codes': []
+        }
+    
+    try:
+        # Detect QR codes
+        qr_codes = detect_qr_codes(image)
+        
+        return {
+            'success': True,
+            'qr_count': len(qr_codes),
+            'qr_codes': qr_codes
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'qr_count': 0,
+            'qr_codes': []
+        }
+
+
 def read_ballot_markers(image_path):
     """
     Đọc tất cả markers (ArUco + QR) từ ảnh phiếu bầu
