@@ -139,3 +139,5 @@ UDKPB/ballot_processing_system/ballot/
 UDKPB/ballot_processing_system/evaluation/
 UDKPB/database.txt
 UDKPB/tải model trocr.txt
+UDKPB/ai_core/model_trocr/
+UDKPB/ai_core/model_yolo_x/

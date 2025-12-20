@@ -1,0 +1,198 @@
+{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title%}Kiểm Phiếu Bầu - {{ poll.poll_name }}{% endblock %} {% block content %}
+<div class="row align-items-center mb-3">
+  <div class="col-md-6">
+    <h2 class="mb-1">Kiểm Phiếu Bầu: {{ poll.poll_name }}</h2>
+    <p class="text-muted mb-0">Chọn cấu hình để xử lý với TrOCR và YOLO</p>
+  </div>
+  <div class="col-md-6 text-end">
+    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and trocr_status and yolo_status %}
+    <button
+      type="submit"
+      form="counting-form"
+      class="btn btn-lg btn-primary me-2"
+    >
+      <i class="bi bi-check2-circle"></i> Kiểm Phiếu Bầu
+    </button>
+    {% else %}
+    <button
+      type="button"
+      class="btn btn-lg btn-secondary me-2"
+      disabled
+      title="Vui lòng hoàn thành tất cả các điều kiện"
+    >
+      <i class="bi bi-check2-circle"></i> Kiểm Phiếu Bầu
+    </button>
+    {% endif %}
+    <a
+      href="{% url 'counting_results' poll.poll_id %}"
+      class="btn btn-lg btn-secondary"
+    >
+      <i class="bi bi-eye"></i> Xem Kết Quả
+    </a>
+  </div>
+</div>
+
+{% if messages %}
+<div class="row">
+  <div class="col-md-12">
+    {% for message in messages %}
+    <div
+      class="alert alert-{{ message.tags }} alert-dismissible fade show"
+      role="alert"
+    >
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<form
+  method="POST"
+  action="{% url 'process_counting' poll.poll_id %}"
+  id="counting-form"
+>
+  {% csrf_token %}
+
+  <div class="row d-flex align-items-stretch gx-4">
+    <!-- Danh sách cấu hình (Bên trái) -->
+    <div class="col-md-6">
+      <div class="card mb-4 h-100 shadow-lg">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><i class="bi bi-gear"></i> Danh sách cấu hình</h5>
+        </div>
+        <div class="card-body">
+          <!-- Cấu hình 1: Bảng biểu quyết -->
+          <div class="form-check mb-3">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              name="config_vote_table"
+              id="config_vote_table"
+              value="1"
+              checked
+            />
+            <label class="form-check-label fw-bold" for="config_vote_table">
+              Bảng biểu quyết (STT, Họ và Tên, Đồng ý, Không đồng ý)
+            </label>
+          </div>
+
+          <div class="ms-4 mb-3">
+            <table class="table table-bordered table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>STT</th>
+                  <th>Họ và Tên</th>
+                  <th>Đồng ý</th>
+                  <th>Không đồng ý</th>
+                </tr>
+                <tr>
+                  <th class="text-center">Cột 1</th>
+                  <th class="text-center">Cột 2</th>
+                  <th class="text-center">Cột 3</th>
+                  <th class="text-center">Cột 4</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="4" class="text-muted small">
+                    <strong>Cấu hình:</strong>
+                    <ul class="mb-0 mt-2">
+                      <li>
+                        <strong>TrOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
+                      </li>
+                      <li>
+                        <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
+                      </li>
+                    </ul>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danh sách điều kiện (Bên phải) -->
+    <div class="col-md-6">
+      <div class="card mb-4 h-100 shadow-lg">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0"><i class="bi bi-filter"></i> Danh sách điều kiện</h5>
+        </div>
+        <div class="card-body">
+          <!-- Điều kiện 1: Ứng viên -->
+          <p class="mb-2">
+            <strong>Ứng viên:</strong>
+            {% if candidates_count > 0 %}
+            <span class="text-success"
+              >Có {{ candidates_count }} ứng cử viên</span
+            >
+            {% else %}
+            <span class="text-danger">Chưa thêm ứng cử viên</span>
+            {% endif %}
+          </p>
+
+          <!-- Điều kiện 2: Ballot -->
+          <p class="mb-2">
+            <strong>Ballot:</strong>
+            {% if ballots_count > 0 %}
+            <span class="text-success">Có {{ ballots_count }} phiếu bầu</span>
+            {% else %}
+            <span class="text-danger"
+              >Chưa thêm phiếu bầu, hãy thêm ở phần tạo form</span
+            >
+            {% endif %}
+          </p>
+
+          <!-- Điều kiện 3: Check ảnh ballot -->
+          <p class="mb-2">
+            <strong>Check ảnh ballot:</strong>
+            {% if ballots_with_image_count > 0 %}
+            <span class="text-success"
+              >Có {{ ballots_with_image_count }} ảnh upload trên {{ ballots_count }} phiếu bầu</span
+            >
+            {% else %}
+            <span class="text-danger">Chưa upload ảnh lên</span>
+            {% endif %}
+          </p>
+
+          <!-- Điều kiện 4: Tiền xử lý -->
+          <p class="mb-2">
+            <strong>Tiền xử lý:</strong>
+            {% if preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 %}
+            <span class="text-success"
+              >Tiền xử lý {{ preprocessed_count }}/{{ ballots_with_image_total }}</span
+            >
+            {% elif ballots_with_image_total > 0 %}
+            <span class="text-danger"
+              >Tiền xử lý {{ preprocessed_count }}/{{ ballots_with_image_total }}</span
+            >
+            {% else %}
+            <span class="text-danger">Chưa có ảnh để tiền xử lý</span>
+            {% endif %}
+          </p>
+
+          <!-- Điều kiện 5: Check model AI -->
+          <p class="mb-0">
+            <strong>Check model:</strong>
+            {% if trocr_status and yolo_status %}
+            <span class="text-success">TrOCR on, YOLO on</span>
+            {% else %}
+            <span class="text-danger">
+              TrOCR {% if trocr_status %}on{% else %}off{% endif %}, YOLO {% if yolo_status %}on{% else %}off{% endif %}
+            </span>
+            {% endif %}
+          </p>
+
+          <input type="hidden" name="start_row" value="2" />
+          <input type="hidden" name="end_row" value="" />
+          <input type="hidden" name="yolo_confidence" value="50" />
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+{% endblock %}

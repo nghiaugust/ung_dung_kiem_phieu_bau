@@ -26,6 +26,9 @@ urlpatterns = [
     path('account/', include('account.urls')),  # Account management
     path('ballot/', include('ballot.urls')),  # Ballot management
     path('poll/', include('poll.urls')),  # Poll management
+    path('form/', include('form.urls')),  # LaTeX form editor
+    path('preprocessing/', include('preprocessing.urls')),  # Image preprocessing for AI
+    path('counting/', include('counting.urls')),  # AI model counting (TrOCR, YOLO)
     path('', include('quan_ly_phieu_bau.urls')),
 ]
 

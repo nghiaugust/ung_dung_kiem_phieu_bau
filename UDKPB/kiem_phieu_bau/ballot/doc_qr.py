@@ -127,6 +127,11 @@ def detect_qr_codes(image):
                     qr_info['rect'] = {k: v // 3 for k, v in qr_info['rect'].items()}
                     qr_info['polygon'] = [(x // 3, y // 3) for x, y in qr_info['polygon']]
                     qr_codes.append(qr_info)
+    
+    # Trả về danh sách QR codes (có thể rỗng nếu không tìm thấy)
+    return qr_codes
+
+
 def _create_qr_info(obj, data):
     """
     Tạo dictionary thông tin QR code từ decoded object

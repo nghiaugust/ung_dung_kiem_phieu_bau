@@ -177,6 +177,7 @@ def delete_poll(request, poll_id):
 	delete_all_candidates(request, poll_id)
 	delete_all_ballots(request, poll_id)
 	poll.delete()
+	return render(request, 'poll/danh_sach_cuoc_bo_phieu.html', {'poll_id': poll_id})
 
 # ==================== CANDIDATE MANAGEMENT ====================
 
@@ -630,14 +631,24 @@ def counting_stream_generator(poll_id):
 		update_data = {'message': 'Bắt đầu quá trình kiểm phiếu...', 'progress': 5}
 		yield f"data: {json.dumps(update_data)}\n\n"
 
+		# Lấy cấu hình num_rows và num_columns từ FormBallot (nếu có)
+		num_rows = None
+		num_columns = None
+
 		# Chạy lệnh kiểm phiếu bằng subprocess (không chờ hoàn thành)
 		# Truyền base_dir để script tìm tất cả file trong thư mục con
 		cmd = [
 			'python',
-			'-m', 'processors.trocr_yolo',
+			'-m', 'processors.trocr_yolo_v2',
 			'--input_dir', base_dir,
 			'--output_dir', output_dir
 		]
+		
+		# Thêm tham số num_rows và num_columns nếu có
+		if num_rows is not None:
+			cmd.extend(['--num_rows', str(num_rows)])
+		if num_columns is not None:
+			cmd.extend(['--num_columns', str(num_columns)])
 		# Xác định đường dẫn tuyệt đối tới ballot_processing_system
 		ballot_processing_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../ballot_processing_system'))
 		#proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ballot_processing_dir)

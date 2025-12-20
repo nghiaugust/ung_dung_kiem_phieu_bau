@@ -46,6 +46,9 @@ INSTALLED_APPS = [
     'quan_ly_phieu_bau',
     'api',  # API cho mobile app
     'security',  # Cryptographic operations for QR code verification
+    'form',  # Ballot form editor
+    'preprocessing',  # Image preprocessing for AI
+    'counting',  # AI model counting (TrOCR, YOLO)
 ]
 
 MIDDLEWARE = [
