@@ -202,4 +202,47 @@
   </div>
 </form>
 
-{% endblock %}
+{% block scripts %}
+<script>
+  const tienXuLyButton = document.getElementById("tien-xu-ly-btn");
+  const loadingOverlay = document.getElementById("loading-overlay");
+  const loadingText = document.getElementById("loading-text");
+
+  // XỬ LÝ NÚT TIỀN XỬ LÝ
+  if (tienXuLyButton) {
+    tienXuLyButton.addEventListener("click", function (event) {
+      event.preventDefault();
+
+      // Hiển thị loading
+      loadingText.innerText = "Đang bắt đầu tiền xử lý...";
+      loadingOverlay.style.display = "flex";
+
+      // Gọi API tiền xử lý
+      const preprocessUrl = "/preprocessing/process/{{ poll.poll_id }}/";
+
+      fetch(preprocessUrl)
+        .then((response) => response.json())
+        .then((data) => {
+          loadingOverlay.style.display = "none";
+
+          if (data.status === "completed") {
+            const message = `Tiền xử lý hoàn tất!\n- Tổng số phiếu: ${data.total_ballots}\n- Thành công: ${data.success_count}\n- Lỗi: ${data.error_count}`;
+            showAlert(message);
+
+            // Reload trang để cập nhật số liệu
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
+          } else {
+            showAlert("Lỗi: " + (data.message || "Không thể xử lý"));
+          }
+        })
+        .catch((error) => {
+          loadingOverlay.style.display = "none";
+          console.error("Lỗi tiền xử lý:", error);
+          showAlert("Lỗi kết nối đến server tiền xử lý!");
+        });
+    });
+  }
+</script>
+{% endblock %} {% endblock %}

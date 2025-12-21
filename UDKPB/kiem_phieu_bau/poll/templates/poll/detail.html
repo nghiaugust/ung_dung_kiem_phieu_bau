@@ -267,46 +267,6 @@ phiếu{% endblock %} {% block content %}
   const loadingOverlay = document.getElementById("loading-overlay");
   const loadingText = document.getElementById("loading-text");
 
-  // XỬ LÝ NÚT TIỀN XỬ LÝ
-  if (tienXuLyButton) {
-    tienXuLyButton.addEventListener("click", function (event) {
-      event.preventDefault();
-
-      // Hiển thị loading
-      loadingText.innerText = "Đang bắt đầu tiền xử lý...";
-      loadingOverlay.style.display = "flex";
-
-      // Gọi API tiền xử lý
-      const preprocessUrl = "/preprocessing/process/{{ poll.poll_id }}/";
-
-      fetch(preprocessUrl)
-        .then((response) => response.json())
-        .then((data) => {
-          loadingOverlay.style.display = "none";
-
-          if (data.status === "completed") {
-            const message = `Tiền xử lý hoàn tất!\n- Tổng số phiếu: ${data.total_ballots}\n- Thành công: ${data.success_count}\n- Lỗi: ${data.error_count}`;
-            showAlert(message);
-
-            // Hiển thị chi tiết nếu có lỗi
-            if (data.error_count > 0) {
-              console.log(
-                "Chi tiết lỗi:",
-                data.results.filter((r) => r.status !== "success")
-              );
-            }
-          } else {
-            showAlert("Lỗi: " + (data.message || "Không thể xử lý"));
-          }
-        })
-        .catch((error) => {
-          loadingOverlay.style.display = "none";
-          console.error("Lỗi tiền xử lý:", error);
-          showAlert("Lỗi kết nối đến server tiền xử lý!");
-        });
-    });
-  }
-
   // Nút KIỂM PHIẾU giờ là link trực tiếp đến trang counting_form
 </script>
 {% endblock %} {% endblock %}
