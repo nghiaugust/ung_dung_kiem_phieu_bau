@@ -476,10 +476,17 @@ def process_counting(request, poll_id):
 		Ballot.objects.filter(poll=poll).update(is_checked=True)
 		
 		messages.success(request, f'Đã xử lý thành công {total_processed} dòng từ {len(ballots)} phiếu bầu!')
+		
+		# Chuyển đến trang hậu kiểm của phiếu đầu tiên
+		first_ballot = Ballot.objects.filter(poll=poll).order_by('ballot_id').first()
+		if first_ballot:
+			from django.urls import reverse
+			return redirect(reverse('ballot:hau_kiem_ballot', kwargs={'ballot_id': first_ballot.ballot_id}))
+		else:
+			return redirect('counting_results', poll_id=poll_id)
 	else:
 		messages.error(request, 'Không có dữ liệu để xử lý!')
-	
-	return redirect('counting_results', poll_id=poll_id)
+		return redirect('counting_form', poll_id=poll_id)
 
 
 def counting_results_view(request, poll_id):
