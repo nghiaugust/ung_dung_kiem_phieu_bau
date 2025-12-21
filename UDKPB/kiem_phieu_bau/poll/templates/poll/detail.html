@@ -211,14 +211,13 @@ phiếu{% endblock %} {% block content %}
       >
         <i class="bi bi-gear-fill"></i> TIỀN XỬ LÝ
       </button>
-      <button
-        id="kiem-phieu-btn"
+      <a
+        href="{% url 'counting_form' poll.poll_id %}"
         class="btn btn-danger btn-lg px-4 py-2 fw-bold"
         style="font-size: 1.2rem; border-radius: 0.5rem"
-        type="button"
       >
-        KIỂM PHIẾU
-      </button>
+        <i class="bi bi-check2-circle"></i> KIỂM PHIẾU
+      </a>
     </div>
   </div>
 </div>
@@ -245,7 +244,6 @@ phiếu{% endblock %} {% block content %}
   // Hàm hiển thị alert toast sử dụng Bootstrap, KHÔNG đổi tên id/class
 
   const tienXuLyButton = document.getElementById("tien-xu-ly-btn");
-  const kiemPhieuButton = document.getElementById("kiem-phieu-btn");
   const loadingOverlay = document.getElementById("loading-overlay");
   const loadingText = document.getElementById("loading-text");
 
@@ -289,64 +287,6 @@ phiếu{% endblock %} {% block content %}
     });
   }
 
-  // XỬ LÝ NÚT KIỂM PHIẾU
-  if (loadingText) {
-    // Thay đổi URL trỏ đến view stream mới
-    const streamUrl = "{% url 'poll:kiem_phieu_stream' poll.poll_id %}";
-
-    kiemPhieuButton.addEventListener("click", function (event) {
-      event.preventDefault();
-
-      // 1. CHUẨN BỊ: Hiển thị loading với text ban đầu
-      loadingText.innerText = "Đang kết nối đến server...";
-      loadingOverlay.style.display = "flex";
-
-      // 2. KHỞI TẠO KẾT NỐI STREAM
-      const eventSource = new EventSource(streamUrl);
-
-      // 3. LẮNG NGHE CÁC CẬP NHẬT TỪ SERVER
-      // Hàm này sẽ được gọi MỖI KHI server 'yield' một mẩu tin
-      eventSource.onmessage = function (event) {
-        const data = JSON.parse(event.data);
-
-        // Cập nhật text trên màn hình loading với tin nhắn từ server
-        loadingText.innerText = data.message;
-
-        // Nếu nhận được tín hiệu lỗi (progress: -1), đóng kết nối và báo lỗi
-        if (data.progress === -1) {
-          eventSource.close(); // Đóng kết nối
-          //setTimeout(function () {
-          // Đợi một chút để người dùng đọc lỗi
-          loadingOverlay.style.display = "none";
-          showAlert(data.message);
-          //}, 100);
-        }
-
-        // Nếu nhận được tín hiệu thành công, chuẩn bị đóng kết nối
-        if (data.progress === 100) {
-          eventSource.close(); // Đóng kết nối
-          setTimeout(function () {
-            loadingOverlay.style.display = "none";
-            showAlert(data.message);
-            window.location.reload(); // Tải lại trang để xem kết quả cuối
-          }, 500); // Đợi 0.5s cho người dùng đọc tin nhắn cuối
-        }
-      };
-
-      // 4. XỬ LÝ KHI CÓ LỖI KẾT NỐI
-      // Hàm này được gọi khi kết nối bị ngắt đột ngột hoặc không thể thiết lập
-      eventSource.onerror = function (err) {
-        console.error("EventSource failed:", err);
-        eventSource.close();
-        loadingOverlay.style.display = "none";
-        alert("Mất kết nối với server!");
-      };
-    });
-  } else {
-    // Báo lỗi ra console nếu thiếu một phần tử nào đó
-    console.error(
-      "Lỗi: Không tìm thấy nút bấm hoặc các phần tử của màn hình loading. Vui lòng kiểm tra lại cấu trúc file base.html và detail.html."
-    );
-  }
+  // Nút KIỂM PHIẾU giờ là link trực tiếp đến trang counting_form
 </script>
 {% endblock %} {% endblock %}

@@ -3,12 +3,13 @@ from django.contrib import messages
 from django.conf import settings
 from django.db import models
 from poll.models import Poll, Candidate
-from ballot.models import Ballot
+from ballot.models import Ballot, BallotSelection
 from preprocessing.models import BallotCell, PreprocessedBallot
 from .models import AIModelResult
 import requests
 import os
 import time
+import difflib
 from typing import List, Dict, Tuple
 
 
@@ -157,6 +158,78 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		# Đóng tất cả file handles
 		for _, (_, file_obj, _) in files:
 			file_obj.close()
+
+
+def save_ballot_selections_from_results(poll: Poll, result_data: Dict):
+	"""
+	Lưu BallotSelection tự động từ kết quả AI
+	
+	Args:
+		poll: Poll object
+		result_data: Dict chứa kết quả từ AI (result_model)
+	"""
+	# 1. Xóa hết BallotSelection cũ thuộc poll này
+	ballot_ids = Ballot.objects.filter(poll=poll).values_list('ballot_id', flat=True)
+	BallotSelection.objects.filter(ballot_id__in=ballot_ids).delete()
+	
+	# 2. Lấy danh sách candidates của poll
+	candidates = Candidate.objects.filter(poll=poll)
+	candidate_names = {c.candidate_id: c.name for c in candidates}
+	
+	if not candidate_names:
+		return  # Không có candidate thì không làm gì
+	
+	# 3. Xử lý từng dòng results
+	results = result_data.get('results', [])
+	selections_to_create = []
+	
+	for item in results:
+		ballot_id = item.get('ballot_id')
+		results_list = item.get('results', [])
+		
+		# Cần ít nhất 2 phần tử: results[0]=tên, results[1]=đồng ý
+		if len(results_list) < 2:
+			continue
+		
+		recognized_name = results_list[0]  # Tên từ TrOCR
+		agree_vote = results_list[1]  # Kết quả cột đồng ý từ YOLO
+		
+		# Kiểm tra xem có dấu X ở cột đồng ý không
+		if 'x_mark' not in agree_vote.lower():
+			continue  # Không có dấu X thì bỏ qua
+		
+		# Loại bỏ các ký tự đặc biệt từ recognized_name (chỉ giữ chữ và số)
+		recognized_name_clean = recognized_name.strip()
+		
+		# Tìm candidate giống nhất với recognized_name
+		best_match_id = None
+		best_match_ratio = 0.0
+		
+		for candidate_id, candidate_name in candidate_names.items():
+			# Sử dụng difflib để so sánh tên
+			ratio = difflib.SequenceMatcher(None, 
+												recognized_name_clean.upper(), 
+												candidate_name.upper()).ratio()
+			
+			if ratio > best_match_ratio:
+				best_match_ratio = ratio
+				best_match_id = candidate_id
+		
+		# Chỉ tạo BallotSelection nếu tỉ lệ khớp >= 0.6 (60%)
+		if best_match_id and best_match_ratio >= 0.6:
+			selections_to_create.append(
+				BallotSelection(
+					ballot_id=ballot_id,
+					candidate_id=best_match_id
+				)
+			)
+	
+	# 4. Bulk create để tối ưu performance
+	if selections_to_create:
+		BallotSelection.objects.bulk_create(selections_to_create)
+		print(f"[BallotSelection] ✅ Đã tạo {len(selections_to_create)} lựa chọn cho poll {poll.poll_id}")
+	else:
+		print(f"[BallotSelection] ⚠️ Không tìm thấy lựa chọn hợp lệ nào cho poll {poll.poll_id}")
 
 
 def counting_form_view(request, poll_id):
@@ -377,6 +450,9 @@ def process_counting(request, poll_id):
 			status='success',
 			error_message=None
 		)
+		
+		# Tự động tạo BallotSelection từ kết quả
+		save_ballot_selections_from_results(poll, result_data)
 		
 		messages.success(request, f'Đã xử lý thành công {total_processed} dòng từ {len(ballots)} phiếu bầu!')
 	else:

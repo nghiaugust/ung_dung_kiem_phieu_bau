@@ -39,6 +39,4 @@ urlpatterns = [
     path('thong_ke/', views.thong_ke, name='thong_ke'),
     path('thong_ke/<int:poll_id>/', views.thong_ke_detail, name='thong_ke_detail'),
     
-    # Counting
-    path('ajax/stream-counting/<int:poll_id>/', views.kiem_phieu_stream, name='kiem_phieu_stream'),
 ]
