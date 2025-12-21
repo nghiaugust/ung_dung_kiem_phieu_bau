@@ -1,1236 +1,1286 @@
-{% extends 'quan_ly_phieu_bau/base.html' %}
-{% load static %}
-
-{% block title %}Ballot Editor{% endblock %}
-
-{% block extra_head %}
+{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title %}Ballot Editor{% endblock %} {% block extra_head %}
 <style>
-      /* Override base container styles for full-screen editor */
-      body {
-        background: #f8fafd;
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      .container-editor {
-        display: flex;
-        height: 100%;
-      }
-
-      /* Left Panel - Form */
-      .left-panel {
-        width: 50%;
-        background: #f5f5f5;
-        overflow-y: auto;
-        border-right: 2px solid #ccc;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .toolbar {
-        background: #2c3e50;
-        color: white;
-        padding: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .toolbar h1 {
-        font-size: 18px;
-        margin: 0;
-      }
-
-      .toolbar button {
-        background: #27ae60;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
-        transition: background 0.3s;
-      }
-
-      .toolbar button:hover {
-        background: #229954;
-      }
-
-      .form-content {
-        padding: 20px;
-        flex: 1;
-        overflow-y: auto;
-      }
-
-      /* Collapsible Section */
-      .section {
-        background: white;
-        margin-bottom: 15px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-      }
-
-      .section-header {
-        background: #3498db;
-        color: white;
-        padding: 12px 15px;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-weight: bold;
-        user-select: none;
-      }
-
-      .section-header:hover {
-        background: #2980b9;
-      }
-
-      .section-header .arrow {
-        transition: transform 0.3s;
-      }
-
-      .section-header.collapsed .arrow {
-        transform: rotate(-90deg);
-      }
-
-      .section-content {
-        padding: 15px;
-        display: block;
-      }
-
-      .section-content.collapsed {
-        display: none;
-      }
-
-      /* Margin Settings */
-      .margin-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-bottom: 15px;
-      }
-
-      .form-group {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .form-group label {
-        margin-bottom: 5px;
-        font-weight: 500;
-        color: #333;
-      }
-
-      .form-group input,
-      .form-group select {
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-      }
-
-      /* Row Item */
-      .row-list {
-        margin-top: 10px;
-      }
-
-      .row-item {
-        background: #f9f9f9;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        padding: 10px;
-        margin-bottom: 10px;
-      }
-
-      .row-controls {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-
-      .btn-small {
-        padding: 6px 12px;
-        border: 1px solid #3498db;
-        background: white;
-        color: #3498db;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        transition: all 0.3s;
-      }
-
-      .btn-small:hover {
-        background: #3498db;
-        color: white;
-      }
-
-      .btn-small.active {
-        background: #3498db;
-        color: white;
-      }
-
-      .btn-danger {
-        border-color: #e74c3c;
-        color: #e74c3c;
-      }
-
-      .btn-danger:hover {
-        background: #e74c3c;
-        color: white;
-      }
-
-      .row-columns {
-        display: flex;
-        gap: 10px;
-      }
-
-      .column {
-        flex: 1;
-        position: relative;
-      }
-
-      .column textarea {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        resize: vertical;
-        min-height: 60px;
-        font-size: 14px;
-      }
-
-      .column-settings {
-        margin-top: 8px;
-        padding: 10px;
-        background: white;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        display: none;
-      }
-
-      .column-settings.show {
-        display: block;
-      }
-
-      .settings-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-
-      .settings-row {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-
-      .settings-row select {
-        flex: 1;
-        padding: 6px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-
-      .btn-icon {
-        padding: 6px 10px;
-        border: 1px solid #ddd;
-        background: white;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
-        transition: all 0.3s;
-      }
-
-      .btn-icon:hover,
-      .btn-icon.active {
-        background: #3498db;
-        color: white;
-        border-color: #3498db;
-      }
-
-      .add-row-btn {
-        width: 100%;
-        padding: 10px;
-        background: #27ae60;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
-        margin-top: 10px;
-      }
-
-      .add-row-btn:hover {
-        background: #229954;
-      }
-
-      .settings-toggle {
-        position: absolute;
-        right: 5px;
-        top: 5px;
-        background: #3498db;
-        color: white;
-        border: none;
-        width: 24px;
-        height: 24px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-      }
-
-      /* Table and Frame styles */
-      .table-frame-container {
-        background: #fff;
-        border: 2px solid #3498db;
-        border-radius: 6px;
-        padding: 10px;
-        margin-top: 10px;
-      }
-
-      .nested-rows {
-        margin-left: 20px;
-        margin-top: 10px;
-        padding-left: 10px;
-        border-left: 3px solid #e0e0e0;
-      }
-
-      .table-controls {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-        align-items: center;
-      }
-
-      .table-controls label {
-        font-weight: 500;
-        font-size: 13px;
-      }
-
-      .table-controls input {
-        width: 80px;
-        padding: 5px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-
-      .column-indicator {
-        font-size: 12px;
-        color: #666;
-        font-weight: normal;
-      }
-
-      .table-row-item {
-        background: #f0f8ff;
-        border: 1px solid #b0d4f1;
-        border-radius: 4px;
-        padding: 8px;
-        margin-bottom: 8px;
-      }
-
-      .table-row-columns {
-        display: grid;
-        gap: 8px;
-        margin-top: 8px;
-      }
-
-      .table-row-columns.cols-1 {
-        grid-template-columns: 1fr;
-      }
-      .table-row-columns.cols-2 {
-        grid-template-columns: 1fr 1fr;
-      }
-      .table-row-columns.cols-3 {
-        grid-template-columns: 1fr 1fr 1fr;
-      }
-      .table-row-columns.cols-4 {
-        grid-template-columns: 1fr 1fr 1fr 1fr;
-      }
-      .table-row-columns.cols-5 {
-        grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-      }
-      .table-row-columns.cols-6 {
-        grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
-      }
-
-      .table-cell {
-        position: relative;
-      }
-
-      .table-cell textarea {
-        width: 100%;
-        padding: 6px;
-        border: 1px solid #ddd;
-        border-radius: 3px;
-        resize: vertical;
-        min-height: 40px;
-        font-size: 13px;
-      }
-
-      /* Right Panel - PDF Viewer */
-      .right-panel {
-        width: 50%;
-        background: #525659;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-      }
-
-      #pdf-viewer {
-        width: 100%;
-        height: 100%;
-        border: none;
-      }
-
-      .pdf-placeholder {
-        color: #ccc;
-        text-align: center;
-        padding: 20px;
-      }
-
-      .pdf-placeholder h2 {
-        margin-bottom: 10px;
-      }
-
-      /* Loading Overlay */
-      .loading-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-      }
-
-      .loading-overlay.show {
-        display: flex;
-      }
-
-      .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #3498db;
-        border-radius: 50%;
-        width: 50px;
-        height: 50px;
-        animation: spin 1s linear infinite;
-      }
-
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-
-      /* Error Message */
-      .error-message {
-        background: #e74c3c;
-        color: white;
-        padding: 15px;
-        border-radius: 4px;
-        margin-top: 10px;
-        display: none;
-      }
-
-      .error-message.show {
-        display: block;
-      }
-
-      /* Documents Sidebar */
-      .documents-sidebar {
-        position: fixed;
-        left: -50%;
-        top: 0;
-        width: 50%;
-        height: 100vh;
-        background: white;
-        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
-        transition: left 0.3s ease-in-out;
-        z-index: 2000;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .documents-sidebar.show {
-        left: 0;
-      }
-
-      .sidebar-header {
-        background: #2c3e50;
-        color: white;
-        padding: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .sidebar-header h2 {
-        margin: 0;
-        font-size: 18px;
-      }
-
-      .close-btn {
-        background: transparent;
-        border: none;
-        color: white;
-        font-size: 24px;
-        cursor: pointer;
-        padding: 0;
-        width: 30px;
-        height: 30px;
-        line-height: 30px;
-      }
-
-      .close-btn:hover {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 4px;
-      }
-
-      .documents-list {
-        flex: 1;
-        overflow-y: auto;
-        padding: 10px;
-      }
-
-      .document-item {
-        background: #f9f9f9;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        padding: 12px;
-        margin-bottom: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .document-item:hover {
-        background: #e8f4f8;
-        border-color: #3498db;
-        transform: translateX(5px);
-      }
-
-      .document-title {
-        font-weight: bold;
-        font-size: 16px;
-        color: #2c3e50;
-        margin-bottom: 5px;
-      }
-
-      .document-date {
-        font-size: 13px;
-        color: #666;
-      }
-
-      .sidebar-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1999;
-        display: none;
-      }
-
-      .sidebar-overlay.show {
-        display: block;
-      }
-      
-      /* Editor specific: remove container constraints */
-      .editor-wrapper {
-        height: calc(100vh - 80px);
-        overflow: hidden;
-      }
-    </style>
-{% endblock %}
-
-{% block content %}
+  /* Override base container styles for full-screen editor */
+  body {
+    background: #f8fafd;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  .container-editor {
+    display: flex;
+    height: 100%;
+  }
+
+  /* Left Panel - Form */
+  .left-panel {
+    width: 50%;
+    background: #f5f5f5;
+    overflow-y: auto;
+    border-right: 2px solid #ccc;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toolbar {
+    background: #2c3e50;
+    color: white;
+    padding: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .toolbar h1 {
+    font-size: 18px;
+    margin: 0;
+  }
+
+  .toolbar button {
+    background: #27ae60;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s;
+  }
+
+  .toolbar button:hover {
+    background: #229954;
+  }
+
+  .form-content {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* Collapsible Section */
+  .section {
+    background: white;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .section-header {
+    background: #3498db;
+    color: white;
+    padding: 12px 15px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    user-select: none;
+  }
+
+  .section-header:hover {
+    background: #2980b9;
+  }
+
+  .section-header .arrow {
+    transition: transform 0.3s;
+  }
+
+  .section-header.collapsed .arrow {
+    transform: rotate(-90deg);
+  }
+
+  .section-content {
+    padding: 15px;
+    display: block;
+  }
+
+  .section-content.collapsed {
+    display: none;
+  }
+
+  /* Margin Settings */
+  .margin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #333;
+  }
+
+  .form-group input,
+  .form-group select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  /* Row Item */
+  .row-list {
+    margin-top: 10px;
+  }
+
+  .row-item {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .row-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .btn-small {
+    padding: 6px 12px;
+    border: 1px solid #3498db;
+    background: white;
+    color: #3498db;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+  }
+
+  .btn-small:hover {
+    background: #3498db;
+    color: white;
+  }
+
+  .btn-small.active {
+    background: #3498db;
+    color: white;
+  }
+
+  .btn-danger {
+    border-color: #e74c3c;
+    color: #e74c3c;
+  }
+
+  .btn-danger:hover {
+    background: #e74c3c;
+    color: white;
+  }
+
+  .row-columns {
+    display: flex;
+    gap: 10px;
+  }
+
+  .column {
+    flex: 1;
+    position: relative;
+  }
+
+  .column textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    min-height: 60px;
+    font-size: 14px;
+  }
+
+  .column-settings {
+    margin-top: 8px;
+    padding: 10px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    display: none;
+  }
+
+  .column-settings.show {
+    display: block;
+  }
+
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .settings-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .settings-row select {
+    flex: 1;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .btn-icon {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s;
+  }
+
+  .btn-icon:hover,
+  .btn-icon.active {
+    background: #3498db;
+    color: white;
+    border-color: #3498db;
+  }
+
+  .add-row-btn {
+    width: 100%;
+    padding: 10px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 10px;
+  }
+
+  .add-row-btn:hover {
+    background: #229954;
+  }
+
+  .settings-toggle {
+    position: absolute;
+    right: 5px;
+    top: 5px;
+    background: #3498db;
+    color: white;
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  /* Table and Frame styles */
+  .table-frame-container {
+    background: #fff;
+    border: 2px solid #3498db;
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 10px;
+  }
+
+  .nested-rows {
+    margin-left: 20px;
+    margin-top: 10px;
+    padding-left: 10px;
+    border-left: 3px solid #e0e0e0;
+  }
+
+  .table-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+
+  .table-controls label {
+    font-weight: 500;
+    font-size: 13px;
+  }
+
+  .table-controls input {
+    width: 80px;
+    padding: 5px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .column-indicator {
+    font-size: 12px;
+    color: #666;
+    font-weight: normal;
+  }
+
+  .table-row-item {
+    background: #f0f8ff;
+    border: 1px solid #b0d4f1;
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 8px;
+  }
+
+  .table-row-columns {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .table-row-columns.cols-1 {
+    grid-template-columns: 1fr;
+  }
+  .table-row-columns.cols-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .table-row-columns.cols-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .table-row-columns.cols-4 {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+  .table-row-columns.cols-5 {
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  }
+  .table-row-columns.cols-6 {
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+  }
+
+  .table-cell {
+    position: relative;
+  }
+
+  .table-cell textarea {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    resize: vertical;
+    min-height: 40px;
+    font-size: 13px;
+  }
+
+  /* Right Panel - PDF Viewer */
+  .right-panel {
+    width: 50%;
+    background: #525659;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  #pdf-viewer {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  .pdf-placeholder {
+    color: #ccc;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .pdf-placeholder h2 {
+    margin-bottom: 10px;
+  }
+
+  /* Loading Overlay */
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .loading-overlay.show {
+    display: flex;
+  }
+
+  .spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Error Message */
+  .error-message {
+    background: #e74c3c;
+    color: white;
+    padding: 15px;
+    border-radius: 4px;
+    margin-top: 10px;
+    display: none;
+  }
+
+  .error-message.show {
+    display: block;
+  }
+
+  /* Documents Sidebar */
+  .documents-sidebar {
+    position: fixed;
+    left: -50%;
+    top: 0;
+    width: 50%;
+    height: 100vh;
+    background: white;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    transition: left 0.3s ease-in-out;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .documents-sidebar.show {
+    left: 0;
+  }
+
+  .sidebar-header {
+    background: #2c3e50;
+    color: white;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .sidebar-header h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .close-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    line-height: 30px;
+  }
+
+  .close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  .documents-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .document-item {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .document-item:hover {
+    background: #e8f4f8;
+    border-color: #3498db;
+    transform: translateX(5px);
+  }
+
+  .document-title {
+    font-weight: bold;
+    font-size: 16px;
+    color: #2c3e50;
+    margin-bottom: 5px;
+  }
+
+  .document-date {
+    font-size: 13px;
+    color: #666;
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1999;
+    display: none;
+  }
+
+  .sidebar-overlay.show {
+    display: block;
+  }
+
+  /* Editor specific: remove container constraints */
+  .editor-wrapper {
+    height: calc(100vh - 80px);
+    overflow: hidden;
+  }
+</style>
+{% endblock %} {% block content %}
 <div class="editor-wrapper">
-    <div class="container-editor">
-      <!-- Left Panel: Form -->
-      <div class="left-panel">
-        <div class="toolbar">
-          <h1>Ballot Editor</h1>
-          <div style="display: flex; gap: 10px">
-            <button
-              id="documents-btn"
-              onclick="toggleDocumentsSidebar()"
-              style="background: #9b59b6"
+  <div class="container-editor">
+    <!-- Left Panel: Form -->
+    <div class="left-panel">
+      <div class="toolbar">
+        <h1>Ballot Editor</h1>
+        <div style="display: flex; gap: 10px">
+          {% if poll_id %}
+          <a
+            href="{% url 'poll:poll_detail' poll_id %}"
+            class="btn btn-secondary"
+            style="
+              background: #34495e;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 4px;
+              text-decoration: none;
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              font-weight: bold;
+              transition: background 0.3s;
+              cursor: pointer;
+            "
+          >
+            <i class="bi bi-arrow-left"></i> Back
+          </a>
+          {% endif %}
+          <button
+            id="documents-btn"
+            onclick="toggleDocumentsSidebar()"
+            style="background: #9b59b6"
+          >
+            Documents
+          </button>
+          <button id="compile-btn" onclick="compilePDF()">Recompile</button>
+          <button
+            id="save-btn"
+            onclick="saveAndCompilePDF()"
+            style="background: #f39c12"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
+      <div class="form-content">
+        <!-- Section 0: Ballot Management -->
+        <div class="section">
+          <div class="section-header" onclick="toggleSection(this)">
+            <span>0. Quản lý lá phiếu</span>
+            <span class="arrow">▼</span>
+          </div>
+          <div class="section-content">
+            {% if poll_id %}
+            <div
+              style="
+                background: #fff;
+                padding: 15px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+              "
             >
-              Documents
-            </button>
-            <button id="compile-btn" onclick="compilePDF()">Recompile</button>
-            <button
-              id="save-btn"
-              onclick="saveAndCompilePDF()"
-              style="background: #f39c12"
-            >
-              Save
+              <div style="text-align: center">
+                <p
+                  style="
+                    font-size: 3rem;
+                    margin: 10px 0;
+                    color: #3498db;
+                    font-weight: bold;
+                  "
+                  id="ballot-count-display"
+                >
+                  0
+                </p>
+                <p style="color: #666; margin: 0">Số lượng lá phiếu</p>
+              </div>
+            </div>
+
+            <div style="background: #fff; padding: 15px; border-radius: 6px">
+              <h5 style="margin: 0 0 10px 0; color: #333">Tạo lá phiếu mới</h5>
+              <div class="form-group" style="margin-bottom: 10px">
+                <label>Số lượng lá phiếu:</label>
+                <input
+                  type="number"
+                  id="ballot-quantity"
+                  class="form-control"
+                  min="1"
+                  max="1000"
+                  value="10"
+                  style="
+                    padding: 8px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                  "
+                />
+              </div>
+
+              <div
+                style="
+                  background: #fff3cd;
+                  border: 1px solid #ffc107;
+                  padding: 10px;
+                  border-radius: 4px;
+                  margin-bottom: 10px;
+                "
+              >
+                <strong style="color: #856404">⚠ Lưu ý:</strong>
+                <span style="color: #856404"
+                  >Khi tạo phiếu mới, tất cả các lá phiếu cũ sẽ bị xóa!</span
+                >
+              </div>
+
+              <button
+                type="button"
+                onclick="createBallotsInEditor()"
+                style="
+                  width: 100%;
+                  padding: 10px;
+                  background: #27ae60;
+                  color: white;
+                  border: none;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-weight: bold;
+                "
+              >
+                + Tạo phiếu
+              </button>
+
+              <div id="ballot-message" style="margin-top: 10px"></div>
+            </div>
+            {% else %}
+            <p style="color: #999; padding: 15px; text-align: center">
+              Chức năng này chỉ khả dụng khi truy cập từ một cuộc bỏ phiếu cụ
+              thể.
+            </p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Section 1: Margin Settings -->
+        <div class="section">
+          <div class="section-header" onclick="toggleSection(this)">
+            <span>1. Cài đặt căn lề và font chữ</span>
+            <span class="arrow">▼</span>
+          </div>
+          <div class="section-content">
+            <div class="margin-grid">
+              <div class="form-group">
+                <label>Lề trên (cm):</label>
+                <input
+                  type="number"
+                  id="margin-top"
+                  value="2"
+                  step="0.1"
+                  min="2"
+                />
+              </div>
+              <div class="form-group">
+                <label>Lề dưới (cm):</label>
+                <input
+                  type="number"
+                  id="margin-bottom"
+                  value="2"
+                  step="0.1"
+                  min="2"
+                />
+              </div>
+              <div class="form-group">
+                <label>Lề trái (cm):</label>
+                <input
+                  type="number"
+                  id="margin-left"
+                  value="2"
+                  step="0.1"
+                  min="2"
+                />
+              </div>
+              <div class="form-group">
+                <label>Lề phải (cm):</label>
+                <input
+                  type="number"
+                  id="margin-right"
+                  value="2"
+                  step="0.1"
+                  min="2"
+                />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Font chữ chung:</label>
+              <select id="font-family">
+                <option value="Times New Roman" selected>
+                  Times New Roman
+                </option>
+                <option value="Arial">Arial</option>
+                <option value="Courier">Courier</option>
+                <option value="Computer Modern">Computer Modern</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cỡ chữ chung:</label>
+              <select id="font-size">
+                <option value="10">10pt</option>
+                <option value="11">11pt</option>
+                <option value="12" selected>12pt</option>
+                <option value="14">14pt</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Header (Quốc hiệu tiêu ngữ) -->
+        <div class="section">
+          <div class="section-header" onclick="toggleSection(this)">
+            <span>2. Quốc hiệu tiêu ngữ</span>
+            <span class="arrow">▼</span>
+          </div>
+          <div class="section-content">
+            <div id="header-rows" class="row-list"></div>
+            <button class="add-row-btn" onclick="addRow('header')">
+              + Thêm dòng
             </button>
           </div>
         </div>
 
-        <div class="form-content">
-          <!-- Section 0: Ballot Management -->
-          <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-              <span>0. Quản lý lá phiếu</span>
-              <span class="arrow">▼</span>
-            </div>
-            <div class="section-content">
-              {% if poll_id %}
-              <div
-                style="
-                  background: #fff;
-                  padding: 15px;
-                  border-radius: 6px;
-                  margin-bottom: 15px;
-                "
-              >
-                <div style="text-align: center">
-                  <p
-                    style="
-                      font-size: 3rem;
-                      margin: 10px 0;
-                      color: #3498db;
-                      font-weight: bold;
-                    "
-                    id="ballot-count-display"
-                  >
-                    0
-                  </p>
-                  <p style="color: #666; margin: 0">Số lượng lá phiếu</p>
-                </div>
-              </div>
+        <!-- Section 3: Title -->
+        <div class="section">
+          <div class="section-header" onclick="toggleSection(this)">
+            <span>3. Phần tiêu đề phiếu</span>
+            <span class="arrow">▼</span>
+          </div>
+          <div class="section-content">
+            <div id="title-rows" class="row-list"></div>
+            <button class="add-row-btn" onclick="addRow('title')">
+              + Thêm dòng
+            </button>
+          </div>
+        </div>
 
-              <div style="background: #fff; padding: 15px; border-radius: 6px">
-                <h5 style="margin: 0 0 10px 0; color: #333">
-                  Tạo lá phiếu mới
-                </h5>
-                <div class="form-group" style="margin-bottom: 10px">
-                  <label>Số lượng lá phiếu:</label>
+        <!-- Section 4: Body Content -->
+        <div class="section">
+          <div class="section-header" onclick="toggleSection(this)">
+            <span>4. Phần nội dung</span>
+            <span class="arrow">▼</span>
+          </div>
+          <div class="section-content">
+            <!-- Candidate Fill Tool -->
+            <div
+              style="
+                background: #e8f4f8;
+                padding: 12px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+                border: 1px solid #3498db;
+              "
+            >
+              <h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px">
+                Fill Ứng viên Tự động
+              </h4>
+              <div style="display: flex; gap: 10px; align-items: flex-end">
+                <div class="form-group" style="flex: 1">
+                  <label style="font-size: 13px">Bắt đầu từ dòng:</label>
                   <input
                     type="number"
-                    id="ballot-quantity"
-                    class="form-control"
+                    id="candidate-start-row"
                     min="1"
-                    max="1000"
-                    value="10"
-                    style="
-                      padding: 8px;
-                      border: 1px solid #ddd;
-                      border-radius: 4px;
-                    "
+                    value="1"
+                    style="padding: 6px"
                   />
                 </div>
-
-                <div
-                  style="
-                    background: #fff3cd;
-                    border: 1px solid #ffc107;
-                    padding: 10px;
-                    border-radius: 4px;
-                    margin-bottom: 10px;
-                  "
-                >
-                  <strong style="color: #856404">⚠ Lưu ý:</strong>
-                  <span style="color: #856404"
-                    >Khi tạo phiếu mới, tất cả các lá phiếu cũ sẽ bị xóa!</span
-                  >
+                <div class="form-group" style="flex: 1">
+                  <label style="font-size: 13px">Bắt đầu từ ô:</label>
+                  <input
+                    type="number"
+                    id="candidate-start-col"
+                    min="1"
+                    max="3"
+                    value="1"
+                    style="padding: 6px"
+                  />
                 </div>
-
                 <button
                   type="button"
-                  onclick="createBallotsInEditor()"
+                  onclick="fillCandidates()"
                   style="
-                    width: 100%;
-                    padding: 10px;
-                    background: #27ae60;
+                    padding: 8px 16px;
+                    background: #e67e22;
                     color: white;
                     border: none;
                     border-radius: 4px;
                     cursor: pointer;
                     font-weight: bold;
+                    white-space: nowrap;
                   "
                 >
-                  + Tạo phiếu
+                  Fill Ứng viên
                 </button>
-
-                <div id="ballot-message" style="margin-top: 10px"></div>
               </div>
-              {% else %}
-              <p style="color: #999; padding: 15px; text-align: center">
-                Chức năng này chỉ khả dụng khi truy cập từ một cuộc bỏ phiếu cụ
-                thể.
-              </p>
-              {% endif %}
-            </div>
-          </div>
-
-          <!-- Section 1: Margin Settings -->
-          <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-              <span>1. Cài đặt căn lề và font chữ</span>
-              <span class="arrow">▼</span>
-            </div>
-            <div class="section-content">
-              <div class="margin-grid">
-                <div class="form-group">
-                  <label>Lề trên (cm):</label>
-                  <input
-                    type="number"
-                    id="margin-top"
-                    value="2"
-                    step="0.1"
-                    min="2"
-                  />
-                </div>
-                <div class="form-group">
-                  <label>Lề dưới (cm):</label>
-                  <input
-                    type="number"
-                    id="margin-bottom"
-                    value="2"
-                    step="0.1"
-                    min="2"
-                  />
-                </div>
-                <div class="form-group">
-                  <label>Lề trái (cm):</label>
-                  <input
-                    type="number"
-                    id="margin-left"
-                    value="2"
-                    step="0.1"
-                    min="2"
-                  />
-                </div>
-                <div class="form-group">
-                  <label>Lề phải (cm):</label>
-                  <input
-                    type="number"
-                    id="margin-right"
-                    value="2"
-                    step="0.1"
-                    min="2"
-                  />
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Font chữ chung:</label>
-                <select id="font-family">
-                  <option value="Times New Roman" selected>
-                    Times New Roman
-                  </option>
-                  <option value="Arial">Arial</option>
-                  <option value="Courier">Courier</option>
-                  <option value="Computer Modern">Computer Modern</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Cỡ chữ chung:</label>
-                <select id="font-size">
-                  <option value="10">10pt</option>
-                  <option value="11">11pt</option>
-                  <option value="12" selected>12pt</option>
-                  <option value="14">14pt</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Section 2: Header (Quốc hiệu tiêu ngữ) -->
-          <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-              <span>2. Quốc hiệu tiêu ngữ</span>
-              <span class="arrow">▼</span>
-            </div>
-            <div class="section-content">
-              <div id="header-rows" class="row-list"></div>
-              <button class="add-row-btn" onclick="addRow('header')">
-                + Thêm dòng
-              </button>
-            </div>
-          </div>
-
-          <!-- Section 3: Title -->
-          <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-              <span>3. Phần tiêu đề phiếu</span>
-              <span class="arrow">▼</span>
-            </div>
-            <div class="section-content">
-              <div id="title-rows" class="row-list"></div>
-              <button class="add-row-btn" onclick="addRow('title')">
-                + Thêm dòng
-              </button>
-            </div>
-          </div>
-
-          <!-- Section 4: Body Content -->
-          <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-              <span>4. Phần nội dung</span>
-              <span class="arrow">▼</span>
-            </div>
-            <div class="section-content">
-              <!-- Candidate Fill Tool -->
               <div
-                style="
-                  background: #e8f4f8;
-                  padding: 12px;
-                  border-radius: 6px;
-                  margin-bottom: 15px;
-                  border: 1px solid #3498db;
-                "
-              >
-                <h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px">
-                  Fill Ứng viên Tự động
-                </h4>
-                <div style="display: flex; gap: 10px; align-items: flex-end">
-                  <div class="form-group" style="flex: 1">
-                    <label style="font-size: 13px">Bắt đầu từ dòng:</label>
-                    <input
-                      type="number"
-                      id="candidate-start-row"
-                      min="1"
-                      value="1"
-                      style="padding: 6px"
-                    />
-                  </div>
-                  <div class="form-group" style="flex: 1">
-                    <label style="font-size: 13px">Bắt đầu từ ô:</label>
-                    <input
-                      type="number"
-                      id="candidate-start-col"
-                      min="1"
-                      max="3"
-                      value="1"
-                      style="padding: 6px"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onclick="fillCandidates()"
-                    style="
-                      padding: 8px 16px;
-                      background: #e67e22;
-                      color: white;
-                      border: none;
-                      border-radius: 4px;
-                      cursor: pointer;
-                      font-weight: bold;
-                      white-space: nowrap;
-                    "
-                  >
-                    Fill Ứng viên
-                  </button>
-                </div>
-                <div
-                  id="candidate-message"
-                  style="margin-top: 8px; font-size: 12px; color: #666"
-                ></div>
+                id="candidate-message"
+                style="margin-top: 8px; font-size: 12px; color: #666"
+              ></div>
+            </div>
+
+            <div id="body-rows" class="row-list"></div>
+            <button class="add-row-btn" onclick="addRow('body')">
+              + Thêm dòng
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 5: Footer -->
+        <div class="section">
+          <div class="section-header" onclick="toggleSection(this)">
+            <span>5. Ghi chú</span>
+            <span class="arrow">▼</span>
+          </div>
+          <div class="section-content">
+            <div id="footer-rows" class="row-list"></div>
+            <button class="add-row-btn" onclick="addRow('footer')">
+              + Thêm dòng
+            </button>
+          </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="error-message"></div>
+      </div>
+    </div>
+
+    <!-- Right Panel: PDF Viewer -->
+    <div class="right-panel">
+      <div id="pdf-placeholder" class="pdf-placeholder">
+        <h2>Xem trước PDF</h2>
+        <p>Nhấn "Recompile" để tạo PDF</p>
+      </div>
+      <iframe id="pdf-viewer" style="display: none"></iframe>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Documents Sidebar -->
+  <div id="documents-sidebar" class="documents-sidebar">
+    <div class="sidebar-header">
+      <h2>Documents</h2>
+      <button class="close-btn" onclick="toggleDocumentsSidebar()">×</button>
+    </div>
+    <div id="documents-list" class="documents-list">
+      <!-- Documents will be loaded here -->
+    </div>
+  </div>
+
+  <!-- Sidebar Overlay -->
+  <div
+    id="sidebar-overlay"
+    class="sidebar-overlay"
+    onclick="toggleDocumentsSidebar()"
+  ></div>
+
+  <script>
+    // Global state
+    let rowCounter = 0;
+    let nestedRowCounter = 0;
+    const documentData = {
+      header: [],
+      title: [],
+      body: [],
+      footer: [],
+    };
+
+    // Get poll_id from template context
+    const pollId = {{ poll_id|default:'null' }};
+
+    // Toggle documents sidebar
+    async function toggleDocumentsSidebar() {
+      const sidebar = document.getElementById('documents-sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+
+      const isOpen = sidebar.classList.contains('show');
+
+      if (isOpen) {
+        // Close sidebar
+        sidebar.classList.remove('show');
+        overlay.classList.remove('show');
+      } else {
+        // Open sidebar and load documents
+        if (pollId) {
+          await loadDocumentsList();
+        }
+        sidebar.classList.add('show');
+        overlay.classList.add('show');
+      }
+    }
+
+    // Load documents list
+    async function loadDocumentsList() {
+      if (!pollId) return;
+
+      const listContainer = document.getElementById('documents-list');
+      listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Loading...</div>';
+
+      try {
+        const response = await fetch(`/form/documents/${pollId}/list/`);
+        const data = await response.json();
+
+        if (data.success && data.documents.length > 0) {
+          let html = '';
+          for (const doc of data.documents) {
+            html += `
+              <div class="document-item" onclick="loadDocumentAndClose(${doc.id})">
+                <div class="document-title">${doc.title}</div>
+                <div class="document-date">Created: ${doc.created_at}</div>
               </div>
-
-              <div id="body-rows" class="row-list"></div>
-              <button class="add-row-btn" onclick="addRow('body')">
-                + Thêm dòng
-              </button>
-            </div>
-          </div>
-
-          <!-- Section 5: Footer -->
-          <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-              <span>5. Ghi chú</span>
-              <span class="arrow">▼</span>
-            </div>
-            <div class="section-content">
-              <div id="footer-rows" class="row-list"></div>
-              <button class="add-row-btn" onclick="addRow('footer')">
-                + Thêm dòng
-              </button>
-            </div>
-          </div>
-
-          <!-- Error Message -->
-          <div id="error-message" class="error-message"></div>
-        </div>
-      </div>
-
-      <!-- Right Panel: PDF Viewer -->
-      <div class="right-panel">
-        <div id="pdf-placeholder" class="pdf-placeholder">
-          <h2>Xem trước PDF</h2>
-          <p>Nhấn "Recompile" để tạo PDF</p>
-        </div>
-        <iframe id="pdf-viewer" style="display: none"></iframe>
-      </div>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay">
-      <div class="spinner"></div>
-    </div>
-
-    <!-- Documents Sidebar -->
-    <div id="documents-sidebar" class="documents-sidebar">
-      <div class="sidebar-header">
-        <h2>Documents</h2>
-        <button class="close-btn" onclick="toggleDocumentsSidebar()">×</button>
-      </div>
-      <div id="documents-list" class="documents-list">
-        <!-- Documents will be loaded here -->
-      </div>
-    </div>
-
-    <!-- Sidebar Overlay -->
-    <div
-      id="sidebar-overlay"
-      class="sidebar-overlay"
-      onclick="toggleDocumentsSidebar()"
-    ></div>
-
-    <script>
-      // Global state
-      let rowCounter = 0;
-      let nestedRowCounter = 0;
-      const documentData = {
-        header: [],
-        title: [],
-        body: [],
-        footer: [],
-      };
-
-      // Get poll_id from template context
-      const pollId = {{ poll_id|default:'null' }};
-
-      // Toggle documents sidebar
-      async function toggleDocumentsSidebar() {
-        const sidebar = document.getElementById('documents-sidebar');
-        const overlay = document.getElementById('sidebar-overlay');
-
-        const isOpen = sidebar.classList.contains('show');
-
-        if (isOpen) {
-          // Close sidebar
-          sidebar.classList.remove('show');
-          overlay.classList.remove('show');
+            `;
+          }
+          listContainer.innerHTML = html;
         } else {
-          // Open sidebar and load documents
-          if (pollId) {
-            await loadDocumentsList();
-          }
-          sidebar.classList.add('show');
-          overlay.classList.add('show');
+          listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No documents found</div>';
         }
+      } catch (error) {
+        console.error('Error loading documents:', error);
+        listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #e74c3c;">Error loading documents</div>';
       }
+    }
 
-      // Load documents list
-      async function loadDocumentsList() {
-        if (!pollId) return;
+    // Load document and close sidebar
+    async function loadDocumentAndClose(docId) {
+      const loading = document.getElementById('loading-overlay');
+      loading.classList.add('show');
 
-        const listContainer = document.getElementById('documents-list');
-        listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">Loading...</div>';
+      try {
+        const response = await fetch(`/form/load/${docId}/`);
+        const data = await response.json();
 
-        try {
-          const response = await fetch(`/form/documents/${pollId}/list/`);
+        if (data.success) {
+          // Close sidebar first
+          toggleDocumentsSidebar();
+
+          // Get the actual data object
+          const docData = data.data;
+
+          // Clear existing data
+          documentData.header = [];
+          documentData.title = [];
+          documentData.body = [];
+          documentData.footer = [];
+          rowCounter = 0;
+          nestedRowCounter = 0;
+
+          // Load margins
+          document.getElementById('margin-top').value = docData.margins.top;
+          document.getElementById('margin-bottom').value = docData.margins.bottom;
+          document.getElementById('margin-left').value = docData.margins.left;
+          document.getElementById('margin-right').value = docData.margins.right;
+
+          // Load font settings
+          document.getElementById('font-family').value = docData.fontFamily;
+          document.getElementById('font-size').value = docData.fontSize;
+
+          // Load content sections
+          if (docData.headerRows) {
+            documentData.header = docData.headerRows;
+            renderSection('header', docData.headerRows);
+          }
+
+          if (docData.titleRows) {
+            documentData.title = docData.titleRows;
+            renderSection('title', docData.titleRows);
+          }
+
+          if (docData.bodyRows) {
+            documentData.body = docData.bodyRows;
+            renderSection('body', docData.bodyRows);
+          }
+
+          if (docData.footerRows) {
+            documentData.footer = docData.footerRows;
+            renderSection('footer', docData.footerRows);
+          }
+
+          // Update row counter to max ID
+          const allRows = [...documentData.header, ...documentData.title, ...documentData.body, ...documentData.footer];
+          if (allRows.length > 0) {
+            rowCounter = Math.max(...allRows.map(r => r.id));
+          }
+
+          // Recompile PDF with loaded data
+          await compilePDF();
+        } else {
+          alert('Error loading document: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error loading document:', error);
+        alert('Error loading document: ' + error.message);
+      } finally {
+        loading.classList.remove('show');
+      }
+    }
+
+    // Render a section with data
+    function renderSection(section, data) {
+      const container = document.getElementById(`${section}-rows`);
+      container.innerHTML = '';
+
+      for (const rowData of data) {
+        const rowHtml = createRowElement(rowData, section);
+        container.insertAdjacentHTML('beforeend', rowHtml);
+      }
+    }
+
+    // Load ballot count on page load
+    async function loadBallotCount() {
+      if (!pollId) return;
+
+      try {
+        const response = await fetch(`/form/ballots/${pollId}/count/`);
+        if (response.ok) {
           const data = await response.json();
-
-          if (data.success && data.documents.length > 0) {
-            let html = '';
-            for (const doc of data.documents) {
-              html += `
-                <div class="document-item" onclick="loadDocumentAndClose(${doc.id})">
-                  <div class="document-title">${doc.title}</div>
-                  <div class="document-date">Created: ${doc.created_at}</div>
-                </div>
-              `;
-            }
-            listContainer.innerHTML = html;
-          } else {
-            listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No documents found</div>';
+          const countDisplay = document.getElementById('ballot-count-display');
+          if (countDisplay) {
+            countDisplay.textContent = data.count || 0;
           }
-        } catch (error) {
-          console.error('Error loading documents:', error);
-          listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #e74c3c;">Error loading documents</div>';
         }
+      } catch (error) {
+        console.error('Error loading ballot count:', error);
+      }
+    }
+
+    // Create ballots in editor
+    async function createBallotsInEditor() {
+      if (!pollId) {
+        alert('Không thể tạo phiếu: Thiếu poll_id');
+        return;
       }
 
-      // Load document and close sidebar
-      async function loadDocumentAndClose(docId) {
-        const loading = document.getElementById('loading-overlay');
-        loading.classList.add('show');
+      const quantityInput = document.getElementById('ballot-quantity');
+      const messageArea = document.getElementById('ballot-message');
+      const loading = document.getElementById('loading-overlay');
 
-        try {
-          const response = await fetch(`/form/load/${docId}/`);
-          const data = await response.json();
+      const quantity = parseInt(quantityInput.value);
 
-          if (data.success) {
-            // Close sidebar first
-            toggleDocumentsSidebar();
+      // Validate
+      if (isNaN(quantity) || quantity <= 0) {
+        showBallotMessage('Vui lòng nhập số lượng hợp lệ (lớn hơn 0)', 'error');
+        return;
+      }
 
-            // Get the actual data object
-            const docData = data.data;
+      if (quantity > 1000) {
+        showBallotMessage('Số lượng tối đa là 1000 phiếu', 'error');
+        return;
+      }
 
-            // Clear existing data
-            documentData.header = [];
-            documentData.title = [];
-            documentData.body = [];
-            documentData.footer = [];
-            rowCounter = 0;
-            nestedRowCounter = 0;
+      // Confirm
+      if (!confirm(`Bạn có chắc muốn tạo ${quantity} lá phiếu mới?\n\nCảnh báo: Tất cả các lá phiếu cũ sẽ bị xóa!`)) {
+        return;
+      }
 
-            // Load margins
-            document.getElementById('margin-top').value = docData.margins.top;
-            document.getElementById('margin-bottom').value = docData.margins.bottom;
-            document.getElementById('margin-left').value = docData.margins.left;
-            document.getElementById('margin-right').value = docData.margins.right;
+      // Show loading
+      loading.classList.add('show');
+      messageArea.innerHTML = '';
 
-            // Load font settings
-            document.getElementById('font-family').value = docData.fontFamily;
-            document.getElementById('font-size').value = docData.fontSize;
+      try {
+        const response = await fetch(`/form/ballots/${pollId}/create/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ quantity: quantity })
+        });
 
-            // Load content sections
-            if (docData.headerRows) {
-              documentData.header = docData.headerRows;
-              renderSection('header', docData.headerRows);
-            }
+        const result = await response.json();
 
-            if (docData.titleRows) {
-              documentData.title = docData.titleRows;
-              renderSection('title', docData.titleRows);
-            }
-
-            if (docData.bodyRows) {
-              documentData.body = docData.bodyRows;
-              renderSection('body', docData.bodyRows);
-            }
-
-            if (docData.footerRows) {
-              documentData.footer = docData.footerRows;
-              renderSection('footer', docData.footerRows);
-            }
-
-            // Update row counter to max ID
-            const allRows = [...documentData.header, ...documentData.title, ...documentData.body, ...documentData.footer];
-            if (allRows.length > 0) {
-              rowCounter = Math.max(...allRows.map(r => r.id));
-            }
-
-            // Recompile PDF with loaded data
-            await compilePDF();
-          } else {
-            alert('Error loading document: ' + (data.error || 'Unknown error'));
+        if (response.ok && result.success) {
+          showBallotMessage(result.message, 'success');
+          // Update count display
+          const countDisplay = document.getElementById('ballot-count-display');
+          if (countDisplay) {
+            countDisplay.textContent = result.ballot_count;
           }
-        } catch (error) {
-          console.error('Error loading document:', error);
-          alert('Error loading document: ' + error.message);
-        } finally {
-          loading.classList.remove('show');
+        } else {
+          showBallotMessage(`Lỗi: ${result.error || 'Không thể tạo phiếu'}`, 'error');
         }
+      } catch (error) {
+        showBallotMessage(`Lỗi kết nối: ${error.message}`, 'error');
+      } finally {
+        loading.classList.remove('show');
       }
+    }
 
-      // Render a section with data
-      function renderSection(section, data) {
-        const container = document.getElementById(`${section}-rows`);
-        container.innerHTML = '';
+    // Show ballot message
+    function showBallotMessage(message, type) {
+      const messageArea = document.getElementById('ballot-message');
+      if (!messageArea) return;
 
-        for (const rowData of data) {
-          const rowHtml = createRowElement(rowData, section);
-          container.insertAdjacentHTML('beforeend', rowHtml);
-        }
-      }
+      const bgColor = type === 'success' ? '#d4edda' : '#f8d7da';
+      const borderColor = type === 'success' ? '#c3e6cb' : '#f5c6cb';
+      const textColor = type === 'success' ? '#155724' : '#721c24';
 
-      // Load ballot count on page load
-      async function loadBallotCount() {
-        if (!pollId) return;
+      messageArea.innerHTML = `
+        <div style="background: ${bgColor}; border: 1px solid ${borderColor}; color: ${textColor}; padding: 10px; border-radius: 4px;">
+          ${message}
+        </div>
+      `;
 
-        try {
-          const response = await fetch(`/form/ballots/${pollId}/count/`);
-          if (response.ok) {
-            const data = await response.json();
-            const countDisplay = document.getElementById('ballot-count-display');
-            if (countDisplay) {
-              countDisplay.textContent = data.count || 0;
-            }
-          }
-        } catch (error) {
-          console.error('Error loading ballot count:', error);
-        }
-      }
-
-      // Create ballots in editor
-      async function createBallotsInEditor() {
-        if (!pollId) {
-          alert('Không thể tạo phiếu: Thiếu poll_id');
-          return;
-        }
-
-        const quantityInput = document.getElementById('ballot-quantity');
-        const messageArea = document.getElementById('ballot-message');
-        const loading = document.getElementById('loading-overlay');
-
-        const quantity = parseInt(quantityInput.value);
-
-        // Validate
-        if (isNaN(quantity) || quantity <= 0) {
-          showBallotMessage('Vui lòng nhập số lượng hợp lệ (lớn hơn 0)', 'error');
-          return;
-        }
-
-        if (quantity > 1000) {
-          showBallotMessage('Số lượng tối đa là 1000 phiếu', 'error');
-          return;
-        }
-
-        // Confirm
-        if (!confirm(`Bạn có chắc muốn tạo ${quantity} lá phiếu mới?\n\nCảnh báo: Tất cả các lá phiếu cũ sẽ bị xóa!`)) {
-          return;
-        }
-
-        // Show loading
-        loading.classList.add('show');
+      // Auto hide after 5 seconds
+      setTimeout(() => {
         messageArea.innerHTML = '';
+      }, 5000);
+    }
 
-        try {
-          const response = await fetch(`/form/ballots/${pollId}/create/`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ quantity: quantity })
-          });
+    // Toggle section collapse
+    function toggleSection(header) {
+      header.classList.toggle("collapsed");
+      const content = header.nextElementSibling;
+      content.classList.toggle("collapsed");
+    }
 
-          const result = await response.json();
-
-          if (response.ok && result.success) {
-            showBallotMessage(result.message, 'success');
-            // Update count display
-            const countDisplay = document.getElementById('ballot-count-display');
-            if (countDisplay) {
-              countDisplay.textContent = result.ballot_count;
-            }
-          } else {
-            showBallotMessage(`Lỗi: ${result.error || 'Không thể tạo phiếu'}`, 'error');
-          }
-        } catch (error) {
-          showBallotMessage(`Lỗi kết nối: ${error.message}`, 'error');
-        } finally {
-          loading.classList.remove('show');
-        }
+    // Fill candidates into body content
+    async function fillCandidates() {
+      if (!pollId) {
+        alert('Không có thông tin cuộc bỏ phiếu');
+        return;
       }
 
-      // Show ballot message
-      function showBallotMessage(message, type) {
-        const messageArea = document.getElementById('ballot-message');
-        if (!messageArea) return;
+      const startRow = parseInt(document.getElementById('candidate-start-row').value);
+      const startCol = parseInt(document.getElementById('candidate-start-col').value);
+      const messageArea = document.getElementById('candidate-message');
 
-        const bgColor = type === 'success' ? '#d4edda' : '#f8d7da';
-        const borderColor = type === 'success' ? '#c3e6cb' : '#f5c6cb';
-        const textColor = type === 'success' ? '#155724' : '#721c24';
-
-        messageArea.innerHTML = `
-          <div style="background: ${bgColor}; border: 1px solid ${borderColor}; color: ${textColor}; padding: 10px; border-radius: 4px;">
-            ${message}
-          </div>
-        `;
-
-        // Auto hide after 5 seconds
-        setTimeout(() => {
-          messageArea.innerHTML = '';
-        }, 5000);
+      // Validate inputs
+      if (isNaN(startRow) || startRow < 1) {
+        messageArea.innerHTML = '<span style="color: #e74c3c;"> Số dòng phải >= 1</span>';
+        return;
       }
 
-      // Toggle section collapse
-      function toggleSection(header) {
-        header.classList.toggle("collapsed");
-        const content = header.nextElementSibling;
-        content.classList.toggle("collapsed");
+      if (isNaN(startCol) || startCol < 1) {
+        messageArea.innerHTML = '<span style="color: #e74c3c;"> Số ô phải >= 1</span>';
+        return;
       }
 
-      // Fill candidates into body content
-      async function fillCandidates() {
-        if (!pollId) {
-          alert('Không có thông tin cuộc bỏ phiếu');
+      messageArea.innerHTML = '<span style="color: #3498db;"> Đang tải danh sách ứng viên...</span>';
+
+      try {
+        const response = await fetch(`/form/candidates/${pollId}/list/`);
+        const data = await response.json();
+
+        if (!data.success) {
+          messageArea.innerHTML = '<span style="color: #e74c3c;">Lỗi: ' + data.error + '</span>';
           return;
         }
 
-        const startRow = parseInt(document.getElementById('candidate-start-row').value);
-        const startCol = parseInt(document.getElementById('candidate-start-col').value);
-        const messageArea = document.getElementById('candidate-message');
-
-        // Validate inputs
-        if (isNaN(startRow) || startRow < 1) {
-          messageArea.innerHTML = '<span style="color: #e74c3c;"> Số dòng phải >= 1</span>';
+        if (data.count === 0) {
+          messageArea.innerHTML = '<span style="color: #f39c12;">Không có ứng viên trong cuộc bỏ phiếu này</span>';
           return;
         }
 
-        if (isNaN(startCol) || startCol < 1) {
-          messageArea.innerHTML = '<span style="color: #e74c3c;"> Số ô phải >= 1</span>';
-          return;
-        }
+        // Fill candidates into a table
+        const candidates = data.candidates;
+        const startRowIndex = startRow; // Starting row in table (1-based)
+        const startColIndex = startCol; // Starting column in table (1-based)
 
-        messageArea.innerHTML = '<span style="color: #3498db;"> Đang tải danh sách ứng viên...</span>';
+        // Determine number of columns needed
+        const numCols = Math.max(startColIndex, 2);
 
-        try {
-          const response = await fetch(`/form/candidates/${pollId}/list/`);
-          const data = await response.json();
+        // Find body rows section to add table
+        const bodyRowIndex = documentData.body.length; // Add at end
 
-          if (!data.success) {
-            messageArea.innerHTML = '<span style="color: #e74c3c;">Lỗi: ' + data.error + '</span>';
-            return;
-          }
+        // Create new table row
+        const tableRowId = ++rowCounter;
+        const tableRow = {
+          id: tableRowId,
+          type: 'table',
+          margin: 0,
+          numCols: numCols,
+          columns: [],
+          nestedRows: []
+        };
 
-          if (data.count === 0) {
-            messageArea.innerHTML = '<span style="color: #f39c12;">Không có ứng viên trong cuộc bỏ phiếu này</span>';
-            return;
-          }
-
-          // Fill candidates into a table
-          const candidates = data.candidates;
-          const startRowIndex = startRow; // Starting row in table (1-based)
-          const startColIndex = startCol; // Starting column in table (1-based)
-
-          // Determine number of columns needed
-          const numCols = Math.max(startColIndex, 2);
-
-          // Find body rows section to add table
-          const bodyRowIndex = documentData.body.length; // Add at end
-
-          // Create new table row
-          const tableRowId = ++rowCounter;
-          const tableRow = {
-            id: tableRowId,
-            type: 'table',
-            margin: 0,
-            numCols: numCols,
-            columns: [],
-            nestedRows: []
+        // Create empty rows before startRow
+        for (let row = 1; row < startRowIndex; row++) {
+          const nestedId = ++nestedRowCounter;
+          const nestedRowData = {
+            id: nestedId,
+            columns: []
           };
 
-          // Create empty rows before startRow
-          for (let row = 1; row < startRowIndex; row++) {
-            const nestedId = ++nestedRowCounter;
-            const nestedRowData = {
-              id: nestedId,
-              columns: []
-            };
+          // All columns empty
+          for (let col = 0; col < numCols; col++) {
+            nestedRowData.columns.push({
+              text: '',
+              bold: false,
+              italic: false,
+              underline: false,
+              align: 'left',
+              fontSize: 12
+            });
+          }
 
-            // All columns empty
-            for (let col = 0; col < numCols; col++) {
+          tableRow.nestedRows.push(nestedRowData);
+        }
+
+        // Add candidate rows starting from startRow
+        for (let i = 0; i < candidates.length; i++) {
+          const candidate = candidates[i];
+          const nestedId = ++nestedRowCounter;
+
+          const nestedRowData = {
+            id: nestedId,
+            columns: []
+          };
+
+          // Fill columns
+          for (let col = 1; col <= numCols; col++) {
+            if (col === startColIndex) {
+              // Fill candidate name at startCol
+              nestedRowData.columns.push({
+                text: candidate.name,
+                bold: false,
+                italic: false,
+                underline: false,
+                align: 'left',
+                fontSize: 12
+              });
+            } else {
+              // Empty cell
               nestedRowData.columns.push({
                 text: '',
                 bold: false,
@@ -1240,938 +1290,901 @@
                 fontSize: 12
               });
             }
-
-            tableRow.nestedRows.push(nestedRowData);
           }
 
-          // Add candidate rows starting from startRow
-          for (let i = 0; i < candidates.length; i++) {
-            const candidate = candidates[i];
-            const nestedId = ++nestedRowCounter;
-
-            const nestedRowData = {
-              id: nestedId,
-              columns: []
-            };
-
-            // Fill columns
-            for (let col = 1; col <= numCols; col++) {
-              if (col === startColIndex) {
-                // Fill candidate name at startCol
-                nestedRowData.columns.push({
-                  text: candidate.name,
-                  bold: false,
-                  italic: false,
-                  underline: false,
-                  align: 'left',
-                  fontSize: 12
-                });
-              } else {
-                // Empty cell
-                nestedRowData.columns.push({
-                  text: '',
-                  bold: false,
-                  italic: false,
-                  underline: false,
-                  align: 'left',
-                  fontSize: 12
-                });
-              }
-            }
-
-            tableRow.nestedRows.push(nestedRowData);
-          }
-
-          // Add table to body
-          documentData.body.push(tableRow);
-
-          // Re-render body section
-          renderSection('body', documentData.body);
-
-          messageArea.innerHTML = '<span style="color: #27ae60;">Đã fill ' + candidates.length + ' ứng viên thành công!</span>';
-
-          // Auto hide message after 3 seconds
-          setTimeout(() => {
-            messageArea.innerHTML = '';
-          }, 3000);
-
-        } catch (error) {
-          console.error('Error filling candidates:', error);
-          messageArea.innerHTML = '<span style="color: #e74c3c;">Lỗi: ' + error.message + '</span>';
-        }
-      }
-
-      // Add new row
-      function addRow(section) {
-        const rowId = ++rowCounter;
-        const container = document.getElementById(`${section}-rows`);
-
-        const rowData = {
-          id: rowId,
-          type: "single",
-          columns: [
-            {
-              text: "",
-              bold: false,
-              italic: false,
-              underline: false,
-              align: "left",
-              fontSize: 12,
-            },
-          ],
-        };
-
-        documentData[section].push(rowData);
-
-        const rowHtml = createRowElement(rowData, section);
-        container.insertAdjacentHTML("beforeend", rowHtml);
-      }
-
-      // Add nested row (for tables and frames)
-      function addNestedRow(section, parentId, numCols = 1) {
-        const nestedId = ++nestedRowCounter;
-        const parentData = documentData[section].find((r) => r.id === parentId);
-        if (!parentData) return;
-
-        if (!parentData.nestedRows) {
-          parentData.nestedRows = [];
+          tableRow.nestedRows.push(nestedRowData);
         }
 
-        const nestedRowData = {
-          id: nestedId,
-          columns: [],
-        };
+        // Add table to body
+        documentData.body.push(tableRow);
 
-        // Create columns based on numCols
-        for (let i = 0; i < numCols; i++) {
-          nestedRowData.columns.push({
+        // Re-render body section
+        renderSection('body', documentData.body);
+
+        messageArea.innerHTML = '<span style="color: #27ae60;">Đã fill ' + candidates.length + ' ứng viên thành công!</span>';
+
+        // Auto hide message after 3 seconds
+        setTimeout(() => {
+          messageArea.innerHTML = '';
+        }, 3000);
+
+      } catch (error) {
+        console.error('Error filling candidates:', error);
+        messageArea.innerHTML = '<span style="color: #e74c3c;">Lỗi: ' + error.message + '</span>';
+      }
+    }
+
+    // Add new row
+    function addRow(section) {
+      const rowId = ++rowCounter;
+      const container = document.getElementById(`${section}-rows`);
+
+      const rowData = {
+        id: rowId,
+        type: "single",
+        columns: [
+          {
             text: "",
             bold: false,
             italic: false,
             underline: false,
             align: "left",
             fontSize: 12,
-          });
-        }
+          },
+        ],
+      };
 
-        parentData.nestedRows.push(nestedRowData);
+      documentData[section].push(rowData);
 
-        // Re-render parent row
-        reRenderRow(section, parentId);
+      const rowHtml = createRowElement(rowData, section);
+      container.insertAdjacentHTML("beforeend", rowHtml);
+    }
+
+    // Add nested row (for tables and frames)
+    function addNestedRow(section, parentId, numCols = 1) {
+      const nestedId = ++nestedRowCounter;
+      const parentData = documentData[section].find((r) => r.id === parentId);
+      if (!parentData) return;
+
+      if (!parentData.nestedRows) {
+        parentData.nestedRows = [];
       }
 
-      // Re-render a specific row
-      function reRenderRow(section, rowId) {
-        const container = document.getElementById(`${section}-rows`);
-        const oldRow = container.querySelector(`[data-row-id="${rowId}"]`);
-        if (!oldRow) return;
+      const nestedRowData = {
+        id: nestedId,
+        columns: [],
+      };
 
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (!rowData) return;
-
-        const newRowHtml = createRowElement(rowData, section);
-        oldRow.outerHTML = newRowHtml;
-      }
-
-      // Create row HTML
-      function createRowElement(rowData, section) {
-        const rowType = rowData.type || "single";
-        const isSingle = rowType === "single";
-        const isTable = rowType === "table" || rowType === "table-double";
-        const isFrame = rowType === "frame" || rowType === "frame-double";
-        const columns = rowData.columns;
-
-        let columnsHtml = "";
-        columns.forEach((col, idx) => {
-          columnsHtml += `
-                    <div class="column">
-                        <textarea
-                            placeholder="Nhập nội dung..."
-                            onchange="updateRowData('${section}', ${
-            rowData.id
-          }, ${idx}, 'text', this.value)"
-                        >${col.text || ""}</textarea>
-                        <button class="settings-toggle" onclick="toggleSettings(this)">⚙</button>
-                        <div class="column-settings">
-                            <div class="settings-grid">
-                                <button class="btn-icon ${
-                                  col.bold ? "active" : ""
-                                }"
-                                    onclick="toggleFormat('${section}', ${
-            rowData.id
-          }, ${idx}, 'bold', this)">
-                                    <b>B</b>
-                                </button>
-                                <button class="btn-icon ${
-                                  col.italic ? "active" : ""
-                                }"
-                                    onclick="toggleFormat('${section}', ${
-            rowData.id
-          }, ${idx}, 'italic', this)">
-                                    <i>I</i>
-                                </button>
-                                <button class="btn-icon ${
-                                  col.underline ? "active" : ""
-                                }"
-                                    onclick="toggleFormat('${section}', ${
-            rowData.id
-          }, ${idx}, 'underline', this)">
-                                    <u>U</u>
-                                </button>
-                            </div>
-                            <div class="settings-row">
-                                <select onchange="updateRowData('${section}', ${
-            rowData.id
-          }, ${idx}, 'align', this.value)">
-                                    <option value="left" ${
-                                      col.align === "left" ? "selected" : ""
-                                    }>Trái</option>
-                                    <option value="center" ${
-                                      col.align === "center" ? "selected" : ""
-                                    }>Giữa</option>
-                                    <option value="right" ${
-                                      col.align === "right" ? "selected" : ""
-                                    }>Phải</option>
-                                </select>
-                                <select onchange="updateRowData('${section}', ${
-            rowData.id
-          }, ${idx}, 'fontSize', this.value)">
-                                    <option value="8" ${
-                                      col.fontSize == 8 ? "selected" : ""
-                                    }>8pt</option>
-                                    <option value="10" ${
-                                      col.fontSize == 10 ? "selected" : ""
-                                    }>10pt</option>
-                                    <option value="12" ${
-                                      col.fontSize == 12 ? "selected" : ""
-                                    }>12pt</option>
-                                    <option value="14" ${
-                                      col.fontSize == 14 ? "selected" : ""
-                                    }>14pt</option>
-                                    <option value="16" ${
-                                      col.fontSize == 16 ? "selected" : ""
-                                    }>16pt</option>
-                                    <option value="18" ${
-                                      col.fontSize == 18 ? "selected" : ""
-                                    }>18pt</option>
-                                    <option value="20" ${
-                                      col.fontSize == 20 ? "selected" : ""
-                                    }>20pt</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                `;
+      // Create columns based on numCols
+      for (let i = 0; i < numCols; i++) {
+        nestedRowData.columns.push({
+          text: "",
+          bold: false,
+          italic: false,
+          underline: false,
+          align: "left",
+          fontSize: 12,
         });
+      }
 
-        let typeButtonsHtml = "";
-        if (section === "body") {
-          // Body section has table and frame options
-          typeButtonsHtml = `
-            <button class="btn-small ${rowType === "single" ? "active" : ""}"
-                onclick="setRowType('${section}', ${rowData.id}, 'single')">
-                Dòng đơn
-            </button>
-            <button class="btn-small ${rowType === "double" ? "active" : ""}"
-                onclick="setRowType('${section}', ${rowData.id}, 'double')">
-                Dòng đôi
-            </button>
-            <button class="btn-small ${rowType === "table" ? "active" : ""}"
-                onclick="setRowType('${section}', ${rowData.id}, 'table')">
-                Bảng đơn
-            </button>
-            <button class="btn-small ${
-              rowType === "table-double" ? "active" : ""
-            }"
-                onclick="setRowType('${section}', ${
-            rowData.id
-          }, 'table-double')">
-                Bảng đôi
-            </button>
-            <button class="btn-small ${rowType === "frame" ? "active" : ""}"
-                onclick="setRowType('${section}', ${rowData.id}, 'frame')">
-                Khung đơn
-            </button>
-            <button class="btn-small ${
-              rowType === "frame-double" ? "active" : ""
-            }"
-                onclick="setRowType('${section}', ${
-            rowData.id
-          }, 'frame-double')">
-                Khung đôi
-            </button>
-          `;
-        } else {
-          // Other sections only have single and double
-          typeButtonsHtml = `
-            <button class="btn-small ${isSingle ? "active" : ""}"
-                onclick="setRowType('${section}', ${rowData.id}, 'single')">
-                Dòng đơn
-            </button>
-            <button class="btn-small ${!isSingle ? "active" : ""}"
-                onclick="setRowType('${section}', ${rowData.id}, 'double')">
-                Dòng đôi
-            </button>
-          `;
-        }
+      parentData.nestedRows.push(nestedRowData);
 
-        let contentHtml = "";
-        if (isTable || isFrame) {
-          // Table or Frame layout
-          const margin = rowData.margin || 0;
-          const numCols = rowData.numCols || 1;
-          const isDouble = rowType.includes("double");
-          const tableType = isTable ? "bảng" : "khung";
+      // Re-render parent row
+      reRenderRow(section, parentId);
+    }
 
-          const doubleMode = rowData.doubleMode || "margin";
-          const minMargin = isDouble ? "0.5" : "0";
-          const tableContent = `
-            <div class="table-frame-container">
-              <div class="table-controls">
-                <label>Lề (cm):</label>
-                <input type="number" value="${margin}" step="0.1" min="${minMargin}"
-                  onchange="updateTableMargin('${section}', ${
-            rowData.id
-          }, this.value, ${isDouble})" />
-                <label>Số cột: <span class="column-indicator">${numCols}</span></label>
-                <button class="btn-small" onclick="changeTableColumns('${section}', ${
-            rowData.id
-          }, 1)"
-                  ${numCols >= 6 ? "disabled" : ""}>
-                  ⏶ Tăng cột
-                </button>
-                <button class="btn-small" onclick="changeTableColumns('${section}', ${
-            rowData.id
-          }, -1)"
-                  ${numCols <= 1 ? "disabled" : ""}>
-                  ⏷ Giảm cột
-                </button>
-              </div>
-              <div class="nested-rows" id="nested-${rowData.id}">
-                ${renderNestedRows(rowData, section)}
-              </div>
-              <button class="add-row-btn" onclick="addNestedRow('${section}', ${
-            rowData.id
-          }, ${numCols})">
-                + Thêm dòng ${tableType}
-              </button>
-            </div>
-          `;
+    // Re-render a specific row
+    function reRenderRow(section, rowId) {
+      const container = document.getElementById(`${section}-rows`);
+      const oldRow = container.querySelector(`[data-row-id="${rowId}"]`);
+      if (!oldRow) return;
 
-          if (isDouble) {
-            // For double table/frame, show two side by side with mode selector
-            contentHtml = `
-              <div style="margin-bottom: 10px;">
-                <label style="font-weight: 500; margin-right: 10px;">Chế độ căn:</label>
-                <button class="btn-small ${
-                  doubleMode === "margin" ? "active" : ""
-                }"
-                  onclick="setDoubleMode('${section}', ${
-              rowData.id
-            }, 'margin')">
-                  Căn lề
-                </button>
-                <button class="btn-small ${
-                  doubleMode === "center" ? "active" : ""
-                }"
-                  onclick="setDoubleMode('${section}', ${
-              rowData.id
-            }, 'center')">
-                  Căn giữa
-                </button>
-              </div>
-              <div style="display: flex; gap: 10px;">
-                <div style="flex: 1;">${tableContent}</div>
-                <div style="flex: 1;">${tableContent
-                  .replace(
-                    new RegExp("nested-" + rowData.id, "g"),
-                    "nested-" + rowData.id + "-right"
-                  )
-                  .replace(
-                    new RegExp(
-                      `addNestedRow\\('${section}', ${rowData.id},`,
-                      "g"
-                    ),
-                    `addNestedRow('${section}', ${rowData.id + "_right"},`
-                  )}</div>
-              </div>
-            `;
-          } else {
-            contentHtml = tableContent;
-          }
-        } else {
-          // Regular single or double column
-          contentHtml = `<div class="row-columns">${columnsHtml}</div>`;
-        }
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (!rowData) return;
 
-        return `
-          <div class="row-item" data-row-id="${rowData.id}">
-            <div class="row-controls">
-              ${typeButtonsHtml}
-              <button class="btn-small btn-danger" onclick="deleteRow('${section}', ${rowData.id})">
-                🗑 Xóa
-              </button>
-            </div>
-            ${contentHtml}
-          </div>
+      const newRowHtml = createRowElement(rowData, section);
+      oldRow.outerHTML = newRowHtml;
+    }
+
+    // Create row HTML
+    function createRowElement(rowData, section) {
+      const rowType = rowData.type || "single";
+      const isSingle = rowType === "single";
+      const isTable = rowType === "table" || rowType === "table-double";
+      const isFrame = rowType === "frame" || rowType === "frame-double";
+      const columns = rowData.columns;
+
+      let columnsHtml = "";
+      columns.forEach((col, idx) => {
+        columnsHtml += `
+                  <div class="column">
+                      <textarea
+                          placeholder="Nhập nội dung..."
+                          onchange="updateRowData('${section}', ${
+          rowData.id
+        }, ${idx}, 'text', this.value)"
+                      >${col.text || ""}</textarea>
+                      <button class="settings-toggle" onclick="toggleSettings(this)">⚙</button>
+                      <div class="column-settings">
+                          <div class="settings-grid">
+                              <button class="btn-icon ${
+                                col.bold ? "active" : ""
+                              }"
+                                  onclick="toggleFormat('${section}', ${
+          rowData.id
+        }, ${idx}, 'bold', this)">
+                                  <b>B</b>
+                              </button>
+                              <button class="btn-icon ${
+                                col.italic ? "active" : ""
+                              }"
+                                  onclick="toggleFormat('${section}', ${
+          rowData.id
+        }, ${idx}, 'italic', this)">
+                                  <i>I</i>
+                              </button>
+                              <button class="btn-icon ${
+                                col.underline ? "active" : ""
+                              }"
+                                  onclick="toggleFormat('${section}', ${
+          rowData.id
+        }, ${idx}, 'underline', this)">
+                                  <u>U</u>
+                              </button>
+                          </div>
+                          <div class="settings-row">
+                              <select onchange="updateRowData('${section}', ${
+          rowData.id
+        }, ${idx}, 'align', this.value)">
+                                  <option value="left" ${
+                                    col.align === "left" ? "selected" : ""
+                                  }>Trái</option>
+                                  <option value="center" ${
+                                    col.align === "center" ? "selected" : ""
+                                  }>Giữa</option>
+                                  <option value="right" ${
+                                    col.align === "right" ? "selected" : ""
+                                  }>Phải</option>
+                              </select>
+                              <select onchange="updateRowData('${section}', ${
+          rowData.id
+        }, ${idx}, 'fontSize', this.value)">
+                                  <option value="8" ${
+                                    col.fontSize == 8 ? "selected" : ""
+                                  }>8pt</option>
+                                  <option value="10" ${
+                                    col.fontSize == 10 ? "selected" : ""
+                                  }>10pt</option>
+                                  <option value="12" ${
+                                    col.fontSize == 12 ? "selected" : ""
+                                  }>12pt</option>
+                                  <option value="14" ${
+                                    col.fontSize == 14 ? "selected" : ""
+                                  }>14pt</option>
+                                  <option value="16" ${
+                                    col.fontSize == 16 ? "selected" : ""
+                                  }>16pt</option>
+                                  <option value="18" ${
+                                    col.fontSize == 18 ? "selected" : ""
+                                  }>18pt</option>
+                                  <option value="20" ${
+                                    col.fontSize == 20 ? "selected" : ""
+                                  }>20pt</option>
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              `;
+      });
+
+      let typeButtonsHtml = "";
+      if (section === "body") {
+        // Body section has table and frame options
+        typeButtonsHtml = `
+          <button class="btn-small ${rowType === "single" ? "active" : ""}"
+              onclick="setRowType('${section}', ${rowData.id}, 'single')">
+              Dòng đơn
+          </button>
+          <button class="btn-small ${rowType === "double" ? "active" : ""}"
+              onclick="setRowType('${section}', ${rowData.id}, 'double')">
+              Dòng đôi
+          </button>
+          <button class="btn-small ${rowType === "table" ? "active" : ""}"
+              onclick="setRowType('${section}', ${rowData.id}, 'table')">
+              Bảng đơn
+          </button>
+          <button class="btn-small ${
+            rowType === "table-double" ? "active" : ""
+          }"
+              onclick="setRowType('${section}', ${
+          rowData.id
+        }, 'table-double')">
+              Bảng đôi
+          </button>
+          <button class="btn-small ${rowType === "frame" ? "active" : ""}"
+              onclick="setRowType('${section}', ${rowData.id}, 'frame')">
+              Khung đơn
+          </button>
+          <button class="btn-small ${
+            rowType === "frame-double" ? "active" : ""
+          }"
+              onclick="setRowType('${section}', ${
+          rowData.id
+        }, 'frame-double')">
+              Khung đôi
+          </button>
+        `;
+      } else {
+        // Other sections only have single and double
+        typeButtonsHtml = `
+          <button class="btn-small ${isSingle ? "active" : ""}"
+              onclick="setRowType('${section}', ${rowData.id}, 'single')">
+              Dòng đơn
+          </button>
+          <button class="btn-small ${!isSingle ? "active" : ""}"
+              onclick="setRowType('${section}', ${rowData.id}, 'double')">
+              Dòng đôi
+          </button>
         `;
       }
 
-      // Render nested rows for tables and frames
-      function renderNestedRows(rowData, section) {
-        if (!rowData.nestedRows || rowData.nestedRows.length === 0) {
-          return '<p style="color: #999; font-size: 13px; margin: 10px 0;">Chưa có dòng nào. Nhấn "+ Thêm dòng" bên dưới.</p>';
-        }
+      let contentHtml = "";
+      if (isTable || isFrame) {
+        // Table or Frame layout
+        const margin = rowData.margin || 0;
+        const numCols = rowData.numCols || 1;
+        const isDouble = rowType.includes("double");
+        const tableType = isTable ? "bảng" : "khung";
 
-        let html = "";
-        rowData.nestedRows.forEach((nestedRow, idx) => {
-          const numCols = nestedRow.columns.length;
-          let cellsHtml = "";
+        const doubleMode = rowData.doubleMode || "margin";
+        const minMargin = isDouble ? "0.5" : "0";
+        const tableContent = `
+          <div class="table-frame-container">
+            <div class="table-controls">
+              <label>Lề (cm):</label>
+              <input type="number" value="${margin}" step="0.1" min="${minMargin}"
+                onchange="updateTableMargin('${section}', ${
+          rowData.id
+        }, this.value, ${isDouble})" />
+              <label>Số cột: <span class="column-indicator">${numCols}</span></label>
+              <button class="btn-small" onclick="changeTableColumns('${section}', ${
+          rowData.id
+        }, 1)"
+                ${numCols >= 6 ? "disabled" : ""}>
+                ⏶ Tăng cột
+              </button>
+              <button class="btn-small" onclick="changeTableColumns('${section}', ${
+          rowData.id
+        }, -1)"
+                ${numCols <= 1 ? "disabled" : ""}>
+                ⏷ Giảm cột
+              </button>
+            </div>
+            <div class="nested-rows" id="nested-${rowData.id}">
+              ${renderNestedRows(rowData, section)}
+            </div>
+            <button class="add-row-btn" onclick="addNestedRow('${section}', ${
+          rowData.id
+        }, ${numCols})">
+              + Thêm dòng ${tableType}
+            </button>
+          </div>
+        `;
 
-          nestedRow.columns.forEach((col, colIdx) => {
-            cellsHtml += `
-              <div class="table-cell">
-                <textarea
-                  placeholder="Ô ${colIdx + 1}"
-                  onchange="updateNestedRowData('${section}', ${
-              rowData.id
-            }, ${idx}, ${colIdx}, 'text', this.value)">${
-              col.text || ""
-            }</textarea>
-                <button class="settings-toggle" onclick="toggleSettings(this)">⚙</button>
-                <div class="column-settings">
-                  <div class="settings-grid">
-                    <button class="btn-icon ${col.bold ? "active" : ""}"
-                      onclick="toggleNestedFormat('${section}', ${
-              rowData.id
-            }, ${idx}, ${colIdx}, 'bold', this)">
-                      <b>B</b>
-                    </button>
-                    <button class="btn-icon ${col.italic ? "active" : ""}"
-                      onclick="toggleNestedFormat('${section}', ${
-              rowData.id
-            }, ${idx}, ${colIdx}, 'italic', this)">
-                      <i>I</i>
-                    </button>
-                    <button class="btn-icon ${col.underline ? "active" : ""}"
-                      onclick="toggleNestedFormat('${section}', ${
-              rowData.id
-            }, ${idx}, ${colIdx}, 'underline', this)">
-                      <u>U</u>
-                    </button>
-                  </div>
-                  <div class="settings-row">
-                    <select onchange="updateNestedRowData('${section}', ${
-              rowData.id
-            }, ${idx}, ${colIdx}, 'align', this.value)">
-                      <option value="left" ${
-                        col.align === "left" ? "selected" : ""
-                      }>Trái</option>
-                      <option value="center" ${
-                        col.align === "center" ? "selected" : ""
-                      }>Giữa</option>
-                      <option value="right" ${
-                        col.align === "right" ? "selected" : ""
-                      }>Phải</option>
-                    </select>
-                    <select onchange="updateNestedRowData('${section}', ${
-              rowData.id
-            }, ${idx}, ${colIdx}, 'fontSize', this.value)">
-                      <option value="8" ${
-                        col.fontSize == 8 ? "selected" : ""
-                      }>8pt</option>
-                      <option value="10" ${
-                        col.fontSize == 10 ? "selected" : ""
-                      }>10pt</option>
-                      <option value="12" ${
-                        col.fontSize == 12 ? "selected" : ""
-                      }>12pt</option>
-                      <option value="14" ${
-                        col.fontSize == 14 ? "selected" : ""
-                      }>14pt</option>
-                      <option value="16" ${
-                        col.fontSize == 16 ? "selected" : ""
-                      }>16pt</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            `;
-          });
-
-          html += `
-            <div class="table-row-item">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <span style="font-size: 12px; color: #666;">Dòng ${
-                  idx + 1
-                }</span>
-                <button class="btn-small btn-danger" style="padding: 3px 8px; font-size: 11px;"
-                  onclick="deleteNestedRow('${section}', ${
+        if (isDouble) {
+          // For double table/frame, show two side by side with mode selector
+          contentHtml = `
+            <div style="margin-bottom: 10px;">
+              <label style="font-weight: 500; margin-right: 10px;">Chế độ căn:</label>
+              <button class="btn-small ${
+                doubleMode === "margin" ? "active" : ""
+              }"
+                onclick="setDoubleMode('${section}', ${
             rowData.id
-          }, ${idx})">
-                  🗑 Xóa
-                </button>
-              </div>
-              <div class="table-row-columns cols-${numCols}">
-                ${cellsHtml}
+          }, 'margin')">
+                Căn lề
+              </button>
+              <button class="btn-small ${
+                doubleMode === "center" ? "active" : ""
+              }"
+                onclick="setDoubleMode('${section}', ${
+            rowData.id
+          }, 'center')">
+                Căn giữa
+              </button>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <div style="flex: 1;">${tableContent}</div>
+              <div style="flex: 1;">${tableContent
+                .replace(
+                  new RegExp("nested-" + rowData.id, "g"),
+                  "nested-" + rowData.id + "-right"
+                )
+                .replace(
+                  new RegExp(
+                    `addNestedRow\\('${section}', ${rowData.id},`,
+                    "g"
+                  ),
+                  `addNestedRow('${section}', ${rowData.id + "_right"},`
+                )}</div>
+            </div>
+          `;
+        } else {
+          contentHtml = tableContent;
+        }
+      } else {
+        // Regular single or double column
+        contentHtml = `<div class="row-columns">${columnsHtml}</div>`;
+      }
+
+      return `
+        <div class="row-item" data-row-id="${rowData.id}">
+          <div class="row-controls">
+            ${typeButtonsHtml}
+            <button class="btn-small btn-danger" onclick="deleteRow('${section}', ${rowData.id})">
+              🗑 Xóa
+            </button>
+          </div>
+          ${contentHtml}
+        </div>
+      `;
+    }
+
+    // Render nested rows for tables and frames
+    function renderNestedRows(rowData, section) {
+      if (!rowData.nestedRows || rowData.nestedRows.length === 0) {
+        return '<p style="color: #999; font-size: 13px; margin: 10px 0;">Chưa có dòng nào. Nhấn "+ Thêm dòng" bên dưới.</p>';
+      }
+
+      let html = "";
+      rowData.nestedRows.forEach((nestedRow, idx) => {
+        const numCols = nestedRow.columns.length;
+        let cellsHtml = "";
+
+        nestedRow.columns.forEach((col, colIdx) => {
+          cellsHtml += `
+            <div class="table-cell">
+              <textarea
+                placeholder="Ô ${colIdx + 1}"
+                onchange="updateNestedRowData('${section}', ${
+            rowData.id
+          }, ${idx}, ${colIdx}, 'text', this.value)">${
+            col.text || ""
+          }</textarea>
+              <button class="settings-toggle" onclick="toggleSettings(this)">⚙</button>
+              <div class="column-settings">
+                <div class="settings-grid">
+                  <button class="btn-icon ${col.bold ? "active" : ""}"
+                    onclick="toggleNestedFormat('${section}', ${
+            rowData.id
+          }, ${idx}, ${colIdx}, 'bold', this)">
+                    <b>B</b>
+                  </button>
+                  <button class="btn-icon ${col.italic ? "active" : ""}"
+                    onclick="toggleNestedFormat('${section}', ${
+            rowData.id
+          }, ${idx}, ${colIdx}, 'italic', this)">
+                    <i>I</i>
+                  </button>
+                  <button class="btn-icon ${col.underline ? "active" : ""}"
+                    onclick="toggleNestedFormat('${section}', ${
+            rowData.id
+          }, ${idx}, ${colIdx}, 'underline', this)">
+                    <u>U</u>
+                  </button>
+                </div>
+                <div class="settings-row">
+                  <select onchange="updateNestedRowData('${section}', ${
+            rowData.id
+          }, ${idx}, ${colIdx}, 'align', this.value)">
+                    <option value="left" ${
+                      col.align === "left" ? "selected" : ""
+                    }>Trái</option>
+                    <option value="center" ${
+                      col.align === "center" ? "selected" : ""
+                    }>Giữa</option>
+                    <option value="right" ${
+                      col.align === "right" ? "selected" : ""
+                    }>Phải</option>
+                  </select>
+                  <select onchange="updateNestedRowData('${section}', ${
+            rowData.id
+          }, ${idx}, ${colIdx}, 'fontSize', this.value)">
+                    <option value="8" ${
+                      col.fontSize == 8 ? "selected" : ""
+                    }>8pt</option>
+                    <option value="10" ${
+                      col.fontSize == 10 ? "selected" : ""
+                    }>10pt</option>
+                    <option value="12" ${
+                      col.fontSize == 12 ? "selected" : ""
+                    }>12pt</option>
+                    <option value="14" ${
+                      col.fontSize == 14 ? "selected" : ""
+                    }>14pt</option>
+                    <option value="16" ${
+                      col.fontSize == 16 ? "selected" : ""
+                    }>16pt</option>
+                  </select>
+                </div>
               </div>
             </div>
           `;
         });
 
-        return html;
-      }
+        html += `
+          <div class="table-row-item">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+              <span style="font-size: 12px; color: #666;">Dòng ${
+                idx + 1
+              }</span>
+              <button class="btn-small btn-danger" style="padding: 3px 8px; font-size: 11px;"
+                onclick="deleteNestedRow('${section}', ${
+          rowData.id
+        }, ${idx})">
+                🗑 Xóa
+              </button>
+            </div>
+            <div class="table-row-columns cols-${numCols}">
+              ${cellsHtml}
+            </div>
+          </div>
+        `;
+      });
 
-      // Update nested row data
-      function updateNestedRowData(
-        section,
-        parentId,
-        nestedIdx,
-        colIdx,
-        field,
-        value
+      return html;
+    }
+
+    // Update nested row data
+    function updateNestedRowData(
+      section,
+      parentId,
+      nestedIdx,
+      colIdx,
+      field,
+      value
+    ) {
+      const parentData = documentData[section].find((r) => r.id === parentId);
+      if (
+        parentData &&
+        parentData.nestedRows &&
+        parentData.nestedRows[nestedIdx]
       ) {
-        const parentData = documentData[section].find((r) => r.id === parentId);
-        if (
-          parentData &&
-          parentData.nestedRows &&
-          parentData.nestedRows[nestedIdx]
-        ) {
-          if (parentData.nestedRows[nestedIdx].columns[colIdx]) {
-            parentData.nestedRows[nestedIdx].columns[colIdx][field] = value;
-          }
+        if (parentData.nestedRows[nestedIdx].columns[colIdx]) {
+          parentData.nestedRows[nestedIdx].columns[colIdx][field] = value;
         }
       }
+    }
 
-      // Toggle nested format
-      function toggleNestedFormat(
-        section,
-        parentId,
-        nestedIdx,
-        colIdx,
-        format,
-        btn
+    // Toggle nested format
+    function toggleNestedFormat(
+      section,
+      parentId,
+      nestedIdx,
+      colIdx,
+      format,
+      btn
+    ) {
+      const parentData = documentData[section].find((r) => r.id === parentId);
+      if (
+        parentData &&
+        parentData.nestedRows &&
+        parentData.nestedRows[nestedIdx]
       ) {
-        const parentData = documentData[section].find((r) => r.id === parentId);
-        if (
-          parentData &&
-          parentData.nestedRows &&
-          parentData.nestedRows[nestedIdx]
-        ) {
-          if (parentData.nestedRows[nestedIdx].columns[colIdx]) {
-            parentData.nestedRows[nestedIdx].columns[colIdx][format] =
-              !parentData.nestedRows[nestedIdx].columns[colIdx][format];
-            btn.classList.toggle("active");
-          }
-        }
-      }
-
-      // Delete nested row
-      function deleteNestedRow(section, parentId, nestedIdx) {
-        const parentData = documentData[section].find((r) => r.id === parentId);
-        if (parentData && parentData.nestedRows) {
-          parentData.nestedRows.splice(nestedIdx, 1);
-          reRenderRow(section, parentId);
-        }
-      }
-
-      // Update table margin
-      function updateTableMargin(section, rowId, margin, isDouble) {
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (rowData) {
-          const minMargin = isDouble ? 0.5 : 0;
-          const marginValue = Math.max(minMargin, parseFloat(margin));
-          rowData.margin = marginValue;
-        }
-      }
-
-      // Change table columns
-      function changeTableColumns(section, rowId, delta) {
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (!rowData) return;
-
-        const currentCols = rowData.numCols || 1;
-        const newCols = Math.max(1, Math.min(6, currentCols + delta));
-
-        if (newCols === currentCols) return;
-
-        rowData.numCols = newCols;
-
-        // Adjust all nested rows to have the new number of columns
-        if (rowData.nestedRows) {
-          rowData.nestedRows.forEach((nestedRow) => {
-            const currentLength = nestedRow.columns.length;
-            if (newCols > currentLength) {
-              // Add columns
-              for (let i = currentLength; i < newCols; i++) {
-                nestedRow.columns.push({
-                  text: "",
-                  bold: false,
-                  italic: false,
-                  underline: false,
-                  align: "left",
-                  fontSize: 12,
-                });
-              }
-            } else if (newCols < currentLength) {
-              // Remove columns
-              nestedRow.columns = nestedRow.columns.slice(0, newCols);
-            }
-          });
-        }
-
-        reRenderRow(section, rowId);
-      }
-
-      // Set row type (single/double/table/frame)
-      function setRowType(section, rowId, type) {
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (!rowData) return;
-
-        const oldType = rowData.type;
-        rowData.type = type;
-
-        // Initialize table/frame specific properties
-        if (
-          (type === "table" ||
-            type === "table-double" ||
-            type === "frame" ||
-            type === "frame-double") &&
-          oldType !== "table" &&
-          oldType !== "table-double" &&
-          oldType !== "frame" &&
-          oldType !== "frame-double"
-        ) {
-          rowData.margin =
-            type === "table-double" || type === "frame-double" ? 0.5 : 0;
-          rowData.numCols = 1;
-          rowData.nestedRows = [];
-          if (type === "table-double" || type === "frame-double") {
-            rowData.doubleMode = "margin"; // Default mode
-          }
-        }
-
-        // Adjust columns for simple single/double
-        if (type === "single" && rowData.columns.length > 1) {
-          rowData.columns = [rowData.columns[0]];
-        } else if (type === "double" && rowData.columns.length === 1) {
-          rowData.columns.push({
-            text: "",
-            bold: false,
-            italic: false,
-            underline: false,
-            align: "left",
-            fontSize: 12,
-          });
-        }
-
-        reRenderRow(section, rowId);
-      }
-
-      // Set double mode (margin or center)
-      function setDoubleMode(section, rowId, mode) {
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (rowData) {
-          rowData.doubleMode = mode;
-          reRenderRow(section, rowId);
-        }
-      }
-
-      // Delete row
-      function deleteRow(section, rowId) {
-        const index = documentData[section].findIndex((r) => r.id === rowId);
-        if (index !== -1) {
-          documentData[section].splice(index, 1);
-          const container = document.getElementById(`${section}-rows`);
-          const row = container.querySelector(`[data-row-id="${rowId}"]`);
-          row.remove();
-        }
-      }
-
-      // Update row data
-      function updateRowData(section, rowId, colIdx, field, value) {
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (rowData && rowData.columns[colIdx]) {
-          rowData.columns[colIdx][field] = value;
-        }
-      }
-
-      // Toggle format
-      function toggleFormat(section, rowId, colIdx, format, btn) {
-        const rowData = documentData[section].find((r) => r.id === rowId);
-        if (rowData && rowData.columns[colIdx]) {
-          rowData.columns[colIdx][format] = !rowData.columns[colIdx][format];
+        if (parentData.nestedRows[nestedIdx].columns[colIdx]) {
+          parentData.nestedRows[nestedIdx].columns[colIdx][format] =
+            !parentData.nestedRows[nestedIdx].columns[colIdx][format];
           btn.classList.toggle("active");
         }
       }
+    }
 
-      // Toggle settings
-      function toggleSettings(btn) {
-        const settings = btn.nextElementSibling;
-        settings.classList.toggle("show");
+    // Delete nested row
+    function deleteNestedRow(section, parentId, nestedIdx) {
+      const parentData = documentData[section].find((r) => r.id === parentId);
+      if (parentData && parentData.nestedRows) {
+        parentData.nestedRows.splice(nestedIdx, 1);
+        reRenderRow(section, parentId);
       }
+    }
 
-      // Compile PDF
-      async function compilePDF() {
-        const loading = document.getElementById("loading-overlay");
-        const errorMsg = document.getElementById("error-message");
-        const pdfViewer = document.getElementById("pdf-viewer");
-        const placeholder = document.getElementById("pdf-placeholder");
-
-        errorMsg.classList.remove("show");
-        loading.classList.add("show");
-
-        const payload = {
-          margins: {
-            top: parseFloat(document.getElementById("margin-top").value),
-            bottom: parseFloat(document.getElementById("margin-bottom").value),
-            left: parseFloat(document.getElementById("margin-left").value),
-            right: parseFloat(document.getElementById("margin-right").value),
-          },
-          fontFamily: document.getElementById("font-family").value,
-          fontSize: parseInt(document.getElementById("font-size").value),
-          headerRows: documentData.header,
-          titleRows: documentData.title,
-          bodyRows: documentData.body,
-          footerRows: documentData.footer,
-        };
-
-        try {
-          const response = await fetch("/form/compile/", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (response.ok) {
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            pdfViewer.src = url;
-            pdfViewer.style.display = "block";
-            placeholder.style.display = "none";
-          } else {
-            const error = await response.json();
-            errorMsg.textContent = `Lỗi: ${error.error}`;
-            errorMsg.classList.add("show");
-          }
-        } catch (error) {
-          errorMsg.textContent = `Lỗi kết nối: ${error.message}`;
-          errorMsg.classList.add("show");
-        } finally {
-          loading.classList.remove("show");
-        }
+    // Update table margin
+    function updateTableMargin(section, rowId, margin, isDouble) {
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (rowData) {
+        const minMargin = isDouble ? 0.5 : 0;
+        const marginValue = Math.max(minMargin, parseFloat(margin));
+        rowData.margin = marginValue;
       }
+    }
 
-      // Save Document
-      async function saveAndCompilePDF() {
-        const loading = document.getElementById("loading-overlay");
-        const errorMsg = document.getElementById("error-message");
-        const pdfViewer = document.getElementById("pdf-viewer");
-        const placeholder = document.getElementById("pdf-placeholder");
+    // Change table columns
+    function changeTableColumns(section, rowId, delta) {
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (!rowData) return;
 
-        errorMsg.classList.remove("show");
-        loading.classList.add("show");
+      const currentCols = rowData.numCols || 1;
+      const newCols = Math.max(1, Math.min(6, currentCols + delta));
 
-        const payload = {
-          title:
-            prompt("Nhập tên phiếu bầu:", "Phiếu bầu cử") || "Phiếu bầu cử",
-          margins: {
-            top: parseFloat(document.getElementById("margin-top").value),
-            bottom: parseFloat(document.getElementById("margin-bottom").value),
-            left: parseFloat(document.getElementById("margin-left").value),
-            right: parseFloat(document.getElementById("margin-right").value),
-          },
-          fontFamily: document.getElementById("font-family").value,
-          fontSize: parseInt(document.getElementById("font-size").value),
-          headerRows: documentData.header,
-          titleRows: documentData.title,
-          bodyRows: documentData.body,
-          footerRows: documentData.footer,
-          pollId: pollId,  // Add poll_id to payload
-        };
+      if (newCols === currentCols) return;
 
-        try {
-          const response = await fetch("/form/save/", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
+      rowData.numCols = newCols;
 
-          const contentType = response.headers.get("content-type") || "";
-          if (response.ok && contentType.includes("application/pdf")) {
-            // Nhận file PDF, hiển thị trên iframe
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            pdfViewer.src = url;
-            pdfViewer.style.display = "block";
-            placeholder.style.display = "none";
-          } else {
-            // Nhận lỗi JSON
-            let errorData = {};
-            try {
-              errorData = await response.json();
-            } catch (e) {
-              errorData = { error: "Lỗi không xác định hoặc không nhận được PDF." };
+      // Adjust all nested rows to have the new number of columns
+      if (rowData.nestedRows) {
+        rowData.nestedRows.forEach((nestedRow) => {
+          const currentLength = nestedRow.columns.length;
+          if (newCols > currentLength) {
+            // Add columns
+            for (let i = currentLength; i < newCols; i++) {
+              nestedRow.columns.push({
+                text: "",
+                bold: false,
+                italic: false,
+                underline: false,
+                align: "left",
+                fontSize: 12,
+              });
             }
-            errorMsg.textContent = errorData.error || "Lỗi không xác định.";
-            errorMsg.classList.add("show");
+          } else if (newCols < currentLength) {
+            // Remove columns
+            nestedRow.columns = nestedRow.columns.slice(0, newCols);
           }
-        } catch (error) {
-          errorMsg.textContent = `Lỗi kết nối: ${error.message}`;
-          errorMsg.classList.add("show");
-        } finally {
-          loading.classList.remove("show");
+        });
+      }
+
+      reRenderRow(section, rowId);
+    }
+
+    // Set row type (single/double/table/frame)
+    function setRowType(section, rowId, type) {
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (!rowData) return;
+
+      const oldType = rowData.type;
+      rowData.type = type;
+
+      // Initialize table/frame specific properties
+      if (
+        (type === "table" ||
+          type === "table-double" ||
+          type === "frame" ||
+          type === "frame-double") &&
+        oldType !== "table" &&
+        oldType !== "table-double" &&
+        oldType !== "frame" &&
+        oldType !== "frame-double"
+      ) {
+        rowData.margin =
+          type === "table-double" || type === "frame-double" ? 0.5 : 0;
+        rowData.numCols = 1;
+        rowData.nestedRows = [];
+        if (type === "table-double" || type === "frame-double") {
+          rowData.doubleMode = "margin"; // Default mode
         }
       }
 
-      // Initialize with example content
-      window.addEventListener("DOMContentLoaded", () => {
-        // Load ballot count if poll_id exists
-        loadBallotCount();
-        // Quốc hiệu tiêu ngữ - Dòng đôi 1
+      // Adjust columns for simple single/double
+      if (type === "single" && rowData.columns.length > 1) {
+        rowData.columns = [rowData.columns[0]];
+      } else if (type === "double" && rowData.columns.length === 1) {
+        rowData.columns.push({
+          text: "",
+          bold: false,
+          italic: false,
+          underline: false,
+          align: "left",
+          fontSize: 12,
+        });
+      }
+
+      reRenderRow(section, rowId);
+    }
+
+    // Set double mode (margin or center)
+    function setDoubleMode(section, rowId, mode) {
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (rowData) {
+        rowData.doubleMode = mode;
+        reRenderRow(section, rowId);
+      }
+    }
+
+    // Delete row
+    function deleteRow(section, rowId) {
+      const index = documentData[section].findIndex((r) => r.id === rowId);
+      if (index !== -1) {
+        documentData[section].splice(index, 1);
+        const container = document.getElementById(`${section}-rows`);
+        const row = container.querySelector(`[data-row-id="${rowId}"]`);
+        row.remove();
+      }
+    }
+
+    // Update row data
+    function updateRowData(section, rowId, colIdx, field, value) {
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (rowData && rowData.columns[colIdx]) {
+        rowData.columns[colIdx][field] = value;
+      }
+    }
+
+    // Toggle format
+    function toggleFormat(section, rowId, colIdx, format, btn) {
+      const rowData = documentData[section].find((r) => r.id === rowId);
+      if (rowData && rowData.columns[colIdx]) {
+        rowData.columns[colIdx][format] = !rowData.columns[colIdx][format];
+        btn.classList.toggle("active");
+      }
+    }
+
+    // Toggle settings
+    function toggleSettings(btn) {
+      const settings = btn.nextElementSibling;
+      settings.classList.toggle("show");
+    }
+
+    // Compile PDF
+    async function compilePDF() {
+      const loading = document.getElementById("loading-overlay");
+      const errorMsg = document.getElementById("error-message");
+      const pdfViewer = document.getElementById("pdf-viewer");
+      const placeholder = document.getElementById("pdf-placeholder");
+
+      errorMsg.classList.remove("show");
+      loading.classList.add("show");
+
+      const payload = {
+        margins: {
+          top: parseFloat(document.getElementById("margin-top").value),
+          bottom: parseFloat(document.getElementById("margin-bottom").value),
+          left: parseFloat(document.getElementById("margin-left").value),
+          right: parseFloat(document.getElementById("margin-right").value),
+        },
+        fontFamily: document.getElementById("font-family").value,
+        fontSize: parseInt(document.getElementById("font-size").value),
+        headerRows: documentData.header,
+        titleRows: documentData.title,
+        bodyRows: documentData.body,
+        footerRows: documentData.footer,
+      };
+
+      try {
+        const response = await fetch("/form/compile/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          pdfViewer.src = url;
+          pdfViewer.style.display = "block";
+          placeholder.style.display = "none";
+        } else {
+          const error = await response.json();
+          errorMsg.textContent = `Lỗi: ${error.error}`;
+          errorMsg.classList.add("show");
+        }
+      } catch (error) {
+        errorMsg.textContent = `Lỗi kết nối: ${error.message}`;
+        errorMsg.classList.add("show");
+      } finally {
+        loading.classList.remove("show");
+      }
+    }
+
+    // Save Document
+    async function saveAndCompilePDF() {
+      const loading = document.getElementById("loading-overlay");
+      const errorMsg = document.getElementById("error-message");
+      const pdfViewer = document.getElementById("pdf-viewer");
+      const placeholder = document.getElementById("pdf-placeholder");
+
+      errorMsg.classList.remove("show");
+      loading.classList.add("show");
+
+      const payload = {
+        title:
+          prompt("Nhập tên phiếu bầu:", "Phiếu bầu cử") || "Phiếu bầu cử",
+        margins: {
+          top: parseFloat(document.getElementById("margin-top").value),
+          bottom: parseFloat(document.getElementById("margin-bottom").value),
+          left: parseFloat(document.getElementById("margin-left").value),
+          right: parseFloat(document.getElementById("margin-right").value),
+        },
+        fontFamily: document.getElementById("font-family").value,
+        fontSize: parseInt(document.getElementById("font-size").value),
+        headerRows: documentData.header,
+        titleRows: documentData.title,
+        bodyRows: documentData.body,
+        footerRows: documentData.footer,
+        pollId: pollId,  // Add poll_id to payload
+      };
+
+      try {
+        const response = await fetch("/form/save/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        if (response.ok && contentType.includes("application/pdf")) {
+          // Nhận file PDF, hiển thị trên iframe
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          pdfViewer.src = url;
+          pdfViewer.style.display = "block";
+          placeholder.style.display = "none";
+        } else {
+          // Nhận lỗi JSON
+          let errorData = {};
+          try {
+            errorData = await response.json();
+          } catch (e) {
+            errorData = { error: "Lỗi không xác định hoặc không nhận được PDF." };
+          }
+          errorMsg.textContent = errorData.error || "Lỗi không xác định.";
+          errorMsg.classList.add("show");
+        }
+      } catch (error) {
+        errorMsg.textContent = `Lỗi kết nối: ${error.message}`;
+        errorMsg.classList.add("show");
+      } finally {
+        loading.classList.remove("show");
+      }
+    }
+
+    // Initialize with example content
+    window.addEventListener("DOMContentLoaded", () => {
+      // Load ballot count if poll_id exists
+      loadBallotCount();
+      // Quốc hiệu tiêu ngữ - Dòng đôi 1
+      addRow("header");
+      setTimeout(() => {
+        setRowType("header", 1, "double");
+        setTimeout(() => {
+          const row1 = document.querySelector(
+            '#header-rows [data-row-id="1"]'
+          );
+          if (row1) {
+            const textareas = row1.querySelectorAll("textarea");
+            const selects = row1.querySelectorAll(
+              '.column-settings select[onchange*="align"]'
+            );
+
+            if (textareas[0]) {
+              textareas[0].value = "PHÒNG GD&ĐT HUYỆN............";
+              updateRowData("header", 1, 0, "text", textareas[0].value);
+            }
+            if (textareas[1]) {
+              textareas[1].value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
+              updateRowData("header", 1, 1, "text", textareas[1].value);
+              updateRowData("header", 1, 1, "align", "center");
+              if (selects[1]) selects[1].value = "center";
+            }
+          }
+        }, 150);
+      }, 100);
+
+      // Quốc hiệu tiêu ngữ - Dòng đôi 2
+      setTimeout(() => {
         addRow("header");
         setTimeout(() => {
-          setRowType("header", 1, "double");
+          setRowType("header", 2, "double");
           setTimeout(() => {
-            const row1 = document.querySelector(
-              '#header-rows [data-row-id="1"]'
+            const row2 = document.querySelector(
+              '#header-rows [data-row-id="2"]'
             );
-            if (row1) {
-              const textareas = row1.querySelectorAll("textarea");
-              const selects = row1.querySelectorAll(
+            if (row2) {
+              const textareas = row2.querySelectorAll("textarea");
+              const selects = row2.querySelectorAll(
                 '.column-settings select[onchange*="align"]'
               );
 
               if (textareas[0]) {
-                textareas[0].value = "PHÒNG GD&ĐT HUYỆN............";
-                updateRowData("header", 1, 0, "text", textareas[0].value);
+                textareas[0].value = "TRƯỜNG............................";
+                updateRowData("header", 2, 0, "text", textareas[0].value);
               }
               if (textareas[1]) {
-                textareas[1].value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
-                updateRowData("header", 1, 1, "text", textareas[1].value);
-                updateRowData("header", 1, 1, "align", "center");
+                textareas[1].value = "Độc lập - Tự do - Hạnh phúc";
+                updateRowData("header", 2, 1, "text", textareas[1].value);
+                updateRowData("header", 2, 1, "align", "center");
                 if (selects[1]) selects[1].value = "center";
               }
             }
           }, 150);
         }, 100);
+      }, 300);
 
-        // Quốc hiệu tiêu ngữ - Dòng đôi 2
+      // Tiêu đề - Dòng đơn 1
+      setTimeout(() => {
+        addRow("title");
         setTimeout(() => {
-          addRow("header");
-          setTimeout(() => {
-            setRowType("header", 2, "double");
-            setTimeout(() => {
-              const row2 = document.querySelector(
-                '#header-rows [data-row-id="2"]'
-              );
-              if (row2) {
-                const textareas = row2.querySelectorAll("textarea");
-                const selects = row2.querySelectorAll(
-                  '.column-settings select[onchange*="align"]'
-                );
-
-                if (textareas[0]) {
-                  textareas[0].value = "TRƯỜNG............................";
-                  updateRowData("header", 2, 0, "text", textareas[0].value);
-                }
-                if (textareas[1]) {
-                  textareas[1].value = "Độc lập - Tự do - Hạnh phúc";
-                  updateRowData("header", 2, 1, "text", textareas[1].value);
-                  updateRowData("header", 2, 1, "align", "center");
-                  if (selects[1]) selects[1].value = "center";
-                }
-              }
-            }, 150);
-          }, 100);
-        }, 300);
-
-        // Tiêu đề - Dòng đơn 1
-        setTimeout(() => {
-          addRow("title");
-          setTimeout(() => {
-            const row1 = document.querySelector(
-              '#title-rows [data-row-id="3"]'
+          const row1 = document.querySelector(
+            '#title-rows [data-row-id="3"]'
+          );
+          if (row1) {
+            const textarea = row1.querySelector("textarea");
+            const select = row1.querySelector(
+              '.column-settings select[onchange*="align"]'
             );
-            if (row1) {
-              const textarea = row1.querySelector("textarea");
-              const select = row1.querySelector(
-                '.column-settings select[onchange*="align"]'
-              );
 
-              if (textarea) {
-                textarea.value = "PHIẾU BẦU CỬ";
-                updateRowData("title", 3, 0, "text", textarea.value);
-                updateRowData("title", 3, 0, "align", "center");
-                if (select) select.value = "center";
-              }
+            if (textarea) {
+              textarea.value = "PHIẾU BẦU CỬ";
+              updateRowData("title", 3, 0, "text", textarea.value);
+              updateRowData("title", 3, 0, "align", "center");
+              if (select) select.value = "center";
             }
-          }, 100);
-        }, 500);
+          }
+        }, 100);
+      }, 500);
 
-        // Tiêu đề - Dòng đơn 2
+      // Tiêu đề - Dòng đơn 2
+      setTimeout(() => {
+        addRow("title");
         setTimeout(() => {
-          addRow("title");
-          setTimeout(() => {
-            const row2 = document.querySelector(
-              '#title-rows [data-row-id="4"]'
+          const row2 = document.querySelector(
+            '#title-rows [data-row-id="4"]'
+          );
+          if (row2) {
+            const textarea = row2.querySelector("textarea");
+            const select = row2.querySelector(
+              '.column-settings select[onchange*="align"]'
             );
-            if (row2) {
-              const textarea = row2.querySelector("textarea");
-              const select = row2.querySelector(
-                '.column-settings select[onchange*="align"]'
-              );
 
-              if (textarea) {
-                textarea.value = "BAN THÀNH TRA NHÂN DÂN";
-                updateRowData("title", 4, 0, "text", textarea.value);
-                updateRowData("title", 4, 0, "align", "center");
-                if (select) select.value = "center";
-              }
+            if (textarea) {
+              textarea.value = "BAN THÀNH TRA NHÂN DÂN";
+              updateRowData("title", 4, 0, "text", textarea.value);
+              updateRowData("title", 4, 0, "align", "center");
+              if (select) select.value = "center";
             }
-          }, 100);
-        }, 700);
+          }
+        }, 100);
+      }, 700);
 
-        // Tiêu đề - Dòng đơn 3
+      // Tiêu đề - Dòng đơn 3
+      setTimeout(() => {
+        addRow("title");
         setTimeout(() => {
-          addRow("title");
-          setTimeout(() => {
-            const row3 = document.querySelector(
-              '#title-rows [data-row-id="5"]'
+          const row3 = document.querySelector(
+            '#title-rows [data-row-id="5"]'
+          );
+          if (row3) {
+            const textarea = row3.querySelector("textarea");
+            const select = row3.querySelector(
+              '.column-settings select[onchange*="align"]'
             );
-            if (row3) {
-              const textarea = row3.querySelector("textarea");
-              const select = row3.querySelector(
-                '.column-settings select[onchange*="align"]'
-              );
 
-              if (textarea) {
-                textarea.value = "NHIỆM KỲ...........";
-                updateRowData("title", 5, 0, "text", textarea.value);
-                updateRowData("title", 5, 0, "align", "center");
-                if (select) select.value = "center";
-              }
+            if (textarea) {
+              textarea.value = "NHIỆM KỲ...........";
+              updateRowData("title", 5, 0, "text", textarea.value);
+              updateRowData("title", 5, 0, "align", "center");
+              if (select) select.value = "center";
             }
-          }, 100);
-        }, 900);
-      });
-    </script>
-    
-    <script>
-      // Remove base.html container styling
-      const parentContainer = document.querySelector("body > .container");
-      if (parentContainer) {
-        parentContainer.style.maxWidth = "100%";
-        parentContainer.style.margin = "0";
-        parentContainer.style.padding = "0";
-        parentContainer.style.borderRadius = "0";
-        parentContainer.style.boxShadow = "none";
-        parentContainer.style.background = "transparent";
-      }
-    </script>
+          }
+        }, 100);
+      }, 900);
+    });
+  </script>
+
+  <script>
+    // Remove base.html container styling
+    const parentContainer = document.querySelector("body > .container");
+    if (parentContainer) {
+      parentContainer.style.maxWidth = "100%";
+      parentContainer.style.margin = "0";
+      parentContainer.style.padding = "0";
+      parentContainer.style.borderRadius = "0";
+      parentContainer.style.boxShadow = "none";
+      parentContainer.style.background = "transparent";
+    }
+  </script>
 </div>
 {% endblock %}
