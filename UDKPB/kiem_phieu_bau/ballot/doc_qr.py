@@ -5,7 +5,6 @@ import cv2
 import numpy as np
 import json
 import sys
-from pyzbar import pyzbar
 
 
 def detect_aruco_markers(image):
@@ -51,7 +50,7 @@ def detect_aruco_markers(image):
 
 def detect_qr_codes(image):
     """
-    Detect QR codes trong ảnh với xử lý thông minh (tự động thử nhiều kỹ thuật)
+    Detect QR codes trong ảnh với xử lý thông minh (tự động thử nhiều kỹ thuật) sử dụng OpenCV
     
     Args:
         image: Ảnh đầu vào (numpy array)
@@ -62,14 +61,14 @@ def detect_qr_codes(image):
     qr_codes = []
     found_data = set()  # Tránh trùng lặp
     
-    # Thử decode trực tiếp trước
-    decoded_objects = pyzbar.decode(image)
+    # Khởi tạo QRCodeDetector
+    qr_detector = cv2.QRCodeDetector()
     
-    for obj in decoded_objects:
-        data = obj.data.decode('utf-8')
-        if data not in found_data:
-            found_data.add(data)
-            qr_codes.append(_create_qr_info(obj, data))
+    # Step 1: Thử decode trực tiếp trước
+    data, points, _ = qr_detector.detectAndDecode(image)
+    if data and data not in found_data:
+        found_data.add(data)
+        qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
     
     if qr_codes:
         return qr_codes
@@ -77,59 +76,121 @@ def detect_qr_codes(image):
     # Step 2: Thử với ảnh được upscale 2x
     if not qr_codes:
         upscaled_2x = cv2.resize(image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-        decoded_objects = pyzbar.decode(upscaled_2x)
-        for obj in decoded_objects:
-            data = obj.data.decode('utf-8')
-            if data not in found_data:
-                found_data.add(data)
-                # Điều chỉnh tọa độ về kích thước gốc
-                qr_info = _create_qr_info(obj, data)
-                qr_info['rect'] = {k: v // 2 for k, v in qr_info['rect'].items()}
-                qr_info['polygon'] = [(x // 2, y // 2) for x, y in qr_info['polygon']]
-                qr_codes.append(qr_info)
+        data, points, _ = qr_detector.detectAndDecode(upscaled_2x)
+        if data and data not in found_data:
+            found_data.add(data)
+            # Điều chỉnh tọa độ về kích thước gốc
+            if points is not None and len(points) > 0:
+                points = points / 2.0
+            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
         
         if qr_codes:
             return qr_codes
-        
-        # Step 3: Thử với ảnh được upscale 3x
-        if not qr_codes:
-            upscaled_3x = cv2.resize(image, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-            decoded_objects = pyzbar.decode(upscaled_3x)
-            for obj in decoded_objects:
-                data = obj.data.decode('utf-8')
-                if data not in found_data:
-                    found_data.add(data)
-                    # Điều chỉnh tọa độ về kích thước gốc
-                    qr_info = _create_qr_info(obj, data)
-                    qr_info['rect'] = {k: v // 3 for k, v in qr_info['rect'].items()}
-                    qr_info['polygon'] = [(x // 3, y // 3) for x, y in qr_info['polygon']]
-                    qr_codes.append(qr_info)
+    
+    # Step 3: Thử với ảnh được upscale 3x
+    if not qr_codes:
+        upscaled_3x = cv2.resize(image, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        data, points, _ = qr_detector.detectAndDecode(upscaled_3x)
+        if data and data not in found_data:
+            found_data.add(data)
+            # Điều chỉnh tọa độ về kích thước gốc
+            if points is not None and len(points) > 0:
+                points = points / 3.0
+            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
         
         if qr_codes:
             return qr_codes
-        
-        # Step 4: Thử kết hợp sharpen + upscale 3x
-        if not qr_codes:
-            # Sharpen trước
-            kernel_sharpen = np.array([[-1,-1,-1],
-                                       [-1, 9,-1],
-                                       [-1,-1,-1]])
-            sharpened = cv2.filter2D(image, -1, kernel_sharpen)
-            # Sau đó upscale 3x
-            upscaled_sharp_3x = cv2.resize(sharpened, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-            decoded_objects = pyzbar.decode(upscaled_sharp_3x)
-            for obj in decoded_objects:
-                data = obj.data.decode('utf-8')
-                if data not in found_data:
-                    found_data.add(data)
-                    # Điều chỉnh tọa độ về kích thước gốc
-                    qr_info = _create_qr_info(obj, data)
-                    qr_info['rect'] = {k: v // 3 for k, v in qr_info['rect'].items()}
-                    qr_info['polygon'] = [(x // 3, y // 3) for x, y in qr_info['polygon']]
-                    qr_codes.append(qr_info)
+    
+    # Step 4: Thử kết hợp sharpen + upscale 3x
+    if not qr_codes:
+        # Sharpen trước
+        kernel_sharpen = np.array([[-1,-1,-1],
+                                   [-1, 9,-1],
+                                   [-1,-1,-1]])
+        sharpened = cv2.filter2D(image, -1, kernel_sharpen)
+        # Sau đó upscale 3x
+        upscaled_sharp_3x = cv2.resize(sharpened, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        data, points, _ = qr_detector.detectAndDecode(upscaled_sharp_3x)
+        if data and data not in found_data:
+            found_data.add(data)
+            # Điều chỉnh tọa độ về kích thước gốc
+            if points is not None and len(points) > 0:
+                points = points / 3.0
+            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
+    
+    # Step 5: Thử với ảnh grayscale và threshold
+    if not qr_codes:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        # Thử adaptive threshold
+        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                       cv2.THRESH_BINARY, 11, 2)
+        # Upscale
+        thresh_upscaled = cv2.resize(thresh, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        data, points, _ = qr_detector.detectAndDecode(thresh_upscaled)
+        if data and data not in found_data:
+            found_data.add(data)
+            if points is not None and len(points) > 0:
+                points = points / 3.0
+            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
     
     # Trả về danh sách QR codes (có thể rỗng nếu không tìm thấy)
     return qr_codes
+
+
+def _create_qr_info_from_cv2(data, points, scale=1.0):
+    """
+    Tạo dictionary thông tin QR code từ kết quả của cv2.QRCodeDetector
+    
+    Args:
+        data: Dữ liệu đã decode (string)
+        points: Array các điểm góc từ OpenCV (shape: (4, 2) hoặc (1, 4, 2))
+        scale: Hệ số scale nếu ảnh đã được resize
+    
+    Returns:
+        dict: Thông tin QR code
+    """
+    qr_info = {
+        'type': 'QRCODE',
+        'data': data,
+        'rect': {},
+        'polygon': []
+    }
+    
+    # Xử lý points
+    if points is not None and len(points) > 0:
+        # Flatten points nếu cần
+        if len(points.shape) == 3:
+            points = points[0]
+        
+        points = points.astype(int)
+        
+        # Tính bounding rect
+        x_coords = points[:, 0]
+        y_coords = points[:, 1]
+        
+        left = int(np.min(x_coords))
+        top = int(np.min(y_coords))
+        right = int(np.max(x_coords))
+        bottom = int(np.max(y_coords))
+        
+        qr_info['rect'] = {
+            'left': left,
+            'top': top,
+            'width': right - left,
+            'height': bottom - top
+        }
+        
+        # Polygon
+        qr_info['polygon'] = [(int(p[0]), int(p[1])) for p in points]
+    
+    # Thử parse JSON nếu có thể
+    try:
+        parsed_data = json.loads(data)
+        qr_info['parsed_data'] = parsed_data
+    except:
+        pass
+    
+    return qr_info
 
 
 def _create_qr_info(obj, data):
