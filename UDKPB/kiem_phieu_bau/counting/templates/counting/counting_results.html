@@ -28,12 +28,10 @@
             <div class="col">
               <h5 class="mb-0">
                 {% if result.model_id == 'vote_table_combined' %}
-                <i class="bi bi-table"></i> Bảng Biểu Quyết (TrOCR + YOLO)
+                <i class="bi bi-table"></i> Bảng Biểu Quyết (TrOCR + YOLO) 
                 {% elif result.model_id == 'trocr' %}
-                <i class="bi bi-fonts"></i> TrOCR 
-                {% else %}
-                <i class="bi bi-box"></i> YOLO 
-                {% endif %}
+                <i class="bi bi-fonts"></i> TrOCR {% else %}
+                <i class="bi bi-box"></i> YOLO {% endif %}
               </h5>
             </div>
             <div class="col-auto">
@@ -54,10 +52,8 @@
             <div class="col-md-6">
               <small class="text-muted">Thời gian chạy:</small><br />
               <strong>
-                {% if result.processing_time %} 
-                {{ result.processing_time|floatformat:2 }} 
-                giây {% else %} 
-                N/A {% endif %}
+                {% if result.processing_time %} {{
+                result.processing_time|floatformat:2 }} giây {% else %} N/A {% endif %}
               </strong>
             </div>
           </div>
@@ -89,12 +85,10 @@
                   {% if result.result_model.success %}
                   <div class="alert alert-success mb-3">
                     <i class="bi bi-check-circle"></i>
-                    <strong>Thành công!</strong> 
-                    {% if result.model_id == 'vote_table_combined' %}
-                    Đã xử lý {{ result.result_model.total_rows }} dòng.
-                    {% else %}
-                    Đã xử lý {{ result.result_model.count }} ảnh.
-                    {% endif %}
+                    <strong>Thành công!</strong>
+                    {% if result.model_id == 'vote_table_combined' %} Đã xử lý
+                    {{ result.result_model.total_rows }} dòng. {% else %} Đã xử
+                    lý {{ result.result_model.count }} ảnh. {% endif %}
                   </div>
 
                   <!-- Config Info cho vote_table_combined -->
@@ -102,10 +96,23 @@
                   <div class="alert alert-info mb-3">
                     <strong>Cấu hình:</strong>
                     <ul class="mb-0 mt-2">
-                      <li>TrOCR: Cột {{ result.result_model.config.trocr_col_ui }} (Tên)</li>
-                      <li>YOLO: Cột {{ result.result_model.config.yolo_cols_ui }} (Đồng ý, Không đồng ý)</li>
-                      <li>Dòng: {{ result.result_model.config.start_row|add:1 }} - {% if result.result_model.config.end_row %}{{ result.result_model.config.end_row|add:1 }}{% else %}Cuối{% endif %}</li>
-                      <li>Ngưỡng YOLO: {{ result.result_model.config.yolo_confidence }}%</li>
+                      <li>
+                        TrOCR: Cột {{ result.result_model.config.trocr_col_ui }}
+                        (Tên)
+                      </li>
+                      <li>
+                        YOLO: Cột {{ result.result_model.config.yolo_cols_ui }}
+                        (Đồng ý, Không đồng ý)
+                      </li>
+                      <li>
+                        Dòng: {{ result.result_model.config.start_row|add:1 }} -
+                        {% if result.result_model.config.end_row %}
+                        {{ result.result_model.config.end_row|add:1 }}
+                        {% else %}Cuối{% endif %}
+                      </li>
+                      <li>
+                        Ngưỡng YOLO: {{ result.result_model.config.yolo_confidence }}%
+                      </li>
                     </ul>
                   </div>
                   {% endif %}
@@ -142,8 +149,7 @@
                           <td>
                             <small>
                               {% for img in item.images %}
-                              <code>{{ img }}</code>{% if not forloop.last %}<br/>{% endif %}
-                              {% endfor %}
+                              <code>{{ img }}</code>{% if not forloop.last %}<br />{% endif %} {% endfor %}
                             </small>
                           </td>
                           <td>
@@ -196,9 +202,8 @@
                   <div class="alert alert-danger">
                     <i class="bi bi-x-circle"></i>
                     <strong>Thất bại!</strong>
-                    {% if result.result_model.error %} 
-                    {{ result.result_model.error }} 
-                    {% else %} Không xác định {% endif %}
+                    {% if result.result_model.error %} {{
+                    result.result_model.error }} {% else %} Không xác định {% endif %}
                   </div>
                   {% endif %}
 
