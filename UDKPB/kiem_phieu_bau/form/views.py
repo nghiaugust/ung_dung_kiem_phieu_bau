@@ -241,7 +241,8 @@ def compile_pdf(request):
                     ['pdflatex', '-interaction=nonstopmode', '-output-directory', temp_dir, tex_file],
                     capture_output=True,
                     text=False,
-                    timeout=30
+                    timeout=30,
+                    cwd=temp_dir
                 )
                 
                 # Check if PDF was generated
