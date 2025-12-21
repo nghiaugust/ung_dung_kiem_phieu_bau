@@ -238,7 +238,7 @@ def compile_pdf(request):
             # Compile LaTeX to PDF using pdflatex
             try:
                 result = subprocess.run(
-                    ['pdflatex', '-interaction=nonstopmode', '-output-directory', temp_dir, tex_file],
+                    ['pdflatex', '-interaction=nonstopmode', 'document.tex'],
                     capture_output=True,
                     text=False,
                     timeout=30,
@@ -369,10 +369,11 @@ def save_document(request):
             # Compile LaTeX to PDF using pdflatex
             try:
                 result = subprocess.run(
-                    ['pdflatex', '-interaction=nonstopmode', '-output-directory', temp_dir, tex_file],
+                    ['pdflatex', '-interaction=nonstopmode', 'ballot.tex'],
                     capture_output=True,
                     text=False,
-                    timeout=60  # Tăng timeout cho nhiều trang
+                    timeout=60,  # Tăng timeout cho nhiều trang
+                    cwd=temp_dir
                 )
                 
                 # Check if PDF was generated
