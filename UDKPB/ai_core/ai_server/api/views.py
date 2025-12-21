@@ -84,6 +84,7 @@ def yolo_detect(request):
     
     Form data:
         - images: Multiple files
+        - image_paths: JSON string chứa mapping {filename: path} (optional)
     
     Response:
         {
@@ -116,12 +117,24 @@ def yolo_detect(request):
                 'error': 'Không có ảnh nào được gửi lên'
             }, status=400)
         
+        # Lấy image_paths mapping (nếu có)
+        image_paths_json = request.POST.get('image_paths', '{}')
+        try:
+            image_paths_map = json.loads(image_paths_json)
+        except:
+            image_paths_map = {}
+        
         # Prepare batch
         images = []
         for file in files:
             image_data = file.read()
             filename = file.name
-            images.append((image_data, filename))
+            image_path = image_paths_map.get(filename)
+            
+            if image_path:
+                images.append((image_data, filename, image_path))
+            else:
+                images.append((image_data, filename))
         
         # Process batch
         results = yolo_service.detect_batch(images)

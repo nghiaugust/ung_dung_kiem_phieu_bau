@@ -5,7 +5,7 @@ Models được load một lần khi server khởi động và tái sử dụng 
 import os
 import torch
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from transformers import pipeline
 from ultralytics import YOLO
 from typing import List, Dict, Optional
@@ -226,13 +226,14 @@ class YOLOService:
             print(f"[YOLO Service] ❌ Lỗi load model: {e}")
             raise
     
-    def detect(self, image_data: bytes, filename: str = "") -> Dict:
+    def detect(self, image_data: bytes, filename: str = "", image_path: str = None) -> Dict:
         """
         Detect dấu X trong ảnh
         
         Args:
             image_data: Dữ liệu ảnh dạng bytes
             filename: Tên file
+            image_path: Đường dẫn ảnh gốc (để lưu ảnh có box)
             
         Returns:
             Dict chứa filename và kết quả detection
@@ -286,6 +287,10 @@ class YOLOService:
                 elif has_x_cancelled:
                     label = "x_cancelled"
             
+            # Vẽ bounding box lên ảnh (hoặc "none" nếu không có detection)
+            if image_path:
+                self._draw_detections(pil_img, detections, image_path, label)
+            
             return {
                 'filename': filename,
                 'label': label,
@@ -302,12 +307,77 @@ class YOLOService:
                 'error': str(e)
             }
     
+    def _draw_detections(self, pil_img: Image.Image, detections: List[Dict], image_path: str, label: str = 'none'):
+        """
+        Vẽ bounding box lên ảnh và lưu lại
+        
+        Args:
+            pil_img: PIL Image object
+            detections: List các detection
+            image_path: Đường dẫn để lưu ảnh
+            label: Label chính (x_mark, x_cancelled, none)
+        """
+        try:
+            # Tạo draw object
+            draw = ImageDraw.Draw(pil_img)
+            
+            # Thử load font (nếu không có thì dùng default)
+            try:
+                # Windows: Arial
+                font = ImageFont.truetype("arial.ttf", 20)
+            except:
+                font = ImageFont.load_default()
+            
+            # Nếu không có detection, vẽ "none (0%)" ở góc trên trái
+            if not detections or label == 'none':
+                text = "none (0%)"
+                # Vẽ background cho text
+                text_bbox = draw.textbbox((10, 10), text, font=font)
+                draw.rectangle(text_bbox, fill=(128, 128, 128))  # Màu xám
+                # Vẽ text
+                draw.text((10, 10), text, fill=(255, 255, 255), font=font)
+            else:
+                # Màu cho từng class
+                color_map = {
+                    'x_mark': (0, 255, 0),      # Xanh lá
+                    'x_cancelled': (255, 0, 0),  # Đỏ
+                }
+                
+                # Vẽ từng detection
+                for det in detections:
+                    bbox = det['bbox']  # [x1, y1, x2, y2]
+                    cls_name = det['class']
+                    conf = det['confidence']
+                    
+                    # Lấy màu theo class
+                    color = color_map.get(cls_name, (255, 255, 0))  # Default: vàng
+                    
+                    # Vẽ rectangle
+                    draw.rectangle(bbox, outline=color, width=3)
+                    
+                    # Tạo label text
+                    label_text = f"{cls_name}: {conf:.0%}"
+                    
+                    # Vẽ background cho text
+                    text_bbox = draw.textbbox((bbox[0], bbox[1] - 25), label_text, font=font)
+                    draw.rectangle(text_bbox, fill=color)
+                    
+                    # Vẽ text
+                    draw.text((bbox[0], bbox[1] - 25), label_text, fill=(255, 255, 255), font=font)
+            
+            # Lưu ảnh đè lên ảnh gốc
+            pil_img.save(image_path)
+            print(f"[YOLO Service] ✅ Đã lưu ảnh với detection: {os.path.basename(image_path)}")
+            
+        except Exception as e:
+            print(f"[YOLO Service] ⚠️ Lỗi khi vẽ bounding box: {e}")
+    
     def detect_batch(self, images: List[tuple]) -> List[Dict]:
         """
         Detect batch nhiều ảnh
         
         Args:
-            images: List of (image_data, filename) tuples
+            images: List of (image_data, filename, image_path) tuples
             
         Returns:
             List of results
@@ -318,8 +388,14 @@ class YOLOService:
         # Xử lý từng ảnh để đảm bảo kết quả chính xác
         print(f"[YOLO Service] Processing {len(images)} images individually for better accuracy...")
         
-        for image_data, filename in images:
-            result = self.detect(image_data, filename)
+        for item in images:
+            # Hỗ trợ cả 2 format: (data, name) và (data, name, path)
+            if len(item) == 3:
+                image_data, filename, image_path = item
+                result = self.detect(image_data, filename, image_path)
+            else:
+                image_data, filename = item
+                result = self.detect(image_data, filename)
             results.append(result)
         
         return results

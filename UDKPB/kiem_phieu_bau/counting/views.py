@@ -137,16 +137,25 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
+	import json
 	api_url = "http://localhost:8080/api/yolo/detect/"
 	
 	files = []
+	image_paths_map = {}  # Mapping filename -> full_path
+	
 	for path in image_paths:
 		filename = os.path.basename(path)
 		files.append(('images', (filename, open(path, 'rb'), 'image/jpeg')))
+		image_paths_map[filename] = path
 	
 	try:
+		# Gửi cả image_paths để API có thể lưu ảnh có box
+		data = {
+			'image_paths': json.dumps(image_paths_map)
+		}
+		
 		# Timeout 1800s (30 phút) để xử lý được nhiều ảnh
-		response = requests.post(api_url, files=files, timeout=1800)
+		response = requests.post(api_url, files=files, data=data, timeout=1800)
 		response.raise_for_status()
 		return response.json()
 	except requests.exceptions.RequestException as e:
@@ -458,6 +467,13 @@ def process_counting(request, poll_id):
 		
 		# Tự động tạo BallotSelection từ kết quả
 		save_ballot_selections_from_results(poll, result_data)
+		
+		# Cập nhật status của Poll thành "Đã kiểm phiếu"
+		poll.status = 'Đã kiểm phiếu'
+		poll.save()
+		
+		# Cập nhật is_checked của tất cả Ballot trong poll thành True
+		Ballot.objects.filter(poll=poll).update(is_checked=True)
 		
 		messages.success(request, f'Đã xử lý thành công {total_processed} dòng từ {len(ballots)} phiếu bầu!')
 	else:

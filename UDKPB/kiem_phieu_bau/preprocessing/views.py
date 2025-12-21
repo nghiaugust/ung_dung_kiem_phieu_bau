@@ -269,8 +269,8 @@ def process_single_ballot(ballot, preprocessing_dir):
 		print(f"[INFO] Đã cắt và lưu {cell_count} ô")
 		
 		# Cập nhật PreprocessedBallot
-		preprocessed.flattened_image = os.path.join('preprocessing', f"{ballot_id}_edge_projection.jpg")
-		preprocessed.histogram_image = os.path.join('preprocessing', f"{ballot_id}_projection_histogram.png")
+		preprocessed.flattened_image = os.path.join('preprocessing', f"{ballot_id}_temp_edge_projection.jpg")
+		preprocessed.histogram_image = os.path.join('preprocessing', f"{ballot_id}_temp_projection_histogram.png")
 		preprocessed.status = 'completed'
 		preprocessed.cell_count = cell_count
 		preprocessed.error_message = None

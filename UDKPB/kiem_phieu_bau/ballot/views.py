@@ -323,11 +323,56 @@ def hau_kiem_ballot(request, ballot_id):
 			'voted': candidate.candidate_id in selections
 		})
 	
-	# ImageFieldFile: dùng .name để lấy relative path
-	original_path = ballot.ballot_image.name if ballot.ballot_image else ''
-	folder, filename = os.path.split(original_path)
-	detect_filename = "detect_" + filename
-	detect_path = os.path.join(folder, detect_filename) if folder else detect_filename
+	# Lấy ảnh histogram (ảnh có grid)
+	from preprocessing.models import PreprocessedBallot, BallotCell
+	from counting.models import AIModelResult
+	
+	histogram_image = None
+	try:
+		preprocessed = PreprocessedBallot.objects.get(ballot=ballot)
+		histogram_image = preprocessed.histogram_image
+	except PreprocessedBallot.DoesNotExist:
+		pass
+	
+	# Lấy kết quả AI để hiển thị các ô
+	ai_result = None
+	cell_results = []
+	try:
+		ai_model_result = AIModelResult.objects.filter(poll=poll).order_by('-created_at').first()
+		if ai_model_result and ai_model_result.result_model:
+			result_data = ai_model_result.result_model
+			# Lấy results cho ballot này
+			for item in result_data.get('results', []):
+				if item.get('ballot_id') == ballot_id:
+					row = item.get('row')
+					results_list = item.get('results', [])
+					images = item.get('images', [])
+					
+					# results_list[0] = tên từ TrOCR
+					# results_list[1:] = YOLO detections
+					# images[1:] = YOLO images (bỏ ảnh TrOCR đầu tiên)
+					
+					yolo_images = images[1:] if len(images) > 1 else []
+					yolo_results = results_list[1:] if len(results_list) > 1 else []
+					
+					# Zip images và results
+					yolo_images_with_results = []
+					for img, result in zip(yolo_images, yolo_results):
+						yolo_images_with_results.append({
+							'image': img,
+							'result': result
+						})
+					
+					cell_results.append({
+						'row': row,
+						'name': results_list[0] if len(results_list) > 0 else '',
+						'yolo_images_with_results': yolo_images_with_results
+					})
+			
+			# Sắp xếp theo row
+			cell_results.sort(key=lambda x: x['row'])
+	except Exception as e:
+		print(f"Error loading AI results: {e}")
 
 	context = {
 		'poll': poll,
@@ -339,7 +384,8 @@ def hau_kiem_ballot(request, ballot_id):
 		'next_ballot_id': next_ballot_id,
 		'prev_ballot_url': prev_ballot_url,
 		'next_ballot_url': next_ballot_url,
-		'detect_ballot_image': detect_path,
+		'histogram_image': histogram_image,
+		'cell_results': cell_results,
 	}
 	
 	return render(request, 'poll/thong_ke/hau_kiem.html', context)
