@@ -1,25 +1,24 @@
-<!DOCTYPE html>
-<html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ballot Editor</title>
-    <style>
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% load static %}
+
+{% block title %}Ballot Editor{% endblock %}
+
+{% block extra_head %}
+<style>
+      /* Override base container styles for full-screen editor */
+      body {
+        background: #f8fafd;
+      }
+
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
       }
 
-      body {
-        font-family: Arial, sans-serif;
-        height: 100vh;
-        overflow: hidden;
-      }
-
-      .container {
+      .container-editor {
         display: flex;
-        height: 100vh;
+        height: 100%;
       }
 
       /* Left Panel - Form */
@@ -548,10 +547,18 @@
       .sidebar-overlay.show {
         display: block;
       }
+      
+      /* Editor specific: remove container constraints */
+      .editor-wrapper {
+        height: calc(100vh - 80px);
+        overflow: hidden;
+      }
     </style>
-  </head>
-  <body>
-    <div class="container">
+{% endblock %}
+
+{% block content %}
+<div class="editor-wrapper">
+    <div class="container-editor">
       <!-- Left Panel: Form -->
       <div class="left-panel">
         <div class="toolbar">
@@ -2153,5 +2160,18 @@
         }, 900);
       });
     </script>
-  </body>
-</html>
+    
+    <script>
+      // Remove base.html container styling
+      const parentContainer = document.querySelector("body > .container");
+      if (parentContainer) {
+        parentContainer.style.maxWidth = "100%";
+        parentContainer.style.margin = "0";
+        parentContainer.style.padding = "0";
+        parentContainer.style.borderRadius = "0";
+        parentContainer.style.boxShadow = "none";
+        parentContainer.style.background = "transparent";
+      }
+    </script>
+</div>
+{% endblock %}
