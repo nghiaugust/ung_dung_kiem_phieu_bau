@@ -225,6 +225,7 @@ def ve_bieu_do_projection(h_projection, v_projection, h_peaks, v_peaks, duong_da
 def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_lines=None, target_v_lines=None):
     """
     PHƯƠNG ÁN 8 + 5: Phát hiện đường kẻ bằng Edge Projection
+    PHIÊN BẢN CẢI TIẾN: Dùng Morphological Line Detection thay vì Canny
     
     Args:
         duong_dan_anh: Đường dẫn tới ảnh
@@ -245,13 +246,39 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
     # 2. PHƯƠNG ÁN 8: Tiền xử lý
     enhanced = tien_xu_ly_anh(gray)
     
-    # 3. Edge Detection
-    print("[INFO] Bước 2: Phát hiện edges (Canny)...")
-    edges = cv2.Canny(enhanced, 50, 150, apertureSize=3)
+    # 3. Binarization - Chuyển ảnh thành đen trắng rõ ràng
+    print("[INFO] Bước 2: Nhị phân hóa ảnh (Adaptive Threshold)...")
+    # Dùng Otsu's thresholding để tự động tìm ngưỡng tối ưu
+    _, binary = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
-    # 4. PHƯƠNG ÁN 5: Edge Projection cho đường NGANG
-    print("[INFO] Bước 3: Chiếu edges theo trục Y (tìm đường NGANG)...")
-    h_projection = chieu_edge_theo_truc(edges, truc='y')
+    # 4. Morphological Line Detection - Phát hiện đường kẻ trực tiếp
+    print("[INFO] Bước 3: Phát hiện đường kẻ bằng Morphology...")
+    
+    # 4.1. Phát hiện đường NGANG
+    # Tạo kernel ngang dài để phát hiện đường ngang
+    horizontal_kernel_length = width // 30  # Độ dài kernel = 1/30 chiều rộng ảnh
+    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_length, 1))
+    # Phát hiện đường ngang
+    h_lines_img = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
+    # Tăng cường đường kẻ bằng dilation
+    h_lines_img = cv2.dilate(h_lines_img, np.ones((3, 1), np.uint8), iterations=2)
+    
+    # 4.2. Phát hiện đường DỌC
+    # Tạo kernel dọc dài để phát hiện đường dọc
+    vertical_kernel_length = height // 30  # Độ dài kernel = 1/30 chiều cao ảnh
+    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_length))
+    # Phát hiện đường dọc
+    v_lines_img = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
+    # Tăng cường đường kẻ bằng dilation
+    v_lines_img = cv2.dilate(v_lines_img, np.ones((1, 3), np.uint8), iterations=2)
+    
+    # Kết hợp cả đường ngang và dọc để có ảnh edges hoàn chỉnh
+    edges = cv2.bitwise_or(h_lines_img, v_lines_img)
+    
+    # 5. PHƯƠNG ÁN 5: Edge Projection cho đường NGANG
+    print("[INFO] Bước 4: Chiếu đường ngang theo trục Y...")
+    # Dùng h_lines_img thay vì edges để có projection chính xác hơn
+    h_projection = chieu_edge_theo_truc(h_lines_img, truc='y')
     
     # Tìm peaks trong projection → vị trí đường ngang
     # min_distance là khoảng cách tối thiểu giữa 2 đường ngang
@@ -288,9 +315,10 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
             'x2': width
         })
     
-    # 5. PHƯƠNG ÁN 5: Edge Projection cho đường DỌC
-    print("[INFO] Bước 4: Chiếu edges theo trục X (tìm đường DỌC)...")
-    v_projection = chieu_edge_theo_truc(edges, truc='x')
+    # 6. PHƯƠNG ÁN 5: Edge Projection cho đường DỌC
+    print("[INFO] Bước 5: Chiếu đường dọc theo trục X...")
+    # Dùng v_lines_img thay vì edges để có projection chính xác hơn
+    v_projection = chieu_edge_theo_truc(v_lines_img, truc='x')
     
     # Tìm peaks trong projection → vị trí đường dọc
     
@@ -328,7 +356,7 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
             'y2': height
         })
     
-    # 6. Tạo grid từ giao điểm
+    # 7. Tạo grid từ giao điểm
     grid = []
     if len(merged_h_lines) >= 2 and len(merged_v_lines) >= 2:
         num_rows = len(merged_h_lines) - 1
@@ -350,7 +378,7 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
         
         print(f"\n[INFO] Đã tạo grid: {num_rows} dòng x {num_cols} cột")
     
-    # 7. Vẽ kết quả lên ảnh
+    # 8. Vẽ kết quả lên ảnh
     if hien_thi:
         result_img = img.copy()
         
@@ -405,7 +433,14 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
         # Lưu thêm ảnh edges để debug
         edges_output = f"{base_name}_edges{ext}"
         cv2.imwrite(edges_output, edges)
-        print(f"[INFO] Đã lưu ảnh edges: {edges_output}")
+        print(f"[INFO] Đã lưu ảnh kết hợp: {edges_output}")
+        
+        # Lưu thêm ảnh đường ngang và dọc riêng biệt
+        h_output = f"{base_name}_horizontal_lines{ext}"
+        v_output = f"{base_name}_vertical_lines{ext}"
+        cv2.imwrite(h_output, h_lines_img)
+        cv2.imwrite(v_output, v_lines_img)
+        print(f"[DEBUG] Đã lưu ảnh debug: {h_output}, {v_output}")
     
     return {
         'horizontal_lines': merged_h_lines,
