@@ -530,6 +530,9 @@ def generate_latex_multi_page(margins, font_family, font_size, header_rows, titl
 \usetikzlibrary{calc}
 \pagestyle{empty}
 
+% Tăng độ đậm đường kẻ bảng
+\setlength{\arrayrulewidth}{1.8pt}
+
 \begin{document}
 
 '''
@@ -830,6 +833,9 @@ def generate_latex(margins, font_family, font_size, header_rows, title_rows, bod
 \usepackage{tikz}
 \usetikzlibrary{calc}
 \pagestyle{empty}
+
+% Tăng độ đậm đường kẻ bảng
+\setlength{\arrayrulewidth}{1.8pt}
 
 \begin{document}
 

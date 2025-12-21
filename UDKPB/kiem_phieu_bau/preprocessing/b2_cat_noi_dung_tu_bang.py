@@ -300,14 +300,14 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
         v_threshold, v_peaks = tim_threshold_tu_dong(
             v_projection,
             target_count=target_v_lines,
-            min_distance=int(width / 8),
+            min_distance=int(width / 20),
             max_iterations=100
         )
     else:
         # Dùng threshold mặc định
         v_peaks = tim_duong_tu_projection(
             v_projection, 
-            min_distance=int(width / 8),                # 12.5% chiều rộng
+            min_distance=int(width / 20),                # 12.5% chiều rộng
             height_threshold=np.max(v_projection) * 0.4  # 40% của peak cao nhất
         )
         v_threshold = np.max(v_projection) * 0.4
@@ -459,7 +459,7 @@ def phat_hien_grid_phieu_bau(anh, target_h_lines=11, target_v_lines=4, verbose=F
         v_threshold, v_peaks = tim_threshold_tu_dong(
             v_projection,
             target_count=target_v_lines,
-            min_distance=int(width / 8),
+            min_distance=int(width / 20),
             max_iterations=100
         )
         
