@@ -421,7 +421,7 @@ def save_document(request):
                         'error': str(e)
                     }, status=500)
                 
-                # Return PDF as response (giống compile_pdf)
+                # Return PDF as response
                 from io import BytesIO
                 response = FileResponse(
                     BytesIO(pdf_data),

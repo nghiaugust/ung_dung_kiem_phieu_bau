@@ -5,6 +5,12 @@
     <p class="text-muted mb-0">Chọn cấu hình để xử lý với TrOCR và YOLO</p>
   </div>
   <div class="col-md-6 text-end">
+    <a
+      href="{% url 'poll:poll_detail' poll.poll_id %}"
+      class="btn btn-lg btn-secondary me-2"
+    >
+      <i class="bi bi-arrow-left"></i> Back
+    </a>
     {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and trocr_status and yolo_status %}
     <button
       type="submit"

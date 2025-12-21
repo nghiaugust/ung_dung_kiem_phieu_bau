@@ -1,5 +1,8 @@
 from django.db import models
 from django.conf import settings
+from django.db.models.signals import post_delete, pre_save
+from django.dispatch import receiver
+import os
 from poll.models import Poll
 
 # Create your models here.
@@ -110,3 +113,31 @@ class BallotDocument(models.Model):
     
     class Meta:
         ordering = ['-updated_at']
+
+
+# Signal để tự động xóa file PDF khi xóa BallotDocument
+@receiver(post_delete, sender=BallotDocument)
+def delete_pdf_file_on_delete(sender, instance, **kwargs):
+    """Xóa file PDF khi xóa BallotDocument"""
+    if instance.pdf_file:
+        if os.path.isfile(instance.pdf_file.path):
+            os.remove(instance.pdf_file.path)
+
+
+# Signal để xóa file PDF cũ khi cập nhật
+@receiver(pre_save, sender=BallotDocument)
+def delete_old_pdf_on_update(sender, instance, **kwargs):
+    """Xóa file PDF cũ khi cập nhật với file mới"""
+    if not instance.pk:
+        return  # Nếu là instance mới, không làm gì
+    
+    try:
+        old_file = BallotDocument.objects.get(pk=instance.pk).pdf_file
+    except BallotDocument.DoesNotExist:
+        return
+    
+    # Nếu file mới khác file cũ, xóa file cũ
+    new_file = instance.pdf_file
+    if old_file and old_file != new_file:
+        if os.path.isfile(old_file.path):
+            os.remove(old_file.path)

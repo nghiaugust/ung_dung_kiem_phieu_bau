@@ -1,5 +1,7 @@
 import os
 from django.db import models
+from django.db.models.signals import post_delete, pre_save
+from django.dispatch import receiver
 from account.models import Account
 from poll.models import Poll, Candidate
 
@@ -40,3 +42,31 @@ class BallotSelection(models.Model):
 	selection_id = models.AutoField(primary_key=True)  # Mã lựa chọn
 	ballot = models.ForeignKey(Ballot, on_delete=models.CASCADE, null=True)  # Phiếu bầu
 	candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, null=True)  # Ứng cử viên được chọn
+
+
+# Signal để tự động xóa file ballot_image khi xóa Ballot
+@receiver(post_delete, sender=Ballot)
+def delete_ballot_image_on_delete(sender, instance, **kwargs):
+	"""Xóa file ballot_image khi xóa Ballot"""
+	if instance.ballot_image:
+		if os.path.isfile(instance.ballot_image.path):
+			os.remove(instance.ballot_image.path)
+
+
+# Signal để xóa file ballot_image cũ khi cập nhật
+@receiver(pre_save, sender=Ballot)
+def delete_old_ballot_image_on_update(sender, instance, **kwargs):
+	"""Xóa file ballot_image cũ khi cập nhật với file mới"""
+	if not instance.pk:
+		return  # Nếu là instance mới, không làm gì
+	
+	try:
+		old_file = Ballot.objects.get(pk=instance.pk).ballot_image
+	except Ballot.DoesNotExist:
+		return
+	
+	# Nếu file mới khác file cũ, xóa file cũ
+	new_file = instance.ballot_image
+	if old_file and old_file != new_file:
+		if os.path.isfile(old_file.path):
+			os.remove(old_file.path)

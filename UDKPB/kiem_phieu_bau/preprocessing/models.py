@@ -1,4 +1,8 @@
+import os
 from django.db import models
+from django.db.models.signals import post_delete, pre_save
+from django.dispatch import receiver
+from django.conf import settings
 from ballot.models import Ballot
 
 
@@ -58,3 +62,72 @@ class BallotCell(models.Model):
 		verbose_name = 'Ô phiếu'
 		verbose_name_plural = 'Ô phiếu'
 		unique_together = ['preprocessed_ballot', 'row', 'col']
+
+
+# Signals cho PreprocessedBallot
+@receiver(post_delete, sender=PreprocessedBallot)
+def delete_preprocessed_images_on_delete(sender, instance, **kwargs):
+	"""Xóa file ảnh khi xóa PreprocessedBallot"""
+	# Xóa flattened_image
+	if instance.flattened_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, instance.flattened_image)
+		if os.path.isfile(file_path):
+			os.remove(file_path)
+	
+	# Xóa histogram_image
+	if instance.histogram_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, instance.histogram_image)
+		if os.path.isfile(file_path):
+			os.remove(file_path)
+
+
+@receiver(pre_save, sender=PreprocessedBallot)
+def delete_old_preprocessed_images_on_update(sender, instance, **kwargs):
+	"""Xóa file ảnh cũ khi cập nhật PreprocessedBallot"""
+	if not instance.pk:
+		return
+	
+	try:
+		old_instance = PreprocessedBallot.objects.get(pk=instance.pk)
+	except PreprocessedBallot.DoesNotExist:
+		return
+	
+	# Xóa flattened_image cũ nếu thay đổi
+	if old_instance.flattened_image and old_instance.flattened_image != instance.flattened_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, old_instance.flattened_image)
+		if os.path.isfile(file_path):
+			os.remove(file_path)
+	
+	# Xóa histogram_image cũ nếu thay đổi
+	if old_instance.histogram_image and old_instance.histogram_image != instance.histogram_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, old_instance.histogram_image)
+		if os.path.isfile(file_path):
+			os.remove(file_path)
+
+
+# Signals cho BallotCell
+@receiver(post_delete, sender=BallotCell)
+def delete_cell_image_on_delete(sender, instance, **kwargs):
+	"""Xóa file ảnh ô khi xóa BallotCell"""
+	if instance.cell_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, instance.cell_image)
+		if os.path.isfile(file_path):
+			os.remove(file_path)
+
+
+@receiver(pre_save, sender=BallotCell)
+def delete_old_cell_image_on_update(sender, instance, **kwargs):
+	"""Xóa file ảnh ô cũ khi cập nhật BallotCell"""
+	if not instance.pk:
+		return
+	
+	try:
+		old_instance = BallotCell.objects.get(pk=instance.pk)
+	except BallotCell.DoesNotExist:
+		return
+	
+	# Xóa cell_image cũ nếu thay đổi
+	if old_instance.cell_image and old_instance.cell_image != instance.cell_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, old_instance.cell_image)
+		if os.path.isfile(file_path):
+			os.remove(file_path)
