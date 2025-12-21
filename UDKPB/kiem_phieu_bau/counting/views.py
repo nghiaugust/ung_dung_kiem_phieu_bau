@@ -111,7 +111,8 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 		files.append(('images', (filename, open(path, 'rb'), 'image/jpeg')))
 	
 	try:
-		response = requests.post(api_url, files=files, timeout=300)
+		# Timeout 1800s (30 phút) để xử lý được nhiều ảnh
+		response = requests.post(api_url, files=files, timeout=1800)
 		response.raise_for_status()
 		return response.json()
 	except requests.exceptions.RequestException as e:
@@ -143,7 +144,8 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		files.append(('images', (filename, open(path, 'rb'), 'image/jpeg')))
 	
 	try:
-		response = requests.post(api_url, files=files, timeout=300)
+		# Timeout 1800s (30 phút) để xử lý được nhiều ảnh
+		response = requests.post(api_url, files=files, timeout=1800)
 		response.raise_for_status()
 		return response.json()
 	except requests.exceptions.RequestException as e:
@@ -159,23 +161,10 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 
 def counting_form_view(request, poll_id):
 	"""
-	Giao diện form để nhập hàng/cột cho TrOCR và YOLO
+	Trả về điều kiện kiểm phiếu cho poll
 	"""
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	
-	# Lấy số hàng/cột có sẵn từ một ballot mẫu
-	sample_ballot = Ballot.objects.filter(poll=poll).first()
-	available_rows = []
-	available_cols = []
-	
-	if sample_ballot:
-		cells = BallotCell.objects.filter(
-			preprocessed_ballot__ballot=sample_ballot
-		).values_list('row', 'col')
-		
-		if cells:
-			available_rows = sorted(set([row for row, col in cells]))
-			available_cols = sorted(set([col for row, col in cells]))
 	
 	# Điều kiện 1: Ứng viên
 	candidates_count = Candidate.objects.filter(poll=poll).count()
@@ -210,8 +199,6 @@ def counting_form_view(request, poll_id):
 	
 	context = {
 		'poll': poll,
-		'available_rows': available_rows,
-		'available_cols': available_cols,
 		# Thêm thông tin điều kiện
 		'candidates_count': candidates_count,
 		'ballots_count': ballots_count,
@@ -242,13 +229,13 @@ def process_counting(request, poll_id):
 		return redirect('counting_form', poll_id=poll_id)
 	
 	# Lấy điều kiện
-	start_row = int(request.POST.get('start_row', 2))
+	start_row = int(request.POST.get('start_row', 2)) - 1  # Trừ 1 vì DB bắt đầu từ 0
 	end_row_str = request.POST.get('end_row', '').strip()
-	end_row = int(end_row_str) if end_row_str else None
+	end_row = (int(end_row_str) - 1) if end_row_str else None  # Trừ 1 vì DB bắt đầu từ 0
 	yolo_confidence = int(request.POST.get('yolo_confidence', 50))
 	
 	# Xác định các dòng cần xử lý
-	if end_row:
+	if end_row is not None:
 		rows_to_process = list(range(start_row, end_row + 1))
 	else:
 		# Lấy tất cả các dòng từ start_row
@@ -268,11 +255,14 @@ def process_counting(request, poll_id):
 		messages.error(request, 'Không tìm thấy dữ liệu dòng nào để xử lý!')
 		return redirect('counting_form', poll_id=poll_id)
 	
-	# Cấu hình cố định:
-	# - TrOCR: cột 2 (tên)
-	# - YOLO: cột 3, 4 (đồng ý, không đồng ý)
-	trocr_col = 2
-	yolo_cols = [3, 4]
+	# Lấy cấu hình từ form (linh hoạt cho các config khác sau này)
+	# Chuyển đổi từ UI (bắt đầu từ 1) sang DB (bắt đầu từ 0)
+	trocr_col_ui = int(request.POST.get('vote_table_trocr_col', 2))
+	yolo_cols_ui_str = request.POST.get('vote_table_yolo_cols', '3,4')
+	
+	# Chuyển đổi sang index DB (trừ 1)
+	trocr_col = trocr_col_ui - 1
+	yolo_cols = [int(col.strip()) - 1 for col in yolo_cols_ui_str.split(',')]
 	
 	# Lấy tất cả ballot trong poll
 	ballots = Ballot.objects.filter(poll=poll)
@@ -324,9 +314,9 @@ def process_counting(request, poll_id):
 					
 					if trocr_result.get('success') and trocr_result.get('results'):
 						recognized_text = trocr_result['results'][0].get('text', '')
-						cell_info['results'].append(f"Tên: {recognized_text}")
+						cell_info['results'].append(f"{recognized_text}")
 					else:
-						cell_info['results'].append("Tên: [Lỗi]")
+						cell_info['results'].append("[Lỗi]")
 			
 			# Xử lý YOLO
 			for yolo_cell in yolo_cells:
@@ -341,14 +331,14 @@ def process_counting(request, poll_id):
 				
 				if yolo_result.get('success') and yolo_result.get('results'):
 					for idx, detection in enumerate(yolo_result['results']):
-						label = detection.get('label', 'unknown')
+						label = detection.get('label', 'trong')
 						confidence = detection.get('confidence', 0)
 						
 						# Kiểm tra ngưỡng confidence
-						if confidence >= yolo_confidence:
-							cell_info['results'].append(f"{label} ({confidence}%)")
-						else:
-							cell_info['results'].append(f"[Dưới ngưỡng: {confidence}%]")
+						# if confidence >= yolo_confidence:
+						cell_info['results'].append(f"{label} ({confidence}%)")
+						# else:
+						# 	cell_info['results'].append(f"Không ({confidence}%)")
 				else:
 					for _ in yolo_image_paths:
 						cell_info['results'].append("[Lỗi YOLO]")
@@ -364,15 +354,20 @@ def process_counting(request, poll_id):
 			'success': True,
 			'config': {
 				'type': 'vote_table',
-				'trocr_col': trocr_col,
-				'yolo_cols': yolo_cols,
-				'start_row': start_row,
-				'end_row': end_row,
+				'trocr_col': trocr_col,  # Giá trị DB (bắt đầu từ 0)
+				'trocr_col_ui': trocr_col_ui,  # Giá trị UI (bắt đầu từ 1)
+				'yolo_cols': yolo_cols,  # Giá trị DB (bắt đầu từ 0)
+				'yolo_cols_ui': yolo_cols_ui_str,  # Giá trị UI (bắt đầu từ 1)
+				'start_row': start_row,  # Giá trị DB (bắt đầu từ 0)
+				'end_row': end_row,  # Giá trị DB (bắt đầu từ 0)
 				'yolo_confidence': yolo_confidence
 			},
 			'total_rows': total_processed,
 			'results': combined_results
 		}
+		
+		# Xóa kết quả cũ của poll này trước khi tạo kết quả mới
+		AIModelResult.objects.filter(poll=poll).delete()
 		
 		AIModelResult.objects.create(
 			poll=poll,
