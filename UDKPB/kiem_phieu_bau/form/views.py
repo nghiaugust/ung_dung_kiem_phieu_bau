@@ -941,30 +941,60 @@ def format_table(row, is_double):
     num_cols = row.get('numCols', 1)
     nested_rows = row.get('nestedRows', [])
     double_mode = row.get('doubleMode', 'margin')  # 'margin' or 'center'
+    column_widths = row.get('columnWidths', [])  # % widths for each column
+    row_height = row.get('rowHeight', 1.0)  # Row height multiplier (default 1.0)
     
     if not nested_rows:
         return ''
+    
+    # Validate and normalize column widths
+    if not column_widths or len(column_widths) != num_cols:
+        # Default to equal widths
+        equal_width = 100.0 / num_cols
+        column_widths = [equal_width] * num_cols
+    
+    # Ensure percentages sum to 100%
+    total = sum(column_widths)
+    if total > 0:
+        column_widths = [w / total * 100 for w in column_widths]
+    
+    # Ensure row height is within reasonable bounds
+    row_height = max(1.0, min(5.0, float(row_height)))
     
     # Build column specification with calculated width
     # Calculate available width and distribute among columns
     if is_double:
         # For double table, use proportional width within minipage (48% of textwidth)
-        # Account for tabcolsep and arrayrulewidth
-        col_width_expr = f'\\dimexpr(\\linewidth-{num_cols + 1}\\arrayrulewidth-{num_cols * 2}\\tabcolsep)/{num_cols}\\relax'
-        col_spec = '|' + f'p{{{col_width_expr}}}|' * num_cols
+        # Calculate width for each column based on percentage
+        col_specs = []
+        for width_pct in column_widths:
+            col_width_expr = f'\\dimexpr({width_pct/100}\\linewidth-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
+            col_specs.append(f'p{{{col_width_expr}}}')
+        col_spec = '|' + '|'.join(col_specs) + '|'
     else:
         # For single table
         if margin > 0:
             # Will be wrapped in minipage, use linewidth
-            col_width_expr = f'\\dimexpr(\\linewidth-{num_cols + 1}\\arrayrulewidth-{num_cols * 2}\\tabcolsep)/{num_cols}\\relax'
-            col_spec = '|' + f'p{{{col_width_expr}}}|' * num_cols
+            col_specs = []
+            for width_pct in column_widths:
+                col_width_expr = f'\\dimexpr({width_pct/100}\\linewidth-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
+                col_specs.append(f'p{{{col_width_expr}}}')
+            col_spec = '|' + '|'.join(col_specs) + '|'
         else:
             # No margin, use textwidth directly
-            col_width_expr = f'\\dimexpr(\\textwidth-{num_cols + 1}\\arrayrulewidth-{num_cols * 2}\\tabcolsep)/{num_cols}\\relax'
-            col_spec = '|' + f'p{{{col_width_expr}}}|' * num_cols
+            col_specs = []
+            for width_pct in column_widths:
+                col_width_expr = f'\\dimexpr({width_pct/100}\\textwidth-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
+                col_specs.append(f'p{{{col_width_expr}}}')
+            col_spec = '|' + '|'.join(col_specs) + '|'
     
-    # Build table content
-    table_content = f'\\begin{{tabular}}{{{col_spec}}}\n'
+    # Build table content with row height adjustment
+    # Use \renewcommand{\arraystretch}{row_height} to increase row height
+    table_content = ''
+    if row_height != 1.0:
+        table_content += f'{{\\renewcommand{{\\arraystretch}}{{{row_height}}}\n'
+    
+    table_content += f'\\begin{{tabular}}{{{col_spec}}}\n'
     table_content += '\\hline\n'
     
     # Add each nested row
@@ -982,6 +1012,8 @@ def format_table(row, is_double):
         table_content += '\\hline\n'
     
     table_content += '\\end{tabular}\n'
+    if row_height != 1.0:
+        table_content += '}\n'  # Close the arraystretch group
     
     if is_double:
         # Create two tables side by side with different modes
@@ -1027,9 +1059,21 @@ def format_frame(row, is_double):
     num_cols = row.get('numCols', 1)
     nested_rows = row.get('nestedRows', [])
     double_mode = row.get('doubleMode', 'margin')  # 'margin' or 'center'
+    column_widths = row.get('columnWidths', [])  # % widths for each column
     
     if not nested_rows:
         return ''
+    
+    # Validate and normalize column widths
+    if not column_widths or len(column_widths) != num_cols:
+        # Default to equal widths
+        equal_width = 100.0 / num_cols
+        column_widths = [equal_width] * num_cols
+    
+    # Ensure percentages sum to 100%
+    total = sum(column_widths)
+    if total > 0:
+        column_widths = [w / total * 100 for w in column_widths]
     
     # Build frame content - start with \noindent to prevent paragraph indentation
     frame_content = '\\noindent\n'
@@ -1045,16 +1089,18 @@ def format_frame(row, is_double):
             cell_text = format_text(col.get('text', ''), col)
             frame_content += indent + cell_text + '\\\\\n'
         else:
-            # Multiple columns - use minipage for each column
+            # Multiple columns - use minipage for each column with custom widths
             frame_content += indent
             columns_data = nested_row.get('columns', [])
-            col_width = f'{0.85 / num_cols:.2f}'  # Distribute width (85% to leave some margin)
             
             for col_idx, col in enumerate(columns_data[:num_cols]):
                 cell_text = format_text(col.get('text', ''), col)
+                # Use percentage width (0.85 factor to leave some margin)
+                col_width_pct = column_widths[col_idx] / 100 * 0.85
+                
                 if col_idx > 0:
                     frame_content += '\\hfill'
-                frame_content += f'\\begin{{minipage}}[t]{{{col_width}\\linewidth}}\n'
+                frame_content += f'\\begin{{minipage}}[t]{{{col_width_pct:.4f}\\linewidth}}\n'
                 frame_content += cell_text + '\n'
                 frame_content += '\\end{minipage}'
             
