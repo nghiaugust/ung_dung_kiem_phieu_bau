@@ -404,14 +404,19 @@ def process_counting(request, poll_id):
 				
 				if yolo_result.get('success') and yolo_result.get('results'):
 					for idx, detection in enumerate(yolo_result['results']):
-						label = detection.get('label', 'trong')
-						confidence = detection.get('confidence', 0)
+						label = detection.get('label', 'none')
+						detections = detection.get('detections', [])
 						
-						# Kiểm tra ngưỡng confidence
-						# if confidence >= yolo_confidence:
+						# Lấy confidence cao nhất từ detections (nếu có)
+						confidence = 0
+						if detections:
+							# Tìm detection với confidence cao nhất
+							max_conf_detection = max(detections, key=lambda d: d.get('confidence', 0))
+							confidence = max_conf_detection.get('confidence', 0)
+							# Convert từ 0-1 sang 0-100
+							confidence = int(confidence * 100)
+						
 						cell_info['results'].append(f"{label} ({confidence}%)")
-						# else:
-						# 	cell_info['results'].append(f"Không ({confidence}%)")
 				else:
 					for _ in yolo_image_paths:
 						cell_info['results'].append("[Lỗi YOLO]")
