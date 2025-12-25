@@ -288,9 +288,18 @@ def api_poll_list(request):
     GET /api/polls/
     Header: Authorization: Bearer <token>
     
+    Query params:
+        - limit: số lượng (default 20, max 100)
+        - offset: vị trí bắt đầu (default 0)
+        - status: filter theo trạng thái poll (optional)
+    
     Response:
     {
         "success": true,
+        "total": 100,
+        "count": 20,
+        "limit": 20,
+        "offset": 0,
         "polls": [...]
     }
     """
@@ -313,7 +322,34 @@ def api_poll_list(request):
         # Gộp 2 queryset
         polls = (created_polls | member_polls).distinct()
     
-    polls = polls.order_by('-poll_id')[:50]  # Limit 50 polls gần nhất
+    # Filter by status if provided
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter:
+        polls = polls.filter(status=status_filter)
+    
+    # Get total count before pagination
+    total_count = polls.count()
+    
+    # Pagination
+    try:
+        limit = int(request.GET.get('limit', 20))
+        offset = int(request.GET.get('offset', 0))
+        
+        # Limit max 100
+        limit = min(limit, 100)
+        
+        # Ensure offset is not negative
+        offset = max(offset, 0)
+        
+    except ValueError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid parameters',
+            'message': 'Tham số limit hoặc offset không hợp lệ'
+        }, status=400)
+    
+    # Apply pagination and order
+    polls = polls.order_by('-poll_id')[offset:offset + limit]
     
     poll_list = []
     for poll in polls:
@@ -329,7 +365,10 @@ def api_poll_list(request):
     
     return JsonResponse({
         'success': True,
+        'total': total_count,
         'count': len(poll_list),
+        'limit': limit,
+        'offset': offset,
         'polls': poll_list
     })
 

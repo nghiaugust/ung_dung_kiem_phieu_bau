@@ -8,7 +8,7 @@ from ballot.models import Ballot
 from ballot.views import delete_all_ballots
 from django.http import JsonResponse
 from django.contrib import messages
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.urls import reverse
 
 # ==================== POLL MANAGEMENT ====================
@@ -358,18 +358,28 @@ def manage_poll_accounts(request):
 	"""
 	Trang quản lý tài khoản cho tất cả các cuộc bỏ phiếu
 	Hiển thị danh sách polls với nested table cho members
+	
+	Optimized: Sử dụng prefetch_related để tải tất cả members trong 1 query
+	thay vì N queries riêng lẻ (N+1 problem)
 	"""
 	# Chỉ admin mới có quyền truy cập
 	if not (request.user.is_superuser and request.user.is_active):
 		return redirect('permission_denied')
 	
-	# Lấy tất cả các cuộc bỏ phiếu
-	polls = Poll.objects.all().order_by('-poll_id')
+	# Lấy tất cả các cuộc bỏ phiếu với prefetch members
+	# Sử dụng Prefetch để customize queryset của members (select_related + order_by)
+	polls = Poll.objects.prefetch_related(
+		Prefetch(
+			'members',  # Related name của PollMember
+			queryset=PollMember.objects.select_related('account', 'assigned_by').order_by('account__username')
+		)
+	).order_by('-poll_id')
 	
-	# Lấy tất cả members cho các polls này
+	# Xây dựng poll_data từ dữ liệu đã prefetch
 	poll_data = []
 	for poll in polls:
-		members = PollMember.objects.filter(poll=poll).select_related('account', 'assigned_by').order_by('account__username')
+		# members.all() sẽ sử dụng cache từ prefetch, không tạo query mới
+		members = poll.members.all()
 		# Tạo list các account_id đã là thành viên
 		member_account_ids = [member.account.id for member in members]
 		poll_data.append({
