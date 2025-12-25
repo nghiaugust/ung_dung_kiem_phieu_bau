@@ -7,3 +7,6 @@ numpy
 ultralytics
 mysqlclient
 python-dotenv
+cryptography
+pdf2image
+waitress
