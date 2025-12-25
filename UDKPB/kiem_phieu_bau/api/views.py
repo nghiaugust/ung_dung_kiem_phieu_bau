@@ -382,9 +382,18 @@ def api_my_poll_memberships(request):
     GET /api/my-poll-memberships/
     Header: Authorization: Bearer <token>
     
+    Query params:
+        - limit: số lượng (default 20, max 100)
+        - offset: vị trí bắt đầu (default 0)
+        - status: filter theo member_status (optional: active, pending, rejected)
+    
     Response:
     {
         "success": true,
+        "total": 50,
+        "count": 20,
+        "limit": 20,
+        "offset": 0,
         "memberships": [
             {
                 "poll_id": 1,
@@ -400,7 +409,36 @@ def api_my_poll_memberships(request):
     # Lấy tất cả các PollMember của user (tất cả status)
     memberships = PollMember.objects.filter(
         account=user
-    ).select_related('poll').order_by('-assigned_at')
+    ).select_related('poll')
+    
+    # Filter by status if provided
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter:
+        memberships = memberships.filter(status=status_filter)
+    
+    # Get total count before pagination
+    total_count = memberships.count()
+    
+    # Pagination
+    try:
+        limit = int(request.GET.get('limit', 20))
+        offset = int(request.GET.get('offset', 0))
+        
+        # Limit max 100
+        limit = min(limit, 100)
+        
+        # Ensure offset is not negative
+        offset = max(offset, 0)
+        
+    except ValueError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid parameters',
+            'message': 'Tham số limit hoặc offset không hợp lệ'
+        }, status=400)
+    
+    # Apply pagination and order
+    memberships = memberships.order_by('-assigned_at')[offset:offset + limit]
     
     membership_list = []
     for membership in memberships:
@@ -414,7 +452,10 @@ def api_my_poll_memberships(request):
     
     return JsonResponse({
         'success': True,
+        'total': total_count,
         'count': len(membership_list),
+        'limit': limit,
+        'offset': offset,
         'memberships': membership_list
     })
 
