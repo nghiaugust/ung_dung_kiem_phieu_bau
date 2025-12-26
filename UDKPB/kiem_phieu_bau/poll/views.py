@@ -74,6 +74,8 @@ def tao_cuoc_bo_phieu(request):
 
 @login_required
 def danh_sach_cuoc_bo_phieu(request):
+	from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+	
 	if request.user.is_superuser and request.user.is_active:
 		# Nếu là admin, lấy TẤT CẢ các cuộc bỏ phiếu
 		polls_queryset = Poll.objects.all()
@@ -82,10 +84,25 @@ def danh_sach_cuoc_bo_phieu(request):
 		polls_queryset = Poll.objects.filter(members__account=request.user)
 
 	# Tối ưu: Annotate count để tránh N+1 queries
-	polls = polls_queryset.annotate(
+	polls_queryset = polls_queryset.annotate(
 		num_candidates=Count('candidate', distinct=True),
-		num_ballots=Count('ballot', distinct=True)
+		num_ballots=Count('ballot', distinct=True),
+		num_voters=Count('voters', distinct=True),
+		num_members=Count('members', distinct=True)
 	).order_by('-start_time')
+	
+	# Phân trang: 10 cuộc bỏ phiếu mỗi trang
+	paginator = Paginator(polls_queryset, 10)
+	page = request.GET.get('page', 1)
+	
+	try:
+		polls = paginator.page(page)
+	except PageNotAnInteger:
+		# Nếu page không phải số nguyên, trả về trang đầu tiên
+		polls = paginator.page(1)
+	except EmptyPage:
+		# Nếu page vượt quá số trang, trả về trang cuối
+		polls = paginator.page(paginator.num_pages)
 	
 	return render(request, 'poll/danh_sach_cuoc_bo_phieu.html', {'polls': polls})
 
