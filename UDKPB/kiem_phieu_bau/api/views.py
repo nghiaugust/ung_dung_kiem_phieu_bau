@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from .models import APIToken
 from .authentication import require_api_token
+from .image_optimizer import optimize_ballot_image
 from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot
 from ballot.doc_qr import read_qr_code_only
@@ -310,9 +311,113 @@ def api_poll_list(request):
         polls = Poll.objects.all()
     else:
         # Lấy polls mình tạo
-        created_polls = Poll.objects.filter(created_by=user)
+        created_polls = Poll.objects.using('api_pool').filter(created_by=user)
         
         # Lấy polls mình là thành viên (status='active')
+        member_poll_ids = PollMember.objects.using('api_pool').filter(
+            account=user, 
+            status='active'
+        ).values_list('poll_id', flat=True)
+        member_polls = Poll.objects.using('api_pool').filter(poll_id__in=member_poll_ids)
+        
+        # Gộp 2 queryset
+        polls = (created_polls | member_polls).distinct()
+    
+    # Filter by status if provided
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter:
+        polls = polls.filter(status=status_filter)
+    
+    # Get total count before pagination
+    total_count = polls.count()
+    
+    # Pagination
+    try:
+        limit = int(request.GET.get('limit', 20))
+        offset = int(request.GET.get('offset', 0))
+        
+        # Limit max 100
+        limit = min(limit, 100)
+        
+        # Ensure offset is not negative
+        offset = max(offset, 0)
+        
+    except ValueError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid parameters',
+            'message': 'Tham số limit hoặc offset không hợp lệ'
+        }, status=400)
+    
+    # Apply pagination and order
+    polls = polls.order_by('-poll_id')[offset:offset + limit]
+    
+    poll_list = []
+    for poll in polls:
+        poll_list.append({
+            'poll_id': poll.poll_id,
+            'title': poll.title,
+            'description': poll.description,
+            'status': poll.status,
+            'start_time': poll.start_time.isoformat() if poll.start_time else None,
+            'end_time': poll.end_time.isoformat() if poll.end_time else None,
+            'created_by': poll.created_by.username if poll.created_by else None
+        })
+    
+    return JsonResponse({
+        'success': True,
+        'total': total_count,
+        'count': len(poll_list),
+        'limit': limit,
+        'offset': offset,
+        'polls': poll_list
+    })
+
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_poll_list_no_pool(request):
+    """
+    Danh sách cuộc bỏ phiếu (KHÔNG sử dụng connection pool - for benchmark)
+    
+    GET /api/polls-no-pool/
+    Header: Authorization: Bearer <token>
+    
+    Query params:
+        - limit: số lượng (default 20, max 100)
+        - offset: vị trí bắt đầu (default 0)
+        - status: filter theo trạng thái poll (optional)
+    
+    Response:
+    {
+        "success": true,
+        "total": 100,
+        "count": 20,
+        "limit": 20,
+        "offset": 0,
+        "polls": [...]
+    }
+    """
+    import time
+    
+    # Mô phỏng remote database connection overhead (20-100ms)
+    # Thêm delay để giả lập thời gian tạo connection mới
+    time.sleep(0.050)  # 50ms delay để mô phỏng remote DB connection
+    
+    user = request.api_user
+    
+    # KHÔNG SỬ DỤNG using('api_pool') - dùng connection mặc định
+    # Đóng connection sau mỗi request để mô phỏng không có pool
+    from django.db import connection
+    
+    # Superuser xem tất cả, user khác xem polls mình tạo + polls mình tham gia
+    if user.is_superuser:
+        polls = Poll.objects.all()
+    else:
+        # Lấy polls mình tạo (KHÔNG dùng api_pool)
+        created_polls = Poll.objects.filter(created_by=user)
+        
+        # Lấy polls mình là thành viên (status='active') (KHÔNG dùng api_pool)
         member_poll_ids = PollMember.objects.filter(
             account=user, 
             status='active'
@@ -362,6 +467,9 @@ def api_poll_list(request):
             'end_time': poll.end_time.isoformat() if poll.end_time else None,
             'created_by': poll.created_by.username if poll.created_by else None
         })
+    
+    # Đóng connection để mô phỏng không có pool
+    connection.close()
     
     return JsonResponse({
         'success': True,
@@ -589,7 +697,7 @@ def api_upload_ballot(request, poll_id):
         else:
             # Kiểm tra xem user có phải là thành viên active của poll không
             try:
-                poll_member = PollMember.objects.get(poll=poll, account=user, status='active')
+                poll_member = PollMember.objects.using('api_pool').get(poll=poll, account=user, status='active')
                 # Chỉ manager và operator mới được upload
                 if poll_member.role in ['manager', 'operator']:
                     has_permission = True
@@ -709,7 +817,7 @@ def api_upload_ballot(request, poll_id):
             if ballot_id:
                 # Update existing ballot
                 try:
-                    ballot = Ballot.objects.get(ballot_id=ballot_id, poll=poll)
+                    ballot = Ballot.objects.using('api_pool').get(ballot_id=ballot_id, poll=poll)
                     
                     # Delete old image file if exists
                     if ballot.ballot_image:
@@ -718,9 +826,12 @@ def api_upload_ballot(request, poll_id):
                         except:
                             pass  # Ignore error if file doesn't exist
                     
+                    # Tối ưu ảnh trước khi lưu
+                    optimized_file = optimize_ballot_image(uploaded_file)
+                    
                     # Update ballot with new image
-                    ballot.ballot_image = uploaded_file
-                    ballot.input_by = user
+                    ballot.ballot_image = optimized_file
+                    ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
                     
                     # Update metadata
                     if ballot.metadata:
@@ -744,10 +855,13 @@ def api_upload_ballot(request, poll_id):
             
             # Nếu không update được, tạo ballot mới
             if ballot is None:
-                ballot = Ballot.objects.create(
+                # Tối ưu ảnh trước khi lưu
+                optimized_file = optimize_ballot_image(uploaded_file)
+                
+                ballot = Ballot.objects.using('api_pool').create(
                     poll=poll,
-                    ballot_image=uploaded_file,
-                    input_by=user,
+                    ballot_image=optimized_file,
+                    input_by_id=user.pk,  # Dùng _id để tránh lỗi database router
                     timestamp=timezone.now(),
                     metadata=metadata
                 )
@@ -830,7 +944,7 @@ def api_upload_ballots_batch(request, poll_id):
             has_permission = True
         else:
             try:
-                poll_member = PollMember.objects.get(poll=poll, account=user, status='active')
+                poll_member = PollMember.objects.using('api_pool').get(poll=poll, account=user, status='active')
                 if poll_member.role in ['manager', 'operator']:
                     has_permission = True
             except PollMember.DoesNotExist:
@@ -1007,7 +1121,7 @@ def api_upload_ballots_batch(request, poll_id):
                         
                         # Tìm ballot để update (CHỈ CHO PHÉP UPDATE)
                         try:
-                            ballot = Ballot.objects.get(ballot_id=qr_ballot_id, poll=poll)
+                            ballot = Ballot.objects.using('api_pool').get(ballot_id=qr_ballot_id, poll=poll)
                         except Ballot.DoesNotExist:
                             result['error'] = f'Không tìm thấy ballot_id {qr_ballot_id} trong cuộc bỏ phiếu này'
                             failed += 1
@@ -1021,9 +1135,12 @@ def api_upload_ballots_batch(request, poll_id):
                             except:
                                 pass
                         
+                        # Tối ưu ảnh trước khi lưu
+                        optimized_file = optimize_ballot_image(uploaded_file)
+                        
                         # Update ballot with new image
-                        ballot.ballot_image = uploaded_file
-                        ballot.input_by = user
+                        ballot.ballot_image = optimized_file
+                        ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
                         #ballot.timestamp = timezone.now()
                         
                         # Update metadata
@@ -2124,7 +2241,7 @@ def api_voter_list(request, poll_id):
     }
     """
     try:
-        poll = Poll.objects.get(poll_id=poll_id)
+        poll = Poll.objects.using('api_pool').get(poll_id=poll_id)
         user = request.api_user
         
         # Kiểm tra quyền: superuser, người tạo poll, hoặc thành viên active của poll

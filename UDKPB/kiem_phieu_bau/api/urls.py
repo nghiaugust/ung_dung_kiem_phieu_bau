@@ -16,6 +16,7 @@ urlpatterns = [
     
     # Polls
     path('polls/', views.api_poll_list, name='poll_list'),
+    path('polls-no-pool/', views.api_poll_list_no_pool, name='poll_list_no_pool'),  # Benchmark endpoint
     path('my-poll-memberships/', views.api_my_poll_memberships, name='my_poll_memberships'),
     path('polls/join/', views.api_join_poll, name='join_poll'),
     path('polls/<int:poll_id>/', views.api_poll_detail, name='poll_detail'),

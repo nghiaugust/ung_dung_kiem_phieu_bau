@@ -81,7 +81,12 @@ def danh_sach_cuoc_bo_phieu(request):
 		# Nếu khác admin, chỉ lấy các cuộc bỏ phiếu mà user là thành viên
 		polls_queryset = Poll.objects.filter(members__account=request.user)
 
-	polls = polls_queryset.order_by('-start_time')
+	# Tối ưu: Annotate count để tránh N+1 queries
+	polls = polls_queryset.annotate(
+		num_candidates=Count('candidate', distinct=True),
+		num_ballots=Count('ballot', distinct=True)
+	).order_by('-start_time')
+	
 	return render(request, 'poll/danh_sach_cuoc_bo_phieu.html', {'polls': polls})
 
 @login_required

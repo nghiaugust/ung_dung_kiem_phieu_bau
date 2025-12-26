@@ -19,8 +19,8 @@ phiếu{% endblock %} {% block content %}
       <td class="w-auto">{{ poll.title }}</td>
       <td class="w-25">{{ poll.description|truncatechars:120 }}</td>
       <td class="w-auto">{{ poll.start_time|date:'d/m/Y H:i' }}</td>
-      <td class="w-auto">{{ poll.candidate_set.count }}</td>
-      <td class="w-auto">{{ poll.ballot_set.count }}</td>
+      <td class="w-auto">{{ poll.num_candidates }}</td>
+      <td class="w-auto">{{ poll.num_ballots }}</td>
       <td>
         {% if poll.status == 'scheduled' %}Chờ diễn ra 
         {% elif poll.status == 'ongoing' %}Đang diễn ra 

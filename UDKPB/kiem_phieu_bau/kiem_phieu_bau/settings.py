@@ -99,6 +99,26 @@ DATABASES = {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         },
         'ATOMIC_REQUESTS': True,
+        'CONN_MAX_AGE': 0,
+    },
+
+    # 2. Kết nối dành riêng cho API cần Pooling
+    'api_pool': {
+        'ENGINE': os.getenv('DB_ENGINE'),
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+        # Giữ kết nối sống 120 giây
+        'CONN_MAX_AGE': 120,
+        # Kiểm tra kết nối còn sống không trước khi dùng (Django 4.1+)
+        # Rất quan trọng với MySQL để tránh lỗi "MySQL server has gone away"
+        'CONN_HEALTH_CHECKS': True, 
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+        'ATOMIC_REQUESTS': True,
     }
 }
 
