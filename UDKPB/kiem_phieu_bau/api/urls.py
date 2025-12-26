@@ -3,6 +3,7 @@ API URLs cho Mobile App
 """
 from django.urls import path
 from . import views
+from .test_upload_view import api_test_upload  # Import benchmark API
 
 app_name = 'api'
 
@@ -23,6 +24,7 @@ urlpatterns = [
     path('polls/<int:poll_id>/upload/', views.api_upload_ballot, name='upload_ballot'),
     path('polls/<int:poll_id>/upload-batch/', views.api_upload_ballots_batch, name='upload_ballots_batch'),
     path('polls/<int:poll_id>/ballots/', views.api_ballot_list, name='ballot_list'),
+    path('polls/<int:poll_id>/ballots/<int:ballot_id>/verify-hmac/', views.api_verify_ballot_hmac, name='verify_ballot_hmac'),
     
     # Poll Member Management
     path('polls/<int:poll_id>/request-role/', views.api_request_role_upgrade, name='request_role_upgrade'),
@@ -37,9 +39,13 @@ urlpatterns = [
     
     # Voter Management
     path('polls/<int:poll_id>/voters/', views.api_voter_list, name='voter_list'),
+    path('polls/<int:poll_id>/voters/all/', views.api_voter_list_no_limit, name='voter_list_no_limit'),
     path('polls/<int:poll_id>/voters/create/', views.api_voter_create, name='voter_create'),
     path('polls/<int:poll_id>/voters/<int:voter_id>/', views.api_voter_update, name='voter_update'),
     path('polls/<int:poll_id>/voters/<int:voter_id>/delete/', views.api_voter_delete, name='voter_delete'),
     path('polls/<int:poll_id>/voters/<int:voter_id>/checkin/', views.api_voter_checkin, name='voter_checkin'),
     path('polls/<int:poll_id>/voters/<int:voter_id>/undo-checkin/', views.api_voter_undo_checkin, name='voter_undo_checkin'),
+    
+    # Benchmark Test API (Simple upload for testing)
+    path('test-upload/', api_test_upload, name='test_upload'),
 ]

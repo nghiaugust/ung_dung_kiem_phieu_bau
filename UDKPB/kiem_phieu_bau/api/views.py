@@ -705,34 +705,11 @@ def api_upload_ballot(request, poll_id):
             }
             
             ballot = None
-            hmac_verified = False
             
             if ballot_id:
                 # Update existing ballot
                 try:
                     ballot = Ballot.objects.get(ballot_id=ballot_id, poll=poll)
-                    
-                    # Xác minh HMAC nếu có
-                    if qr_hmac:
-                        try:
-                            hmac_verified = verify_ballot_from_qr(ballot, qr_hmac)
-                            if not hmac_verified:
-                                # HMAC không hợp lệ, từ chối update
-                                return JsonResponse({
-                                    'success': False,
-                                    'error': 'Invalid HMAC',
-                                    'message': 'Chữ ký HMAC không hợp lệ. Phiếu bầu có thể bị giả mạo.',
-                                    'ballot_id': ballot_id,
-                                    'qr_ballot_id': qr_ballot_id
-                                }, status=403)
-                        except Exception as hmac_error:
-                            # Lỗi khi verify HMAC
-                            return JsonResponse({
-                                'success': False,
-                                'error': 'HMAC verification error',
-                                'message': f'Lỗi xác minh HMAC: {str(hmac_error)}',
-                                'ballot_id': ballot_id
-                            }, status=500)
                     
                     # Delete old image file if exists
                     if ballot.ballot_image:
@@ -783,7 +760,7 @@ def api_upload_ballot(request, poll_id):
                 'is_update': is_update,
                 'qr_ballot_id': qr_ballot_id,
                 'qr_detected': qr_ballot_id is not None,
-                'hmac_verified': hmac_verified if is_update else None,
+                'qr_hmac': qr_hmac,
                 'filename': uploaded_file.name,
                 'message': message
             }, status=200 if is_update else 201)
@@ -1020,7 +997,6 @@ def api_upload_ballots_batch(request, poll_id):
                         }
                         
                         ballot = None
-                        hmac_verified = False
                         
                         # Kiểm tra phải có ballot_id từ QR
                         if not qr_ballot_id:
@@ -1037,24 +1013,6 @@ def api_upload_ballots_batch(request, poll_id):
                             failed += 1
                             results.append(result)
                             raise Exception(f'File {uploaded_file.name}: Không tìm thấy ballot_id {qr_ballot_id}')
-                        
-                        # Xác minh HMAC nếu có
-                        if qr_hmac:
-                            try:
-                                hmac_verified = verify_ballot_from_qr(ballot, qr_hmac)
-                                if not hmac_verified:
-                                    # HMAC không hợp lệ, HỦY TOÀN BỘ TRANSACTION
-                                    result['error'] = 'Chữ ký HMAC không hợp lệ. Phiếu bầu có thể bị giả mạo.'
-                                    result['hmac_verified'] = False
-                                    failed += 1
-                                    results.append(result)
-                                    raise Exception(f'File {uploaded_file.name}: HMAC không hợp lệ - Phiếu bầu có thể bị giả mạo')
-                            except Exception as hmac_error:
-                                result['error'] = f'Lỗi xác minh HMAC: {str(hmac_error)}'
-                                result['hmac_verified'] = False
-                                failed += 1
-                                results.append(result)
-                                raise Exception(f'File {uploaded_file.name}: {str(hmac_error)}')
                         
                         # Delete old image file if exists
                         if ballot.ballot_image:
@@ -1085,8 +1043,8 @@ def api_upload_ballots_batch(request, poll_id):
                         result['success'] = True
                         result['ballot_id'] = ballot.ballot_id
                         result['is_update'] = True
-                        result['hmac_verified'] = hmac_verified
-                        result['message'] = 'Đã cập nhật phiếu bầu từ QR code' + (' (HMAC verified)' if hmac_verified else '')
+                        result['qr_hmac'] = qr_hmac
+                        result['message'] = 'Đã cập nhật phiếu bầu từ QR code'
                         succeeded += 1
                         
                     except Exception as e:
@@ -1769,6 +1727,119 @@ def api_approve_join_request(request, poll_id, member_id):
             'message': str(e)
         }, status=500)
 
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_verify_ballot_hmac(request, poll_id, ballot_id):
+    """
+    Xác minh chữ ký HMAC của phiếu bầu
+    
+    POST /api/polls/<poll_id>/ballots/<ballot_id>/verify-hmac/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "hmac_signature": "abc123..."
+    }
+    
+    Response:
+    {
+        "success": true,
+        "verified": true,
+        "ballot_id": 123,
+        "message": "Chữ ký HMAC hợp lệ"
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        
+        # Check permission - Chỉ cần là thành viên active
+        user = request.api_user
+        has_permission = False
+        
+        if user.is_superuser:
+            has_permission = True
+        elif poll.created_by == user:
+            has_permission = True
+        else:
+            try:
+                PollMember.objects.get(poll=poll, account=user, status='active')
+                has_permission = True
+            except PollMember.DoesNotExist:
+                pass
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xác minh phiếu bầu trong cuộc bỏ phiếu này'
+            }, status=403)
+        
+        # Get ballot
+        try:
+            ballot = Ballot.objects.get(ballot_id=ballot_id, poll=poll)
+        except Ballot.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Ballot not found',
+                'message': 'Không tìm thấy phiếu bầu'
+            }, status=404)
+        
+        # Get HMAC signature from request
+        data = json.loads(request.body)
+        hmac_signature = data.get('hmac_signature', '').strip()
+        
+        if not hmac_signature:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing HMAC signature',
+                'message': 'Vui lòng cung cấp chữ ký HMAC'
+            }, status=400)
+        
+        # Verify HMAC
+        try:
+            verified = verify_ballot_from_qr(ballot, hmac_signature)
+            
+            if verified:
+                return JsonResponse({
+                    'success': True,
+                    'verified': True,
+                    'ballot_id': ballot_id,
+                    'message': 'Chữ ký HMAC hợp lệ'
+                })
+            else:
+                return JsonResponse({
+                    'success': True,
+                    'verified': False,
+                    'ballot_id': ballot_id,
+                    'message': 'Chữ ký HMAC không hợp lệ. Phiếu bầu có thể bị giả mạo.'
+                })
+        
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': 'HMAC verification error',
+                'message': f'Lỗi xác minh HMAC: {str(e)}'
+            }, status=500)
+    
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
 
 @require_api_token
 @require_http_methods(["GET"])
@@ -2135,6 +2206,107 @@ def api_voter_list(request, poll_id):
             'error': 'Invalid parameters',
             'message': 'Tham số không hợp lệ'
         }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_voter_list_no_limit(request, poll_id):
+    """
+    Danh sách TẤT CẢ cử tri của cuộc bỏ phiếu (không phân trang - dùng để test)
+    
+    GET /api/polls/<poll_id>/voters/all/
+    Header: Authorization: Bearer <token>
+    
+    Query params:
+        - search: tìm kiếm theo tên hoặc code_id
+        - checked_in: filter theo trạng thái check-in (true/false)
+    
+    Response:
+    {
+        "success": true,
+        "count": 100,
+        "voters": [...]
+    }
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        user = request.api_user
+        
+        # Kiểm tra quyền: superuser, người tạo poll, hoặc thành viên active của poll
+        has_permission = False
+        if user.is_superuser or poll.created_by == user:
+            has_permission = True
+        else:
+            member = PollMember.objects.filter(
+                poll=poll, 
+                account=user, 
+                status='active'
+            ).first()
+            if member:
+                has_permission = True
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xem danh sách cử tri của cuộc bỏ phiếu này'
+            }, status=403)
+        
+        # Parse query params
+        search = request.GET.get('search', '').strip()
+        checked_in_filter = request.GET.get('checked_in', '').lower()
+        
+        # Query voters
+        from django.db.models import Q
+        voters = Voter.objects.filter(poll=poll)
+        
+        # Apply search filter
+        if search:
+            voters = voters.filter(
+                Q(full_name__icontains=search) | 
+                Q(code_id__icontains=search) |
+                Q(email__icontains=search)
+            )
+        
+        # Apply check-in filter
+        if checked_in_filter == 'true':
+            voters = voters.filter(has_checked_in=True)
+        elif checked_in_filter == 'false':
+            voters = voters.filter(has_checked_in=False)
+        
+        # Lấy tất cả không phân trang
+        total_count = voters.count()
+        voters = voters.order_by('voter_id')  # Sắp xếp theo voter_id tăng dần
+        
+        voter_list = []
+        for voter in voters:
+            voter_list.append({
+                'voter_id': voter.voter_id,
+                'full_name': voter.full_name,
+                'email': voter.email or '',
+                'code_id': voter.code_id,
+                'has_checked_in': voter.has_checked_in,
+                'check_in_time': voter.check_in_time.isoformat() if voter.check_in_time else None,
+                'check_in_by': voter.check_in_by.username if voter.check_in_by else None
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'count': total_count,
+            'voters': voter_list
+        })
+        
+    except Poll.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Poll not found',
+            'message': 'Không tìm thấy cuộc bỏ phiếu'
+        }, status=404)
     except Exception as e:
         return JsonResponse({
             'success': False,

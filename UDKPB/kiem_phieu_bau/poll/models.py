@@ -116,4 +116,5 @@ class Voter(models.Model): # cử tri
 		unique_together = [['poll', 'code_id'], ['poll', 'email']]
 		indexes = [
             models.Index(fields=['poll', 'code_id']), # Index để search check-in cho nhanh
+			models.Index(fields=['full_name']),
         ]
