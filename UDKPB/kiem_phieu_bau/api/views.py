@@ -659,20 +659,30 @@ def api_poll_detail(request, poll_id):
 @require_http_methods(["POST"])
 def api_upload_ballot(request, poll_id):
     """
-    Upload phiếu bầu từ mobile
+    Cập nhật phiếu bầu từ mobile (chỉ cho phép UPDATE, không tạo mới)
     
     POST /api/polls/<poll_id>/upload/
     Header: Authorization: Bearer <token>
     Body: multipart/form-data
         - ballot_file: file ảnh (required)
-        - ballot_id: ID của ballot cần cập nhật (optional - nếu có sẽ update, không có sẽ tạo mới)
     
     Response:
     {
         "success": true,
         "ballot_id": 123,
-        "is_update": false,
-        "message": "Upload thành công"
+        "is_update": true,
+        "qr_ballot_id": 123,
+        "qr_detected": true,
+        "qr_hmac": "abc123...",
+        "filename": "image.jpg",
+        "message": "Cập nhật phiếu bầu thành công (từ QR code)"
+    }
+    
+    Error Response (nếu không tìm thấy ballot_id):
+    {
+        "success": false,
+        "error": "Ballot not found",
+        "message": "Không tìm thấy phiếu bầu với ID này"
     }
     """
     try:
@@ -741,21 +751,25 @@ def api_upload_ballot(request, poll_id):
                 'message': 'Kích thước file không được vượt quá 10MB'
             }, status=400)
         
-        # Đọc QR code từ phiếu bầu
+        # Tối ưu ảnh trước khi xử lý
+        optimized_file = optimize_ballot_image(uploaded_file)
+        
+        # Đọc QR code từ phiếu bầu đã tối ưu
         temp_file_path = None
         qr_ballot_id = None
         qr_code_raw = None
         qr_data = None
         
         try:
-            # Lưu file tạm để đọc QR
+            # Lưu file tạm từ optimized_file để đọc QR
             with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_file:
-                for chunk in uploaded_file.chunks():
+                optimized_file.seek(0)
+                for chunk in optimized_file.chunks():
                     temp_file.write(chunk)
                 temp_file_path = temp_file.name
             
             # Reset file pointer để có thể sử dụng lại
-            uploaded_file.seek(0)
+            optimized_file.seek(0)
             
             # Đọc chỉ QR code từ ảnh
             qr_result = read_qr_code_only(temp_file_path)
@@ -800,84 +814,67 @@ def api_upload_ballot(request, poll_id):
             except ValueError:
                 ballot_id = None
         
-        is_update = False
+        # Kiểm tra bắt buộc phải có ballot_id
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Không tìm thấy ballot_id trong QR code hoặc tham số'
+            }, status=400)
         
-        # Save file
+        # Chỉ cho phép UPDATE, không cho tạo mới
         with transaction.atomic():
-            # Chuẩn bị metadata
-            metadata = {
-                'uploaded_by': user.username,
-                'upload_method': 'mobile_api',
-                'original_filename': uploaded_file.name,
-                'qr_code_raw': qr_code_raw
-            }
+            try:
+                ballot = Ballot.objects.using('api_pool').get(ballot_id=ballot_id, poll=poll)
+            except Ballot.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Ballot not found',
+                    'message': f'Không tìm thấy phiếu bầu với ID {ballot_id} trong cuộc bỏ phiếu này'
+                }, status=404)
             
-            ballot = None
-            
-            if ballot_id:
-                # Update existing ballot
+            # Delete old image file if exists
+            if ballot.ballot_image:
                 try:
-                    ballot = Ballot.objects.using('api_pool').get(ballot_id=ballot_id, poll=poll)
-                    
-                    # Delete old image file if exists
-                    if ballot.ballot_image:
-                        try:
-                            ballot.ballot_image.delete(save=False)
-                        except:
-                            pass  # Ignore error if file doesn't exist
-                    
-                    # Tối ưu ảnh trước khi lưu
-                    optimized_file = optimize_ballot_image(uploaded_file)
-                    
-                    # Update ballot with new image
-                    ballot.ballot_image = optimized_file
-                    ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
-                    
-                    # Update metadata
-                    if ballot.metadata:
-                        ballot.metadata.update({
-                            'updated_by': user.username,
-                            'last_update_method': 'mobile_api',
-                            'last_updated_filename': uploaded_file.name,
-                            'last_updated_at': timezone.now().isoformat(),
-                            'qr_code_raw': qr_code_raw
-                        })
-                    else:
-                        ballot.metadata = metadata
-                    
-                    ballot.save()
-                    is_update = True
-                    message = 'Cập nhật phiếu bầu thành công' + (' (từ QR code)' if qr_ballot_id else '')
-                    
-                except Ballot.DoesNotExist:
-                    # Nếu không tìm thấy ballot để update, tạo mới
-                    ballot = None
+                    ballot.ballot_image.delete(save=False)
+                except:
+                    pass  # Ignore error if file doesn't exist
             
-            # Nếu không update được, tạo ballot mới
-            if ballot is None:
-                # Tối ưu ảnh trước khi lưu
-                optimized_file = optimize_ballot_image(uploaded_file)
-                
-                ballot = Ballot.objects.using('api_pool').create(
-                    poll=poll,
-                    ballot_image=optimized_file,
-                    input_by_id=user.pk,  # Dùng _id để tránh lỗi database router
-                    timestamp=timezone.now(),
-                    metadata=metadata
-                )
-                is_update = False
-                message = 'Upload phiếu bầu thành công'
+            # Update ballot with new image (đã được tối ưu từ trước)
+            ballot.ballot_image = optimized_file
+            ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
+            
+            # Chuẩn bị và update metadata
+            if ballot.metadata:
+                ballot.metadata.update({
+                    'updated_by': user.username,
+                    'last_update_method': 'mobile_api',
+                    'last_updated_filename': uploaded_file.name,
+                    'last_updated_at': timezone.now().isoformat(),
+                    'qr_code_raw': qr_code_raw
+                })
+            else:
+                ballot.metadata = {
+                    'uploaded_by': user.username,
+                    'upload_method': 'mobile_api',
+                    'original_filename': uploaded_file.name,
+                    'qr_code_raw': qr_code_raw
+                }
+            
+            ballot.save()
+            
+            message = 'Cập nhật phiếu bầu thành công' + (' (từ QR code)' if qr_ballot_id else '')
             
             return JsonResponse({
                 'success': True,
                 'ballot_id': ballot.ballot_id,
-                'is_update': is_update,
+                'is_update': True,
                 'qr_ballot_id': qr_ballot_id,
                 'qr_detected': qr_ballot_id is not None,
                 'qr_hmac': qr_hmac,
                 'filename': uploaded_file.name,
                 'message': message
-            }, status=200 if is_update else 201)
+            }, status=200)
         
     except Poll.DoesNotExist:
         return JsonResponse({
@@ -1013,17 +1010,21 @@ def api_upload_ballots_batch(request, poll_id):
                             # Hủy toàn bộ transaction
                             raise Exception(f'File {uploaded_file.name}: Vượt quá kích thước cho phép')
                         
-                        # Đọc QR code từ phiếu bầu
+                        # Tối ưu ảnh trước khi xử lý
+                        optimized_file = optimize_ballot_image(uploaded_file)
+                        
+                        # Đọc QR code từ phiếu bầu đã tối ưu
                         qr_data = None
                         try:
-                            # Lưu file tạm để đọc QR
+                            # Lưu file tạm từ optimized_file để đọc QR
                             with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_file:
-                                for chunk in uploaded_file.chunks():
+                                optimized_file.seek(0)
+                                for chunk in optimized_file.chunks():
                                     temp_file.write(chunk)
                                 temp_file_path = temp_file.name
                             
                             # Reset file pointer để có thể sử dụng lại
-                            uploaded_file.seek(0)
+                            optimized_file.seek(0)
                             
                             # Đọc chỉ QR code từ ảnh
                             qr_result = read_qr_code_only(temp_file_path)
@@ -1135,10 +1136,7 @@ def api_upload_ballots_batch(request, poll_id):
                             except:
                                 pass
                         
-                        # Tối ưu ảnh trước khi lưu
-                        optimized_file = optimize_ballot_image(uploaded_file)
-                        
-                        # Update ballot with new image
+                        # Update ballot with new image (đã được tối ưu từ trước)
                         ballot.ballot_image = optimized_file
                         ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
                         #ballot.timestamp = timezone.now()
