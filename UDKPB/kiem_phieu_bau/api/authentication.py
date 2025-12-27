@@ -42,10 +42,14 @@ def require_api_token(view_func):
         
         # Validate token
         try:
-            api_token = APIToken.objects.select_related('user').get(
-                token=token,
-                is_active=True
-            )
+            # Tìm token bằng blind index (SHA-256 hash)
+            api_token = APIToken.get_by_token(token)
+            
+            if not api_token:
+                return JsonResponse({
+                    'error': 'Invalid token',
+                    'message': 'Token không hợp lệ hoặc đã hết hạn'
+                }, status=401)
             
             # Check if token has expired
             now = timezone.now()
@@ -69,10 +73,10 @@ def require_api_token(view_func):
             # Attach user to request
             request.api_user = api_token.user
             
-        except APIToken.DoesNotExist:
+        except Exception as e:
             return JsonResponse({
-                'error': 'Invalid token',
-                'message': 'Token không hợp lệ hoặc đã hết hạn'
+                'error': 'Authentication error',
+                'message': 'Lỗi xác thực token'
             }, status=401)
         
         # Call the view
@@ -95,19 +99,19 @@ def optional_api_token(view_func):
             try:
                 scheme, token = auth_header.split(' ', 1)
                 if scheme.lower() in ['bearer', 'token']:
-                    api_token = APIToken.objects.select_related('user').get(
-                        token=token,
-                        is_active=True
-                    )
-                    # Check if token has expired
-                    now = timezone.now()
-                    if api_token.expires_at and api_token.expires_at < now:
-                        pass  # Token expired, skip authentication
-                    elif api_token.user.is_active:
-                        request.api_user = api_token.user
-                        api_token.last_used = timezone.now()
-                        api_token.save(update_fields=['last_used'])
-            except (ValueError, APIToken.DoesNotExist):
+                    # Tìm token bằng blind index
+                    api_token = APIToken.get_by_token(token)
+                    
+                    if api_token:
+                        # Check if token has expired
+                        now = timezone.now()
+                        if api_token.expires_at and api_token.expires_at < now:
+                            pass  # Token expired, skip authentication
+                        elif api_token.user.is_active:
+                            request.api_user = api_token.user
+                            api_token.last_used = timezone.now()
+                            api_token.save(update_fields=['last_used'])
+            except (ValueError, Exception):
                 pass
         
         return view_func(request, *args, **kwargs)

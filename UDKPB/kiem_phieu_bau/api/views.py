@@ -197,10 +197,12 @@ def api_login(request):
         
         # Tạo token mới
         token.token = APIToken.generate_token()
+        token.token_hash = APIToken.hash_token(token.token)
         token.expires_at = now + timedelta(seconds=access_token_lifetime)
         
         # Tạo refresh token mới
         token.refresh_token = APIToken.generate_token()
+        token.refresh_token_hash = APIToken.hash_token(token.refresh_token)
         token.refresh_token_expires_at = now + timedelta(seconds=refresh_token_lifetime)
         
         # Update last used
@@ -213,6 +215,7 @@ def api_login(request):
             'access_token': token.token,
             'refresh_token': token.refresh_token,
             'expires_in': access_token_lifetime,
+            'expires_at': token.expires_at.isoformat() if token.expires_at else None,
             'user': {
                 'id': user.id,
                 'username': user.username,
@@ -266,10 +269,10 @@ def api_refresh_token(request):
                 'message': 'Vui lòng cung cấp refresh token'
             }, status=400)
         
-        # Tìm token
-        try:
-            token = APIToken.objects.get(refresh_token=refresh_token, is_active=True)
-        except APIToken.DoesNotExist:
+        # Tìm token bằng refresh token (sử dụng blind index)
+        token = APIToken.get_by_refresh_token(refresh_token)
+        
+        if not token:
             return JsonResponse({
                 'success': False,
                 'error': 'Invalid refresh token',
@@ -289,6 +292,7 @@ def api_refresh_token(request):
         access_token_lifetime = int(os.environ.get('ACCESS_TOKEN_LIFETIME', 3600))
         
         token.token = APIToken.generate_token()
+        token.token_hash = APIToken.hash_token(token.token)
         token.expires_at = now + timedelta(seconds=access_token_lifetime)
         token.last_used = now
         token.save()
@@ -296,7 +300,8 @@ def api_refresh_token(request):
         return JsonResponse({
             'success': True,
             'access_token': token.token,
-            'expires_in': access_token_lifetime
+            'expires_in': access_token_lifetime,
+            'expires_at': token.expires_at.isoformat() if token.expires_at else None
         })
         
     except json.JSONDecodeError:
