@@ -11,6 +11,7 @@ urlpatterns = [
     # Authentication
     path('register/', views.api_register, name='register'),
     path('login/', views.api_login, name='login'),
+    path('refresh-token/', views.api_refresh_token, name='refresh_token'),
     path('logout/', views.api_logout, name='logout'),
     path('me/', views.api_me, name='me'),
     

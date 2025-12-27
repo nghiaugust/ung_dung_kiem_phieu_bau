@@ -5,8 +5,9 @@ import secrets
 
 class APIToken(models.Model):
     """
-    Token đơn giản cho mobile authentication
-    Mỗi user có 1 token duy nhất
+    Token với Access Token và Refresh Token
+    Access Token: thời gian ngắn (1 giờ)
+    Refresh Token: thời gian dài (30 ngày)
     """
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -14,6 +15,9 @@ class APIToken(models.Model):
         related_name='api_token'
     )
     token = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    refresh_token = models.CharField(max_length=64, unique=True, db_index=True, null=True, blank=True)
+    refresh_token_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_used = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)

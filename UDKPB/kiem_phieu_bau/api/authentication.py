@@ -47,6 +47,14 @@ def require_api_token(view_func):
                 is_active=True
             )
             
+            # Check if token has expired
+            now = timezone.now()
+            if api_token.expires_at and api_token.expires_at < now:
+                return JsonResponse({
+                    'error': 'Token expired',
+                    'message': 'Token đã hết hạn. Vui lòng làm mới token hoặc đăng nhập lại'
+                }, status=401)
+            
             # Check if user is active
             if not api_token.user.is_active:
                 return JsonResponse({
@@ -91,7 +99,11 @@ def optional_api_token(view_func):
                         token=token,
                         is_active=True
                     )
-                    if api_token.user.is_active:
+                    # Check if token has expired
+                    now = timezone.now()
+                    if api_token.expires_at and api_token.expires_at < now:
+                        pass  # Token expired, skip authentication
+                    elif api_token.user.is_active:
                         request.api_user = api_token.user
                         api_token.last_used = timezone.now()
                         api_token.save(update_fields=['last_used'])

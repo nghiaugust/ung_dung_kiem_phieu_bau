@@ -5,6 +5,7 @@ import json
 import os
 import uuid
 import tempfile
+from datetime import timedelta
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -131,7 +132,7 @@ def api_register(request):
 @require_http_methods(["POST"])
 def api_login(request):
     """
-    API Login - Trả về token
+    API Login - Trả về Access Token và Refresh Token
     
     POST /api/login/
     Body (JSON):
@@ -143,7 +144,9 @@ def api_login(request):
     Response:
     {
         "success": true,
-        "token": "abc123...",
+        "access_token": "abc123...",
+        "refresh_token": "xyz789...",
+        "expires_in": 3600,
         "user": {
             "id": 1,
             "username": "john",
@@ -185,13 +188,31 @@ def api_login(request):
         # Get or create token
         token, created = APIToken.objects.get_or_create(user=user)
         
+        # Làm mới token mỗi lần đăng nhập
+        now = timezone.now()
+        
+        # Lấy thời gian sống từ settings (đơn vị: giây)
+        access_token_lifetime = int(os.environ.get('ACCESS_TOKEN_LIFETIME', 3600))  # Mặc định 1 giờ
+        refresh_token_lifetime = int(os.environ.get('REFRESH_TOKEN_LIFETIME', 2592000))  # Mặc định 30 ngày
+        
+        # Tạo token mới
+        token.token = APIToken.generate_token()
+        token.expires_at = now + timedelta(seconds=access_token_lifetime)
+        
+        # Tạo refresh token mới
+        token.refresh_token = APIToken.generate_token()
+        token.refresh_token_expires_at = now + timedelta(seconds=refresh_token_lifetime)
+        
         # Update last used
-        token.last_used = timezone.now()
-        token.save(update_fields=['last_used'])
+        token.last_used = now
+        token.is_active = True
+        token.save()
         
         return JsonResponse({
             'success': True,
-            'token': token.token,
+            'access_token': token.token,
+            'refresh_token': token.refresh_token,
+            'expires_in': access_token_lifetime,
             'user': {
                 'id': user.id,
                 'username': user.username,
@@ -199,6 +220,83 @@ def api_login(request):
                 'email': user.email or '',
                 'full_name': user.last_name or ''
             }
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON',
+            'message': 'Dữ liệu JSON không hợp lệ'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_refresh_token(request):
+    """
+    API Refresh Token - Làm mới Access Token bằng Refresh Token
+    
+    POST /api/refresh-token/
+    Body (JSON):
+    {
+        "refresh_token": "xyz789..."
+    }
+    
+    Response:
+    {
+        "success": true,
+        "access_token": "new_abc123...",
+        "expires_in": 3600
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        refresh_token = data.get('refresh_token', '').strip()
+        
+        if not refresh_token:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing refresh token',
+                'message': 'Vui lòng cung cấp refresh token'
+            }, status=400)
+        
+        # Tìm token
+        try:
+            token = APIToken.objects.get(refresh_token=refresh_token, is_active=True)
+        except APIToken.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid refresh token',
+                'message': 'Refresh token không hợp lệ'
+            }, status=401)
+        
+        # Kiểm tra refresh token chưa hết hạn
+        now = timezone.now()
+        if token.refresh_token_expires_at and token.refresh_token_expires_at < now:
+            return JsonResponse({
+                'success': False,
+                'error': 'Refresh token expired',
+                'message': 'Refresh token đã hết hạn. Vui lòng đăng nhập lại'
+            }, status=401)
+        
+        # Tạo access token mới
+        access_token_lifetime = int(os.environ.get('ACCESS_TOKEN_LIFETIME', 3600))
+        
+        token.token = APIToken.generate_token()
+        token.expires_at = now + timedelta(seconds=access_token_lifetime)
+        token.last_used = now
+        token.save()
+        
+        return JsonResponse({
+            'success': True,
+            'access_token': token.token,
+            'expires_in': access_token_lifetime
         })
         
     except json.JSONDecodeError:
