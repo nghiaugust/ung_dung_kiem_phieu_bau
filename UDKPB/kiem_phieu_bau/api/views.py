@@ -2372,16 +2372,11 @@ def api_voter_list(request, poll_id):
         checked_in_filter = request.GET.get('checked_in', '').lower()
         
         # Query voters
-        from django.db.models import Q
         voters = Voter.objects.filter(poll=poll)
         
-        # Apply search filter
+        # Apply search filter sử dụng blind index
         if search:
-            voters = voters.filter(
-                Q(full_name__icontains=search) | 
-                Q(code_id__icontains=search) |
-                Q(email__icontains=search)
-            )
+            voters = Voter.search_by_fields(poll, search)
         
         # Apply check-in filter
         if checked_in_filter == 'true':
@@ -2480,16 +2475,11 @@ def api_voter_list_no_limit(request, poll_id):
         checked_in_filter = request.GET.get('checked_in', '').lower()
         
         # Query voters
-        from django.db.models import Q
         voters = Voter.objects.filter(poll=poll)
         
-        # Apply search filter
+        # Apply search filter sử dụng blind index
         if search:
-            voters = voters.filter(
-                Q(full_name__icontains=search) | 
-                Q(code_id__icontains=search) |
-                Q(email__icontains=search)
-            )
+            voters = Voter.search_by_fields(poll, search)
         
         # Apply check-in filter
         if checked_in_filter == 'true':
@@ -2600,16 +2590,16 @@ def api_voter_create(request, poll_id):
                 'message': 'Mã cử tri không được để trống'
             }, status=400)
         
-        # Check duplicate code_id in this poll
-        if Voter.objects.filter(poll=poll, code_id=code_id).exists():
+        # Check duplicate code_id in this poll (sử dụng blind index)
+        if Voter.get_by_code_id(poll, code_id):
             return JsonResponse({
                 'success': False,
                 'error': 'Duplicate code_id',
                 'message': f'Mã cử tri {code_id} đã tồn tại trong cuộc bỏ phiếu này'
             }, status=400)
         
-        # Check duplicate email in this poll (if provided)
-        if email and Voter.objects.filter(poll=poll, email=email).exists():
+        # Check duplicate email in this poll (if provided, sử dụng blind index)
+        if email and Voter.get_by_email(poll, email):
             return JsonResponse({
                 'success': False,
                 'error': 'Duplicate email',
@@ -2737,21 +2727,24 @@ def api_voter_update(request, poll_id, voter_id):
                 'message': 'Mã cử tri không được để trống'
             }, status=400)
         
-        # Check duplicate code_id (exclude current voter)
-        if Voter.objects.filter(poll=poll, code_id=code_id).exclude(voter_id=voter_id).exists():
+        # Check duplicate code_id (exclude current voter, sử dụng blind index)
+        existing_voter = Voter.get_by_code_id(poll, code_id)
+        if existing_voter and existing_voter.voter_id != voter_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Duplicate code_id',
                 'message': f'Mã cử tri {code_id} đã tồn tại trong cuộc bỏ phiếu này'
             }, status=400)
         
-        # Check duplicate email (exclude current voter)
-        if email and Voter.objects.filter(poll=poll, email=email).exclude(voter_id=voter_id).exists():
-            return JsonResponse({
-                'success': False,
-                'error': 'Duplicate email',
-                'message': f'Email {email} đã tồn tại trong cuộc bỏ phiếu này'
-            }, status=400)
+        # Check duplicate email (exclude current voter, sử dụng blind index)
+        if email:
+            existing_voter = Voter.get_by_email(poll, email)
+            if existing_voter and existing_voter.voter_id != voter_id:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Duplicate email',
+                    'message': f'Email {email} đã tồn tại trong cuộc bỏ phiếu này'
+                }, status=400)
         
         # Update voter (không cập nhật has_checked_in, check_in_time, check_in_by)
         with transaction.atomic():

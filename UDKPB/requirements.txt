@@ -10,3 +10,4 @@ python-dotenv
 cryptography
 pdf2image
 waitress
+qreader

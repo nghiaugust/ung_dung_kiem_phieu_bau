@@ -48,3 +48,52 @@ class EncryptedEmailField(EncryptedFieldMixin, models.EmailField):
         if value:
             value = value.lower() # Chuẩn hóa email
         return super().get_prep_value(value)
+
+class EncryptedImageField(models.ImageField):
+    """
+    ImageField với mã hóa AES-256-GCM cho đường dẫn file trong database
+    File path được mã hóa khi lưu vào DB và giải mã khi load ra
+    """
+    description = "Encrypted ImageField"
+    
+    def from_db_value(self, value, expression, connection):
+        """Giải mã đường dẫn file khi load từ database"""
+        if value is None or value == '':
+            return value
+        try:
+            decrypted_path = decrypt_aes_gcm(value)
+            return decrypted_path
+        except Exception:
+            return None  # Trả về None nếu không giải mã được
+    
+    def get_prep_value(self, value):
+        """Mã hóa đường dẫn file trước khi lưu vào database"""
+        if value is None or value == '':
+            return None
+        
+        # value có thể là:
+        # 1. String (file path) - khi load từ DB hoặc gán trực tiếp
+        # 2. FieldFile object - khi có file upload mới
+        # 3. InMemoryUploadedFile hoặc TemporaryUploadedFile - khi upload
+        
+        # Lấy đường dẫn file
+        file_path = None
+        if hasattr(value, 'name'):
+            # FieldFile hoặc UploadedFile object
+            file_path = value.name
+        else:
+            # String path
+            file_path = str(value)
+        
+        if not file_path or file_path == '':
+            return None
+            
+        # Mã hóa đường dẫn
+        return encrypt_aes_gcm(file_path)
+    
+    def to_python(self, value):
+        """Convert value về Python object"""
+        if value is None or value == '':
+            return None
+        # value đã được giải mã bởi from_db_value
+        return super().to_python(value)

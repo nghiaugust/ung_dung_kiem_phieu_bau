@@ -4,6 +4,7 @@ from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
 from account.models import Account
 from poll.models import Poll, Candidate
+from security.fields import EncryptedImageField
 
 
 def ballot_image_upload_path(instance, filename):
@@ -17,6 +18,10 @@ def ballot_image_upload_path(instance, filename):
 
 
 class Ballot(models.Model): # phiếu bầu
+	"""
+	Model phiếu bầu với mã hóa AES-256-GCM cho đường dẫn ảnh
+	File path được mã hóa trong database để bảo vệ thông tin vị trí file
+	"""
 	ballot_id = models.AutoField(primary_key=True)  # Mã lá phiếu
 	poll = models.ForeignKey(Poll, on_delete=models.CASCADE, null=True)  # Thuộc cuộc bỏ phiếu
 	
@@ -26,7 +31,7 @@ class Ballot(models.Model): # phiếu bầu
 	timestamp = models.DateTimeField(auto_now_add=True)  # Thời gian tạo phiếu (chỉ set khi tạo, không thay đổi sau đó)
 	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
-	ballot_image = models.ImageField(upload_to=ballot_image_upload_path, null=True, blank=True)
+	ballot_image = EncryptedImageField(upload_to=ballot_image_upload_path, null=True, blank=True)  # Đường dẫn ảnh được mã hóa
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
 	metadata = models.JSONField(null=True)  # Thông tin mở rộng
 	

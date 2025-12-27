@@ -745,7 +745,7 @@ def manage_voters(request, poll_id):
 		return redirect('poll:poll_detail', poll_id=poll_id)
 	
 	# Get all voters of this poll
-	voters = Voter.objects.filter(poll=poll).select_related('check_in_by').order_by('full_name')
+	voters = Voter.objects.filter(poll=poll).select_related('check_in_by').order_by('voter_id')
 	
 	context = {
 		'poll': poll,
@@ -782,12 +782,12 @@ def add_voter(request, poll_id):
 	if not full_name or not code_id:
 		return JsonResponse({'success': False, 'message': 'Họ tên và mã cử tri là bắt buộc!'})
 	
-	# Check if code_id already exists in this poll
-	if Voter.objects.filter(poll=poll, code_id=code_id).exists():
+	# Check if code_id already exists in this poll (sử dụng blind index)
+	if Voter.get_by_code_id(poll, code_id):
 		return JsonResponse({'success': False, 'message': f'Mã cử tri "{code_id}" đã tồn tại trong cuộc bỏ phiếu này!'})
 	
-	# Check if email already exists in this poll (if provided)
-	if email and Voter.objects.filter(poll=poll, email=email).exists():
+	# Check if email already exists in this poll (if provided, sử dụng blind index)
+	if email and Voter.get_by_email(poll, email):
 		return JsonResponse({'success': False, 'message': f'Email "{email}" đã tồn tại trong cuộc bỏ phiếu này!'})
 	
 	# Create new voter
@@ -834,13 +834,16 @@ def update_voter(request, poll_id, voter_id):
 	if not full_name or not code_id:
 		return JsonResponse({'success': False, 'message': 'Họ tên và mã cử tri là bắt buộc!'})
 	
-	# Check if code_id already exists in this poll (excluding current voter)
-	if Voter.objects.filter(poll=poll, code_id=code_id).exclude(voter_id=voter_id).exists():
+	# Check if code_id already exists in this poll (excluding current voter, sử dụng blind index)
+	existing_voter = Voter.get_by_code_id(poll, code_id)
+	if existing_voter and existing_voter.voter_id != voter_id:
 		return JsonResponse({'success': False, 'message': f'Mã cử tri "{code_id}" đã tồn tại trong cuộc bỏ phiếu này!'})
 	
-	# Check if email already exists in this poll (excluding current voter, if provided)
-	if email and Voter.objects.filter(poll=poll, email=email).exclude(voter_id=voter_id).exists():
-		return JsonResponse({'success': False, 'message': f'Email "{email}" đã tồn tại trong cuộc bỏ phiếu này!'})
+	# Check if email already exists in this poll (excluding current voter, if provided, sử dụng blind index)
+	if email:
+		existing_voter = Voter.get_by_email(poll, email)
+		if existing_voter and existing_voter.voter_id != voter_id:
+			return JsonResponse({'success': False, 'message': f'Email "{email}" đã tồn tại trong cuộc bỏ phiếu này!'})
 	
 	# Update voter
 	try:

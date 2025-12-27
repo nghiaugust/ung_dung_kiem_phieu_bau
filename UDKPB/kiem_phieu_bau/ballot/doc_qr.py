@@ -6,6 +6,14 @@ import numpy as np
 import json
 import sys
 
+try:
+    from qreader import QReader
+    # Khởi tạo 1 lần duy nhất khi chạy server. 
+    # model_size='s' cân bằng giữa tốc độ và độ chính xác.
+    GLOBAL_QREADER = QReader(model_size='s', min_confidence=0.5)
+except Exception as e:
+    print(f"⚠️ Không thể tải QReader: {e}")
+    GLOBAL_QREADER = None
 
 def detect_aruco_markers(image):
     """
@@ -50,92 +58,62 @@ def detect_aruco_markers(image):
 
 def detect_qr_codes(image):
     """
-    Detect QR codes trong ảnh với xử lý thông minh (tự động thử nhiều kỹ thuật) sử dụng OpenCV
-    
-    Args:
-        image: Ảnh đầu vào (numpy array)
-    
-    Returns:
-        list: Danh sách thông tin QR codes tìm thấy
+    Hàm phụ trợ: Detect QR codes an toàn, xử lý lỗi bộ nhớ numpy
     """
     qr_codes = []
-    found_data = set()  # Tránh trùng lặp
     
-    # Khởi tạo QRCodeDetector
-    qr_detector = cv2.QRCodeDetector()
-    
-    # Step 1: Thử decode trực tiếp trước
-    data, points, _ = qr_detector.detectAndDecode(image)
-    if data and data not in found_data:
-        found_data.add(data)
-        qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
-    
-    if qr_codes:
-        return qr_codes
-    
-    # Step 2: Thử với ảnh được upscale 2x
-    if not qr_codes:
-        upscaled_2x = cv2.resize(image, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-        data, points, _ = qr_detector.detectAndDecode(upscaled_2x)
-        if data and data not in found_data:
-            found_data.add(data)
-            # Điều chỉnh tọa độ về kích thước gốc
-            if points is not None and len(points) > 0:
-                points = points / 2.0
-            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
-        
-        if qr_codes:
-            return qr_codes
-    
-    # Step 3: Thử với ảnh được upscale 3x
-    if not qr_codes:
-        upscaled_3x = cv2.resize(image, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-        data, points, _ = qr_detector.detectAndDecode(upscaled_3x)
-        if data and data not in found_data:
-            found_data.add(data)
-            # Điều chỉnh tọa độ về kích thước gốc
-            if points is not None and len(points) > 0:
-                points = points / 3.0
-            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
-        
-        if qr_codes:
-            return qr_codes
-    
-    # Step 4: Thử kết hợp sharpen + upscale 3x
-    if not qr_codes:
-        # Sharpen trước
-        kernel_sharpen = np.array([[-1,-1,-1],
-                                   [-1, 9,-1],
-                                   [-1,-1,-1]])
-        sharpened = cv2.filter2D(image, -1, kernel_sharpen)
-        # Sau đó upscale 3x
-        upscaled_sharp_3x = cv2.resize(sharpened, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-        data, points, _ = qr_detector.detectAndDecode(upscaled_sharp_3x)
-        if data and data not in found_data:
-            found_data.add(data)
-            # Điều chỉnh tọa độ về kích thước gốc
-            if points is not None and len(points) > 0:
-                points = points / 3.0
-            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
-    
-    # Step 5: Thử với ảnh grayscale và threshold
-    if not qr_codes:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-        # Thử adaptive threshold
-        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                       cv2.THRESH_BINARY, 11, 2)
-        # Upscale
-        thresh_upscaled = cv2.resize(thresh, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-        data, points, _ = qr_detector.detectAndDecode(thresh_upscaled)
-        if data and data not in found_data:
-            found_data.add(data)
-            if points is not None and len(points) > 0:
-                points = points / 3.0
-            qr_codes.append(_create_qr_info_from_cv2(data, points, 1.0))
-    
-    # Trả về danh sách QR codes (có thể rỗng nếu không tìm thấy)
-    return qr_codes
+    # 1. Kiểm tra ảnh rỗng an toàn (Fix lỗi Truth value)
+    if image is None or image.size == 0:
+        return []
 
+    try:
+        if GLOBAL_QREADER:
+            # 2. Chuẩn hóa ảnh cho QReader (Fix lỗi QReader crash)
+            # Chuyển sang RGB
+            if len(image.shape) == 3 and image.shape[2] == 3:
+                rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            else:
+                rgb_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            
+            # QUAN TRỌNG: Sắp xếp lại bộ nhớ đệm để tránh lỗi crash C++ bên dưới
+            rgb_image = np.ascontiguousarray(rgb_image, dtype=np.uint8)
+
+            # 3. Detect
+            decoded_data = GLOBAL_QREADER.detect_and_decode(image=rgb_image, return_detections=True)
+            
+            # 4. Parse kết quả
+            if decoded_data and len(decoded_data) == 2:
+                texts, detections = decoded_data
+                if texts:
+                    for text, detection in zip(texts, detections):
+                        if text is None: continue
+                        
+                        str_text = str(text)
+                        if not str_text.strip(): continue
+
+                        # Lấy tọa độ
+                        bbox = detection.get('bbox_xyxy', [0, 0, 0, 0])
+                        l, t, r, b = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+                        
+                        qr_info = {
+                            'type': 'QRCODE',
+                            'data': str_text,
+                            'rect': {'left': l, 'top': t, 'width': r-l, 'height': b-t},
+                            'polygon': [], # QReader có trả về quad_xy nhưng để trống cho nhẹ nếu không cần
+                            'confidence': float(detection.get('confidence', 1.0))
+                        }
+                        
+                        # Thử parse JSON
+                        try:
+                            qr_info['parsed_data'] = json.loads(str_text)
+                        except:
+                            pass
+                            
+                        qr_codes.append(qr_info)
+    except Exception as e:
+        print(f"⚠️ Lỗi trong detect_qr_codes: {e}")
+    
+    return qr_codes
 
 def _create_qr_info_from_cv2(data, points, scale=1.0):
     """
@@ -191,43 +169,6 @@ def _create_qr_info_from_cv2(data, points, scale=1.0):
         pass
     
     return qr_info
-
-
-def _create_qr_info(obj, data):
-    """
-    Tạo dictionary thông tin QR code từ decoded object
-    
-    Args:
-        obj: Decoded object từ pyzbar
-        data: Dữ liệu đã decode (string)
-    
-    Returns:
-        dict: Thông tin QR code
-    """
-    rect = obj.rect
-    polygon = obj.polygon
-    
-    qr_info = {
-        'type': obj.type,
-        'data': data,
-        'rect': {
-            'left': rect.left,
-            'top': rect.top,
-            'width': rect.width,
-            'height': rect.height
-        },
-        'polygon': [(p.x, p.y) for p in polygon]
-    }
-    
-    # Thử parse JSON nếu có thể
-    try:
-        parsed_data = json.loads(data)
-        qr_info['parsed_data'] = parsed_data
-    except:
-        pass
-    
-    return qr_info
-
 
 def read_qr_code_only(image_path):
     """

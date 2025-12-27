@@ -5,37 +5,61 @@ Yêu cầu 4 markers để xử lý
 
 import cv2
 import numpy as np
+import sys
+import os
+
+# Import detect_qr_codes từ ballot.doc_qr
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from ballot.doc_qr import detect_qr_codes
 
 
-def detect_qr_code_opencv(image, gray_image):
+def detect_qr_code(image, gray_image=None):
     """
-    Phát hiện QR code bằng OpenCV QRCodeDetector
+    Phát hiện QR code bằng QReader (từ doc_qr.py)
     
     Args:
         image: Ảnh màu (BGR)
-        gray_image: Ảnh grayscale
+        gray_image: Ảnh grayscale (không sử dụng, chỉ để tương thích API)
     
     Returns:
         tuple: (qr_data, qr_corners) hoặc (None, None) nếu không tìm thấy
         - qr_data: str - Dữ liệu decode được
         - qr_corners: numpy array shape (4, 2) - 4 góc của QR code
     """
-    qr_detector = cv2.QRCodeDetector()
-    
-    # Thử decode với ảnh màu trước
-    data, points, _ = qr_detector.detectAndDecode(image)
-    
-    if data and points is not None:
-        # Reshape points từ (1, 4, 2) thành (4, 2)
-        qr_corners = points.reshape(4, 2).astype(np.float32)
-        return data, qr_corners
-    
-    # Nếu không thành công, thử với ảnh grayscale
-    data, points, _ = qr_detector.detectAndDecode(gray_image)
-    
-    if data and points is not None:
-        qr_corners = points.reshape(4, 2).astype(np.float32)
-        return data, qr_corners
+    try:
+        # Dùng detect_qr_codes từ doc_qr (QReader)
+        qr_results = detect_qr_codes(image)
+        
+        if qr_results and len(qr_results) > 0:
+            # Lấy QR code đầu tiên
+            qr = qr_results[0]
+            qr_data = qr.get('data')
+            
+            # Trích xuất corners từ polygon
+            if 'polygon' in qr and qr['polygon']:
+                # polygon là list[(x, y), ...]
+                qr_corners = np.array(qr['polygon'], dtype=np.float32)
+                return qr_data, qr_corners
+            
+            # Nếu không có polygon, tạo từ rect
+            if 'rect' in qr:
+                rect = qr['rect']
+                left = rect['left']
+                top = rect['top']
+                right = left + rect['width']
+                bottom = top + rect['height']
+                
+                # Tạo 4 góc: TL, TR, BR, BL
+                qr_corners = np.array([
+                    [left, top],
+                    [right, top],
+                    [right, bottom],
+                    [left, bottom]
+                ], dtype=np.float32)
+                
+                return qr_data, qr_corners
+    except Exception as e:
+        print(f"[WARNING] QReader failed: {e}")
     
     return None, None
 
@@ -108,8 +132,8 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
         gray_region = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
         
         if use_qr:
-            # Phát hiện QR Code bằng OpenCV QRCodeDetector
-            qr_data, qr_corners = detect_qr_code_opencv(region, gray_region)
+            # Phát hiện QR Code bằng QReader
+            qr_data, qr_corners = detect_qr_code(region, gray_region)
             
             # Tìm QR code đầu tiên
             qr_found = False
@@ -152,8 +176,8 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
                 gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
                 scale_factor = 3.0
                 
-                # Thử decode lại với OpenCV
-                qr_data, qr_corners = detect_qr_code_opencv(region_upscaled, gray_region_upscaled)
+                # Thử decode lại với QReader
+                qr_data, qr_corners = detect_qr_code(region_upscaled, gray_region_upscaled)
                 
                 if qr_data and qr_corners is not None:
                     # Tinh chỉnh sub-pixel
@@ -193,8 +217,8 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
                 gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
                 scale_factor = 5.0
                 
-                # Thử decode lại với OpenCV
-                qr_data, qr_corners = detect_qr_code_opencv(region_upscaled, gray_region_upscaled)
+                # Thử decode lại với QReader
+                qr_data, qr_corners = detect_qr_code(region_upscaled, gray_region_upscaled)
                 
                 if qr_data and qr_corners is not None:
                     # Tinh chỉnh sub-pixel

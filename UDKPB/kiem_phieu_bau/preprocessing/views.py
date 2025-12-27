@@ -10,7 +10,6 @@ from poll.models import Poll
 from form.models import BallotDocument
 from .models import PreprocessedBallot, BallotCell
 from .b1_lam_phang_anh import lam_phang_anh
-from .b2_cat_noi_dung_tu_bang import phat_hien_grid_phieu_bau
 
 
 def preprocess_poll_ballots(request, poll_id):

@@ -1,5 +1,7 @@
 from django.db import models
 from account.models import Account
+import hashlib
+from security.fields import EncryptedCharField
 
 class Poll(models.Model): # cuộc bỏ phiếu
 	poll_id = models.AutoField(primary_key=True)  # Mã cuộc bỏ phiếu
@@ -99,22 +101,110 @@ class Candidate(models.Model): # ứng cử viên
 	image_url = models.URLField(null=True)  # Ảnh
 
 class Voter(models.Model): # cử tri
+	"""
+	Model cử tri với mã hóa AES-256-GCM cho dữ liệu nhạy cảm
+	Sử dụng SHA-256 blind index để hỗ trợ tìm kiếm
+	"""
 	voter_id = models.AutoField(primary_key=True)  # Mã cử tri
 	poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name='voters', null=True, blank=True) # Link vào Poll
 
-	full_name = models.CharField(max_length=255, null=True)  # Họ tên
-	email = models.EmailField(blank=True, null=True)  # Email
-	code_id = models.CharField(max_length=128, null=True)  # Mã nội bộ
+	# Dữ liệu
+	full_name = models.CharField(max_length=255, null=True, db_index=True)  # Họ tên
+	email = EncryptedCharField(max_length=512, blank=True, null=True)  # Email (encrypted)
+	code_id = EncryptedCharField(max_length=256, null=True)  # Mã nội bộ (encrypted)
+	
+	# Blind Index (SHA-256 hash) để tìm kiếm
+	email_hash = models.CharField(max_length=64, db_index=True, null=True, blank=True)
+	code_id_hash = models.CharField(max_length=64, db_index=True, null=True, blank=True)
+	
 	# Trạng thái đi bầu (Check-in)
 	has_checked_in = models.BooleanField(default=False) # Đã đến nhận phiếu chưa
 	check_in_time = models.DateTimeField(null=True, blank=True)
 	check_in_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True) # Ai là người phát phiếu/gạch tên
 	
 	class Meta:
-        # Ràng buộc duy nhất theo cặp (Poll + Code) hoặc (Poll + Email)
+        # Ràng buộc duy nhất theo cặp (Poll + Hash) thay vì plaintext
         # Trong 1 cuộc bỏ phiếu, mã code_id này chỉ xuất hiện 1 lần.
-		unique_together = [['poll', 'code_id'], ['poll', 'email']]
+		unique_together = [['poll', 'code_id_hash'], ['poll', 'email_hash']]
 		indexes = [
-            models.Index(fields=['poll', 'code_id']), # Index để search check-in cho nhanh
+            models.Index(fields=['poll', 'code_id_hash']), # Index để search check-in cho nhanh
 			models.Index(fields=['full_name']),
         ]
+	
+	@staticmethod
+	def hash_value(value: str) -> str:
+		"""Tạo SHA-256 hash của giá trị cho blind index"""
+		if not value:
+			return None
+		return hashlib.sha256(value.encode('utf-8')).hexdigest()
+	
+	def save(self, *args, **kwargs):
+		"""Tự động tạo hash khi save()"""
+		# Tạo hash nếu có giá trị plaintext và chưa có hash
+		if self.email and not self.email_hash:
+			self.email_hash = self.hash_value(self.email)
+		if self.code_id and not self.code_id_hash:
+			self.code_id_hash = self.hash_value(self.code_id)
+		super().save(*args, **kwargs)
+	
+	@classmethod
+	def get_by_code_id(cls, poll, plaintext_code_id):
+		"""Tìm voter theo code_id sử dụng blind index"""
+		if not plaintext_code_id:
+			return None
+		code_hash = cls.hash_value(plaintext_code_id)
+		try:
+			voter = cls.objects.get(poll=poll, code_id_hash=code_hash)
+			# Verify plaintext matches (double-check security)
+			if voter.code_id == plaintext_code_id:
+				return voter
+		except cls.DoesNotExist:
+			pass
+		return None
+	
+	@classmethod
+	def get_by_email(cls, poll, plaintext_email):
+		"""Tìm voter theo email sử dụng blind index"""
+		if not plaintext_email:
+			return None
+		email_hash = cls.hash_value(plaintext_email)
+		try:
+			voter = cls.objects.get(poll=poll, email_hash=email_hash)
+			# Verify plaintext matches
+			if voter.email == plaintext_email:
+				return voter
+		except cls.DoesNotExist:
+			pass
+		return None
+	
+	@classmethod
+	def search_by_fields(cls, poll, search_text):
+		"""Tìm kiếm voter theo full_name, email, hoặc code_id"""
+		if not search_text:
+			return cls.objects.filter(poll=poll)
+		
+		# Tạo hash của search text cho email và code_id
+		search_hash = cls.hash_value(search_text)
+		
+		# Tìm theo full_name (plaintext) và hash của email/code_id
+		from django.db.models import Q
+		voters = cls.objects.filter(
+			poll=poll
+		).filter(
+			Q(full_name__icontains=search_text) |
+			Q(email_hash=search_hash) |
+			Q(code_id_hash=search_hash)
+		)
+		
+		# Verify plaintext matches cho encrypted fields (vì hash collision có thể xảy ra)
+		matched_voters = []
+		for voter in voters:
+			if (voter.full_name and search_text.lower() in voter.full_name.lower()) or \
+			   (voter.email and search_text.lower() in voter.email.lower()) or \
+			   (voter.code_id and search_text.lower() in voter.code_id.lower()):
+				matched_voters.append(voter.voter_id)
+		
+		# Trả về queryset với các voter_id matched
+		if matched_voters:
+			return cls.objects.filter(voter_id__in=matched_voters)
+		return cls.objects.none()
