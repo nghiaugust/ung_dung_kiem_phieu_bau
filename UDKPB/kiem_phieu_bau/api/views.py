@@ -5,6 +5,7 @@ import json
 import os
 import uuid
 import tempfile
+from io import BytesIO
 from datetime import timedelta
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -26,7 +27,7 @@ from form.models import BallotDocument
 from preprocessing.b1_lam_phang_anh import lam_phang_anh
 
 User = get_user_model()
-
+from kiem_phieu_bau.rate_limiting_decorator import rate_limit
 
 # =====================================================
 # AUTHENTICATION APIs
@@ -130,7 +131,7 @@ def api_register(request):
             'message': str(e)
         }, status=500)
 
-
+@rate_limit(max_requests=10, period=60, key_prefix='login')
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_login(request):
@@ -857,25 +858,22 @@ def api_upload_ballot(request, poll_id):
                 'message': 'Kích thước file không được vượt quá 10MB'
             }, status=400)
         
-        # Tối ưu ảnh trước khi xử lý
-        optimized_file = optimize_ballot_image(uploaded_file)
-        
-        # Đọc QR code từ phiếu bầu đã tối ưu
+        # Đọc QR code từ phiếu bầu gốc (không tối ưu để đảm bảo chất lượng cho làm phẳng ảnh)
         temp_file_path = None
         qr_ballot_id = None
         qr_code_raw = None
         qr_data = None
         
         try:
-            # Lưu file tạm từ optimized_file để đọc QR
+            # Lưu file tạm từ uploaded_file gốc để đọc QR
             with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_file:
-                optimized_file.seek(0)
-                for chunk in optimized_file.chunks():
+                uploaded_file.seek(0)
+                for chunk in uploaded_file.chunks():
                     temp_file.write(chunk)
                 temp_file_path = temp_file.name
             
             # Reset file pointer để có thể sử dụng lại
-            optimized_file.seek(0)
+            uploaded_file.seek(0)
             
             # Đọc chỉ QR code từ ảnh
             qr_result = read_qr_code_only(temp_file_path)
@@ -946,7 +944,23 @@ def api_upload_ballot(request, poll_id):
                 except:
                     pass  # Ignore error if file doesn't exist
             
-            # Update ballot with new image (đã được tối ưu từ trước)
+            # Tối ưu ảnh trước khi lưu (giảm dung lượng nhưng vẫn đảm bảo TrOCR, YOLO nhận diện tốt)
+            uploaded_file.seek(0)
+            optimized_bytes = optimize_ballot_image(uploaded_file)
+            
+            # Tạo InMemoryUploadedFile từ BytesIO đã tối ưu
+            from django.core.files.uploadedfile import InMemoryUploadedFile
+            
+            optimized_bytes.seek(0)
+            optimized_file = InMemoryUploadedFile(
+                optimized_bytes,
+                'ballot_image',
+                f'{ballot.ballot_id}.jpg',
+                'image/jpeg',
+                optimized_bytes.getbuffer().nbytes,
+                None
+            )
+            
             ballot.ballot_image = optimized_file
             ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
             
@@ -1251,18 +1265,41 @@ def api_upload_ballots_batch(request, poll_id):
                             except:
                                 pass
                         
-                        # Đọc ảnh đã làm phẳng từ file
+                        # Tối ưu ảnh đã làm phẳng để giảm dung lượng
                         from django.core.files import File
+                        from django.core.files.uploadedfile import InMemoryUploadedFile
                         
-                        # Lấy extension từ file gốc
-                        file_ext = uploaded_file.name.split('.')[-1].lower()
-                        
+                        # Đọc file đã làm phẳng vào BytesIO
                         with open(temp_output_path, 'rb') as f:
-                            ballot.ballot_image.save(
-                                f'{ballot.ballot_id}.{file_ext}',
-                                File(f),
-                                save=False
+                            temp_file_for_optimize = InMemoryUploadedFile(
+                                BytesIO(f.read()),
+                                'ballot_image',
+                                uploaded_file.name,
+                                'image/jpeg',
+                                os.path.getsize(temp_output_path),
+                                None
                             )
+                        
+                        # Tối ưu ảnh
+                        optimized_bytes = optimize_ballot_image(temp_file_for_optimize)
+                        
+                        # Tạo InMemoryUploadedFile từ BytesIO đã tối ưu
+                        optimized_bytes.seek(0)
+                        optimized_file = InMemoryUploadedFile(
+                            optimized_bytes,
+                            'ballot_image',
+                            f'{ballot.ballot_id}.jpg',
+                            'image/jpeg',
+                            optimized_bytes.getbuffer().nbytes,
+                            None
+                        )
+                        
+                        # Save ảnh đã tối ưu
+                        ballot.ballot_image.save(
+                            f'{ballot.ballot_id}.jpg',
+                            optimized_file,
+                            save=False
+                        )
                         
                         ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
                         #ballot.timestamp = timezone.now()

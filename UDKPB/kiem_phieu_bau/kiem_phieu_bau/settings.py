@@ -61,6 +61,8 @@ MIDDLEWARE = [
     'quan_ly_phieu_bau.middleware.LoginRequiredMessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'kiem_phieu_bau.request_logging_middleware.RequestLoggingMiddleware',  # Request logging
+    'kiem_phieu_bau.rate_limiting_middleware.RateLimitMiddleware',  # Global rate limiting
+    # 'kiem_phieu_bau.rate_limiting_middleware.UserBasedRateLimitMiddleware',  # User-based rate limiting (alternative)
 ]
 
 ROOT_URLCONF = 'kiem_phieu_bau.urls'
@@ -221,4 +223,51 @@ LOGGING = {
             'level': 'INFO',
         },
     },
+}
+
+# ============================================
+# RATE LIMITING CONFIGURATION
+# ============================================
+
+# Bật/tắt rate limiting
+RATE_LIMIT_ENABLED = os.getenv('RATE_LIMIT_ENABLED', 'True') == 'True'
+
+# Cấu hình rate limiting cho IP-based (Global)
+RATE_LIMIT_REQUESTS = int(os.getenv('RATE_LIMIT_REQUESTS', '100'))  # Số requests tối đa
+RATE_LIMIT_PERIOD = int(os.getenv('RATE_LIMIT_PERIOD', '60'))  # Thời gian (giây)
+
+# Cấu hình rate limiting cho User-based
+RATE_LIMIT_AUTHENTICATED_REQUESTS = int(os.getenv('RATE_LIMIT_AUTHENTICATED_REQUESTS', '200'))  # User đã đăng nhập
+RATE_LIMIT_ANONYMOUS_REQUESTS = int(os.getenv('RATE_LIMIT_ANONYMOUS_REQUESTS', '50'))  # User chưa đăng nhập
+
+# Whitelist IPs (không bị giới hạn)
+RATE_LIMIT_WHITELIST_IPS = [
+    '127.0.0.1',
+    'localhost',
+]
+
+# Exempt paths (không bị giới hạn)
+RATE_LIMIT_EXEMPT_PATHS = [
+    '/static/',
+    '/media/',
+    '/admin/jsi18n/',  # Django admin javascript translations
+]
+
+# Cache backend cho rate limiting (sử dụng Django cache framework)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'OPTIONS': {
+            'MAX_ENTRIES': 10000,
+        },
+    },
+    # Nếu muốn dùng Redis cho production (hiệu suất tốt hơn):
+    # 'default': {
+    #     'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+    #     'LOCATION': 'redis://127.0.0.1:6379/1',
+    #     'OPTIONS': {
+    #         'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    #     },
+    # },
 }

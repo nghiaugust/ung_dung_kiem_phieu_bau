@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.contrib import messages
 from .models import Account
+from kiem_phieu_bau.rate_limiting_decorator import rate_limit
 
 def tai_khoan(request):
 	# Chỉ cho phép admin
@@ -71,6 +72,7 @@ def register_view(request):
 	return render(request, 'account/register.html')
 
 # View đăng nhập
+@rate_limit(max_requests=10, period=60, key_prefix='login')
 def login_view(request):
 	error = False
 	if request.method == 'POST':

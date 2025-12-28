@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>429 - Quá nhiều yêu cầu</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #3d8bfd 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 25px 20px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 12px;
+            background: linear-gradient(135deg, #667eea 0%, #3d8bfd 100%);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 6px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .icon svg {
+            width: 30px;
+            height: 30px;
+            fill: white;
+        }
+        
+        h1 {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
+        
+        .error-code {
+            font-size: 0.85em;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .message {
+            font-size: 0.85em;
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        
+        .info-box {
+            background: #f8f9ff;
+            border-left: 3px solid #667eea;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 12px 0;
+            text-align: left;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            color: #666;
+            font-weight: 500;
+            font-size: 0.8em;
+        }
+        
+        .info-value {
+            color: #333;
+            font-weight: 700;
+            font-size: 0.85em;
+        }
+        
+        .countdown {
+            font-size: 2em;
+            color: #667eea;
+            font-weight: 700;
+            margin: 10px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .retry-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #3d8bfd 100%);
+            color: white;
+            padding: 10px 28px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.85em;
+            margin-top: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 3px 12px rgba(102, 126, 234, 0.3);
+            border: none;
+            cursor: pointer;
+        }
+        
+        .retry-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .retry-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .tips {
+            background: #fff3cd;
+            border-left: 3px solid #ffc107;
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-top: 12px;
+            text-align: left;
+            font-size: 0.75em;
+            color: #856404;
+        }
+        
+        .tips-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .tips-title::before {
+            content: "💡";
+            margin-right: 5px;
+            font-size: 0.9em;
+        }
+        
+        .tips ul {
+            margin-left: 15px;
+            margin-top: 4px;
+        }
+        
+        .tips li {
+            margin: 2px 0;
+            line-height: 1.4;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+            
+            h1 {
+                font-size: 1.3em;
+            }
+            
+            .countdown {
+                font-size: 1.8em;
+            }
+            
+            .retry-button {
+                padding: 8px 20px;
+                font-size: 0.8em;
+            }
+            
+            .tips {
+                font-size: 0.7em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+        </div>
+        
+        <h1>Quá nhiều yêu cầu</h1>
+        <div class="error-code">HTTP 429 - Too Many Requests</div>
+        
+        <div class="message">
+            Bạn đã vượt quá giới hạn <strong>{{ rate_limit }} requests</strong> trong <strong>{{ rate_period }} giây</strong>.
+        </div>
+        
+        <div class="info-box">
+            <div class="info-item">
+                <span class="info-label">🔒 Giới hạn</span>
+                <span class="info-value">{{ rate_limit }} requests/{{ rate_period }}s</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">⏱️ Thử lại sau</span>
+                <span class="info-value" id="countdown">{{ retry_after }} giây</span>
+            </div>
+        </div>
+        
+        <div class="countdown" id="big-countdown">{{ retry_after }}</div>
+        
+        <button class="retry-button" id="retry-btn" disabled onclick="location.reload()">
+            ⏳ Đợi một chút...
+        </button>
+        
+        <div class="tips">
+            <div class="tips-title">Mẹo:</div>
+            <ul>
+                <li>Tránh gửi quá nhiều requests trong thời gian ngắn</li>
+                <li>Trang sẽ tự động tải lại khi hết thời gian chờ</li>
+                <li>Nếu gặp vấn đề liên tục, vui lòng liên hệ quản trị viên</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        let timeLeft = {{ retry_after }};
+        const countdownElement = document.getElementById('big-countdown');
+        const countdownTextElement = document.getElementById('countdown');
+        const retryButton = document.getElementById('retry-btn');
+        
+        function updateCountdown() {
+            if (timeLeft <= 0) {
+                countdownElement.textContent = '0';
+                countdownTextElement.textContent = '0 giây';
+                retryButton.disabled = false;
+                retryButton.textContent = '🔄 Thử lại ngay';
+                retryButton.style.cursor = 'pointer';
+                return;
+            }
+            
+            countdownElement.textContent = timeLeft;
+            countdownTextElement.textContent = timeLeft + ' giây';
+            timeLeft--;
+            setTimeout(updateCountdown, 1000);
+        }
+        
+        updateCountdown();
+        
+        // Auto reload khi hết thời gian
+        setTimeout(() => {
+            location.reload();
+        }, {{ retry_after }} * 1000);
+    </script>
+</body>
+</html>
