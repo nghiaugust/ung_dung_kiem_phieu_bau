@@ -72,7 +72,7 @@ def register_view(request):
 	return render(request, 'account/register.html')
 
 # View đăng nhập
-@rate_limit(max_requests=10, period=60, key_prefix='login')
+@rate_limit(max_requests=5, period=60, key_prefix='login')
 def login_view(request):
 	error = False
 	if request.method == 'POST':

@@ -18,6 +18,7 @@ from django.utils import timezone
 from .models import APIToken
 from .authentication import require_api_token
 from .image_optimizer import optimize_ballot_image
+from .verify_file_signature import verify_file_signature
 from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot
 from ballot.doc_qr import read_qr_code_only
@@ -142,7 +143,8 @@ def api_login(request):
     Body (JSON):
     {
         "username": "string",
-        "password": "string"
+        "password": "string",
+        "public_key": "..."
     }
     
     Response:
@@ -164,6 +166,7 @@ def api_login(request):
         data = json.loads(request.body)
         username = data.get('username')
         password = data.get('password')
+        public_key = data.get('public_key', '').strip()  # Lấy public_key từ client
         
         if not username or not password:
             return JsonResponse({
@@ -209,6 +212,10 @@ def api_login(request):
         token.refresh_token_hash = APIToken.hash_token(token.refresh_token)
         token.refresh_token_expires_at = now + timedelta(seconds=refresh_token_lifetime)
         
+        # Lưu public key của client (nếu có)
+        if public_key:
+            token.public_key = public_key
+        
         # Update last used
         token.last_used = now
         token.is_active = True
@@ -220,6 +227,7 @@ def api_login(request):
             'refresh_token': token.refresh_token,
             'expires_in': access_token_lifetime,
             'expires_at': token.expires_at.isoformat() if token.expires_at else None,
+            'public_key': token.public_key,  # Trả về public_key đã lưu
             'user': {
                 'id': user.id,
                 'username': user.username,
@@ -1015,12 +1023,21 @@ def api_upload_ballot(request, poll_id):
 @require_http_methods(["POST"])
 def api_upload_ballots_batch(request, poll_id):
     """
-    Upload hàng loạt phiếu bầu từ mobile
+    Upload hàng loạt phiếu bầu từ mobile với xác thực chữ ký số
     
     POST /api/polls/<poll_id>/upload-batch/
     Header: Authorization: Bearer <token>
     Body: multipart/form-data
         - ballot_files: multiple files ảnh
+        - signatures: JSON string chứa chữ ký cho từng file
+          Format: {"filename1.jpg": "base64_signature1", "filename2.jpg": "base64_signature2"}
+          Chữ ký được tạo bằng RSA-PSS với SHA256 từ private key của client
+    
+    Lưu ý:
+        - Public key phải được cung cấp khi đăng nhập (lưu trong APIToken)
+        - Mỗi file phải có chữ ký tương ứng
+        - Tất cả chữ ký phải hợp lệ trước khi xử lý files
+        - Nếu bất kỳ file nào không có chữ ký hoặc chữ ký không hợp lệ, toàn bộ batch sẽ bị từ chối
     
     Response:
     {
@@ -1028,11 +1045,14 @@ def api_upload_ballots_batch(request, poll_id):
         "total": 10,
         "succeeded": 9,
         "failed": 1,
+        "message": "Upload hoàn tất: 9 thành công, 1 thất bại",
         "results": [
             {
                 "filename": "image1.jpg",
                 "success": true,
-                "ballot_id": 123
+                "ballot_id": 123,
+                "qr_ballot_id": 123,
+                "is_update": true
             },
             {
                 "filename": "image2.jpg",
@@ -1040,6 +1060,15 @@ def api_upload_ballots_batch(request, poll_id):
                 "error": "File too large"
             }
         ]
+    }
+    
+    Error Response (signature verification failed):
+    {
+        "success": false,
+        "error": "Signature verification failed",
+        "message": "Xác thực chữ ký thất bại cho file: image1.jpg",
+        "filename": "image1.jpg",
+        "verify_error": "Invalid signature"
     }
     """
     try:
@@ -1083,6 +1112,72 @@ def api_upload_ballots_batch(request, poll_id):
                 'error': 'Missing files',
                 'message': 'Vui lòng chọn ít nhất một file ảnh phiếu bầu'
             }, status=400)
+        
+        # Lấy signatures từ request (JSON string)
+        signatures_json = request.POST.get('signatures', '{}')
+        try:
+            signatures = json.loads(signatures_json)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid signatures format',
+                'message': 'Định dạng chữ ký không hợp lệ (phải là JSON)'
+            }, status=400)
+        
+        # Lấy public key từ token của user
+        try:
+            token = APIToken.objects.get(user=user)
+            public_key_pem = token.public_key
+            
+            if not public_key_pem:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Missing public key',
+                    'message': 'Public key chưa được cung cấp. Vui lòng đăng nhập lại với public key.'
+                }, status=400)
+        except APIToken.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Token not found',
+                'message': 'Không tìm thấy token'
+            }, status=401)
+        
+        # BƯỚC 1: VERIFY CHỮ KÝ CỦA TẤT CẢ FILES TRƯỚC
+        print(f"[INFO] Bắt đầu verify chữ ký cho {len(uploaded_files)} files...")
+        
+        for uploaded_file in uploaded_files:
+            filename = uploaded_file.name
+            
+            # Kiểm tra có chữ ký cho file này không
+            if filename not in signatures:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Missing signature',
+                    'message': f'Không tìm thấy chữ ký cho file: {filename}',
+                    'filename': filename
+                }, status=400)
+            
+            # Đọc toàn bộ dữ liệu file để verify
+            uploaded_file.seek(0)
+            file_data = uploaded_file.read()
+            uploaded_file.seek(0)  # Reset lại để sử dụng sau
+            
+            # Verify chữ ký
+            signature_base64 = signatures[filename]
+            verify_result = verify_file_signature(public_key_pem, signature_base64, file_data)
+            
+            if not verify_result['verified']:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Signature verification failed',
+                    'message': f'Xác thực chữ ký thất bại cho file: {filename}',
+                    'filename': filename,
+                    'verify_error': verify_result.get('error', 'Unknown error')
+                }, status=400)
+            
+            print(f"[INFO] ✓ Verified signature for: {filename}")
+        
+        print(f"[SUCCESS] Tất cả {len(uploaded_files)} files đã được verify thành công!")
         
         # Validate and process files
         allowed_extensions = ['jpg', 'jpeg', 'png', 'bmp', 'tiff']
