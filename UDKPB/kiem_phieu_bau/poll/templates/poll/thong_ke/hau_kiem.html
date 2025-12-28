@@ -382,9 +382,9 @@
     <div class="column-section ballot-image-section">
       <h4 class="mb-3 section-title">Phiếu bầu (Grid)</h4>
       <div class="ballot-image-wrapper">
-        {% if flattened_image %}
+        {% if detection_image %}
         <img
-          src="/media/{{ flattened_image }}"
+          src="/media/{{ detection_image }}"
           alt="Phiếu bầu Grid #{{ current_ballot.ballot_id }}"
           class="ballot-image"
         />

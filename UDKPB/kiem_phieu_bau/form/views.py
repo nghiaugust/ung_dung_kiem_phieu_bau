@@ -176,7 +176,7 @@ def _generate_aruco_marker(marker_id, size_px=200, qr_data=None):
             version=None,  # Auto size
             error_correction=qrcode.constants.ERROR_CORRECT_L,
             box_size=10,
-            border=2,
+            border=0.5,  # Giảm border để sát lề hơn
         )
         qr.add_data(qr_data)
         qr.make(fit=True)

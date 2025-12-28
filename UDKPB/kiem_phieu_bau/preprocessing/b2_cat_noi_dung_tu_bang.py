@@ -217,8 +217,8 @@ def ve_bieu_do_projection(h_projection, v_projection, h_peaks, v_peaks, duong_da
     
     # Lưu đồ thị
     base_name = os.path.splitext(duong_dan_anh)[0]
-    plt.savefig(f"{base_name}_projection_histogram.png", dpi=150, bbox_inches='tight')
-    print(f"[INFO] Đã lưu đồ thị projection: {base_name}_projection_histogram.png")
+    plt.savefig(f"{base_name}_histogram.png", dpi=150, bbox_inches='tight')
+    print(f"[INFO] Đã lưu đồ thị projection: {base_name}_histogram.png")
     plt.close()
 
 
@@ -423,24 +423,16 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
                           (cell['x_min'] + 5, cell['y_min'] + 20), 
                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
         
-        # Lưu ảnh kết quả
+        # Lưu ảnh grid detection
         base_name = os.path.splitext(duong_dan_anh)[0]
-        ext = os.path.splitext(duong_dan_anh)[1]
-        output_path = f"{base_name}_edge_projection{ext}"
-        cv2.imwrite(output_path, result_img)
-        print(f"\n[INFO] Đã lưu ảnh kết quả: {output_path}")
+        detection_output = f"{base_name}_detection.jpg"
+        cv2.imwrite(detection_output, result_img)
+        print(f"\n[INFO] Đã lưu ảnh grid detection: {detection_output}")
         
-        # Lưu thêm ảnh edges để debug
-        edges_output = f"{base_name}_edges{ext}"
+        # Lưu ảnh edges kết hợp
+        edges_output = f"{base_name}_edges.jpg"
         cv2.imwrite(edges_output, edges)
-        print(f"[INFO] Đã lưu ảnh kết hợp: {edges_output}")
-        
-        # Lưu thêm ảnh đường ngang và dọc riêng biệt
-        h_output = f"{base_name}_horizontal_lines{ext}"
-        v_output = f"{base_name}_vertical_lines{ext}"
-        cv2.imwrite(h_output, h_lines_img)
-        cv2.imwrite(v_output, v_lines_img)
-        print(f"[DEBUG] Đã lưu ảnh debug: {h_output}, {v_output}")
+        print(f"[INFO] Đã lưu ảnh edges kết hợp: {edges_output}")
     
     return {
         'horizontal_lines': merged_h_lines,

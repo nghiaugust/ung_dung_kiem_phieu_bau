@@ -327,10 +327,10 @@ def hau_kiem_ballot(request, ballot_id):
 	from preprocessing.models import PreprocessedBallot, BallotCell
 	from counting.models import AIModelResult
 	
-	flattened_image = None
+	detection_image = None
 	try:
 		preprocessed = PreprocessedBallot.objects.get(ballot=ballot)
-		flattened_image = preprocessed.flattened_image
+		detection_image = preprocessed.detection_image
 	except PreprocessedBallot.DoesNotExist:
 		pass
 	
@@ -384,7 +384,7 @@ def hau_kiem_ballot(request, ballot_id):
 		'next_ballot_id': next_ballot_id,
 		'prev_ballot_url': prev_ballot_url,
 		'next_ballot_url': next_ballot_url,
-		'flattened_image': flattened_image,
+		'detection_image': detection_image,
 		'cell_results': cell_results,
 	}
 	

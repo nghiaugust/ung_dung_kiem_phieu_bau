@@ -76,7 +76,9 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
         dpi: int - DPI để chuyển đổi cm sang pixel (mặc định 300)
         
     Returns:
-        numpy.ndarray: Ảnh đã làm phẳng
+        tuple: (warped_image, qr_data)
+            - warped_image: numpy.ndarray - Ảnh đã làm phẳng
+            - qr_data: str | None - Dữ liệu từ QR code (hoặc None nếu không tìm thấy)
         
     Raises:
         ValueError: Nếu không tìm thấy đủ 4 markers hoặc không đọc được ảnh
@@ -114,6 +116,9 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
     
     # Dictionary lưu góc markers theo id
     marker_corners = {}
+    
+    # Biến lưu data QR code
+    detected_qr_data = None
     
     # Định nghĩa 4 vùng quét và marker dự kiến
     regions = [
@@ -162,6 +167,7 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
                 corner_point_global = corner_point + np.array([offset_x, offset_y])
                 
                 marker_corners[expected_id] = corner_point_global
+                detected_qr_data = qr_data  # Lưu data QR
                 
                 print(f"[INFO] Tìm thấy QR Code (ID 0) tại góc bottom-right: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
                 print(f"[INFO] QR Data: {qr_data}")
@@ -203,6 +209,7 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
                     corner_point_global = corner_point + np.array([offset_x, offset_y])
                     
                     marker_corners[expected_id] = corner_point_global
+                    detected_qr_data = qr_data  # Lưu data QR
                     
                     print(f"[INFO] Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
                     print(f"[INFO] QR Data: {qr_data}")
@@ -244,6 +251,7 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
                     corner_point_global = corner_point + np.array([offset_x, offset_y])
                     
                     marker_corners[expected_id] = corner_point_global
+                    detected_qr_data = qr_data  # Lưu data QR
                     
                     print(f"[INFO] Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
                     print(f"[INFO] QR Data: {qr_data}")
@@ -329,7 +337,7 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
     
     print(f"[INFO] Đã lưu ảnh làm phẳng tại: {duong_dan_anh_dau_ra}")
     
-    return warped
+    return warped, detected_qr_data
 
 
 # Alias cho tương thích với tên hàm cũ

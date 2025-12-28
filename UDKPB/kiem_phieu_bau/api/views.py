@@ -21,6 +21,9 @@ from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot
 from ballot.doc_qr import read_qr_code_only
 from security.hmac_utils import verify_ballot_from_qr
+from form.models import BallotDocument
+# Gọi làm phẳng ảnh
+from preprocessing.b1_lam_phang_anh import lam_phang_anh
 
 User = get_user_model()
 
@@ -1113,45 +1116,60 @@ def api_upload_ballots_batch(request, poll_id):
                             # Hủy toàn bộ transaction
                             raise Exception(f'File {uploaded_file.name}: Vượt quá kích thước cho phép')
                         
-                        # Tối ưu ảnh trước khi xử lý
-                        optimized_file = optimize_ballot_image(uploaded_file)
+                        # Lưu file tạm để xử lý làm phẳng ảnh
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_input:
+                            for chunk in uploaded_file.chunks():
+                                temp_input.write(chunk)
+                            temp_file_path = temp_input.name
                         
-                        # Đọc QR code từ phiếu bầu đã tối ưu
-                        qr_data = None
+                        # Tạo file tạm cho ảnh đầu ra
+                        temp_output_path = None
+                        
                         try:
-                            # Lưu file tạm từ optimized_file để đọc QR
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_file:
-                                optimized_file.seek(0)
-                                for chunk in optimized_file.chunks():
-                                    temp_file.write(chunk)
-                                temp_file_path = temp_file.name
+                            # Lấy kích thước từ BallotDocument của poll
+                            try:
+                                ballot_doc = BallotDocument.objects.get(poll=poll)
+                                chieu_ngang_cm = ballot_doc.marker_distance_horizontal
+                                chieu_doc_cm = ballot_doc.marker_distance_vertical
+                                
+                                if chieu_ngang_cm is None or chieu_doc_cm is None:
+                                    raise ValueError("BallotDocument không có thông tin kích thước marker")
+                                
+                                print(f"[INFO] Sử dụng kích thước từ BallotDocument: {chieu_ngang_cm}cm x {chieu_doc_cm}cm")
+                            except BallotDocument.DoesNotExist:
+                                # Fallback về kích thước mặc định nếu không tìm thấy BallotDocument
+                                chieu_ngang_cm = 18.0
+                                chieu_doc_cm = 25.5
+                                print(f"[WARNING] Không tìm thấy BallotDocument cho poll {poll.poll_id}, sử dụng kích thước mặc định: {chieu_ngang_cm}cm x {chieu_doc_cm}cm")
                             
-                            # Reset file pointer để có thể sử dụng lại
-                            optimized_file.seek(0)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_output:
+                                temp_output_path = temp_output.name
                             
-                            # Đọc chỉ QR code từ ảnh
-                            qr_result = read_qr_code_only(temp_file_path)
+                            # Làm phẳng ảnh và lấy data QR
+                            _, qr_data_raw = lam_phang_anh(
+                                temp_file_path,
+                                temp_output_path,
+                                chieu_ngang_cm=chieu_ngang_cm,
+                                chieu_doc_cm=chieu_doc_cm,
+                                dpi=300
+                            )
                             
-                            # Kiểm tra kết quả đọc QR
-                            if not qr_result.get('success'):
-                                result['error'] = f'Không thể đọc QR code: {qr_result.get("error", "Unknown error")}'
+                            # Parse QR data nếu có
+                            qr_result = {'success': True, 'qr_count': 0}
+                            if qr_data_raw:
+                                qr_result['qr_count'] = 1
+                                qr_result['qr_codes'] = [{'data': qr_data_raw}]
+                            
+                            # Kiểm tra kết quả làm phẳng ảnh
+                            if qr_result.get('qr_count', 0) == 0:
+                                result['error'] = 'Không tìm thấy QR code trên phiếu bầu hoặc không đủ 4 markers'
                                 failed += 1
                                 results.append(result)
                                 raise Exception(f'File {uploaded_file.name}: {result["error"]}')
                             
-                            if qr_result.get('qr_count', 0) == 0:
-                                result['error'] = 'Không tìm thấy QR code trên phiếu bầu'
-                                failed += 1
-                                results.append(result)
-                                raise Exception(f'File {uploaded_file.name}: Không tìm thấy QR code')
-                            
                             # Lấy thông tin QR code
                             qr_codes = qr_result.get('qr_codes', [])
-                            if qr_codes and 'parsed_data' in qr_codes[0]:
-                                qr_data = qr_codes[0]['parsed_data']
-                                result['qr_detected'] = True
-                                result['qr_data'] = qr_data
-                            elif qr_codes:
+                            if qr_codes:
                                 result['qr_detected'] = True
                                 result['qr_data_raw'] = qr_codes[0].get('data', '')
                             else:
@@ -1160,15 +1178,21 @@ def api_upload_ballots_batch(request, poll_id):
                                 results.append(result)
                                 raise Exception(f'File {uploaded_file.name}: Không thể đọc dữ liệu từ QR code')
                                 
-                        except Exception as qr_error:
-                            # Nếu đọc QR thất bại, raise exception để rollback
+                        except ValueError as straighten_error:
+                            # Lỗi từ làm phẳng ảnh (thiếu markers)
+                            result['error'] = f'Lỗi làm phẳng ảnh: {str(straighten_error)}'
+                            failed += 1
+                            results.append(result)
+                            raise Exception(f'File {uploaded_file.name}: {result["error"]}')
+                        except Exception as process_error:
+                            # Lỗi khác
                             if 'error' not in result:
-                                result['error'] = f'Lỗi đọc QR code: {str(qr_error)}'
+                                result['error'] = f'Lỗi xử lý ảnh: {str(process_error)}'
                                 failed += 1
                                 results.append(result)
                             raise
                         finally:
-                            # Xóa file tạm
+                            # Xóa file tạm input (chỉ xóa file input, giữ lại output)
                             if temp_file_path and os.path.exists(temp_file_path):
                                 try:
                                     os.unlink(temp_file_path)
@@ -1176,16 +1200,9 @@ def api_upload_ballots_batch(request, poll_id):
                                     pass
                         # Trích xuất ballot_id từ QR code
                         qr_ballot_id = None
-                        qr_code_raw = None
+                        qr_code_raw = result.get('qr_data_raw')
                         
-                        # Lấy dữ liệu QR code raw
-                        if qr_data and 'data' in qr_data:
-                            qr_code_raw = qr_data.get('data')
-                        elif result.get('qr_data_raw'):
-                            qr_code_raw = result['qr_data_raw']
-                        
-                        # Parse QR code có dạng "0:1:abcd" -> ballot_id = 1, hmac = abcd
-                        qr_hmac = None
+                        # Parse QR code có dạng "0:1:abcd" -> ballot_id = 1
                         if qr_code_raw:
                             try:
                                 parts = qr_code_raw.split(':')
@@ -1197,9 +1214,6 @@ def api_upload_ballots_batch(request, poll_id):
                                 
                                 qr_ballot_id = int(parts[1])
                                 result['qr_ballot_id'] = qr_ballot_id
-                                
-                                if len(parts) >= 3:
-                                    qr_hmac = parts[2]  # HMAC signature
                             except (ValueError, IndexError) as parse_error:
                                 result['error'] = f'Không thể parse ballot_id từ QR code: {qr_code_raw}'
                                 failed += 1
@@ -1213,8 +1227,6 @@ def api_upload_ballots_batch(request, poll_id):
                             'original_filename': uploaded_file.name,
                             'qr_code_raw': qr_code_raw
                         }
-                        
-                        ballot = None
                         
                         # Kiểm tra phải có ballot_id từ QR
                         if not qr_ballot_id:
@@ -1239,8 +1251,19 @@ def api_upload_ballots_batch(request, poll_id):
                             except:
                                 pass
                         
-                        # Update ballot with new image (đã được tối ưu từ trước)
-                        ballot.ballot_image = optimized_file
+                        # Đọc ảnh đã làm phẳng từ file
+                        from django.core.files import File
+                        
+                        # Lấy extension từ file gốc
+                        file_ext = uploaded_file.name.split('.')[-1].lower()
+                        
+                        with open(temp_output_path, 'rb') as f:
+                            ballot.ballot_image.save(
+                                f'{ballot.ballot_id}.{file_ext}',
+                                File(f),
+                                save=False
+                            )
+                        
                         ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
                         #ballot.timestamp = timezone.now()
                         
@@ -1258,10 +1281,16 @@ def api_upload_ballots_batch(request, poll_id):
                         
                         ballot.save()
                         
+                        # Xóa file tạm output SAU KHI save thành công
+                        if temp_output_path and os.path.exists(temp_output_path):
+                            try:
+                                os.unlink(temp_output_path)
+                            except:
+                                pass
+                        
                         result['success'] = True
                         result['ballot_id'] = ballot.ballot_id
                         result['is_update'] = True
-                        result['qr_hmac'] = qr_hmac
                         result['message'] = 'Đã cập nhật phiếu bầu từ QR code'
                         succeeded += 1
                         

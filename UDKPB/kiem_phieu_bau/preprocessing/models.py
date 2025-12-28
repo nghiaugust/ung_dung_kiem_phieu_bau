@@ -10,18 +10,14 @@ class PreprocessedBallot(models.Model):
 	"""
 	Lưu thông tin các ảnh đã xử lý cho ballot
 	Mỗi ballot sẽ có: 
-	- 1 ảnh đã làm phẳng
-	- 1 ảnh projection histogram (debug)
+	- 1 ảnh grid detection (debug)
 	- Nhiều ảnh ô đã cắt
 	"""
 	preprocessing_id = models.AutoField(primary_key=True)
 	ballot = models.OneToOneField(Ballot, on_delete=models.CASCADE, related_name='preprocessed')
 	
-	# Ảnh đã làm phẳng
-	flattened_image = models.CharField(max_length=512, null=True, blank=True)  # preprocessing/<ballot_id>.jpg
-	
-	# Ảnh projection histogram (debug)
-	histogram_image = models.CharField(max_length=512, null=True, blank=True)  # preprocessing/<ballot_id>_projection_histogram.png
+	# Ảnh grid detection (debug)
+	detection_image = models.CharField(max_length=512, null=True, blank=True)  # preprocessing/<ballot_id>_detection.jpg
 	
 	# Thời gian xử lý
 	processed_at = models.DateTimeField(auto_now_add=True)
@@ -68,17 +64,23 @@ class BallotCell(models.Model):
 @receiver(post_delete, sender=PreprocessedBallot)
 def delete_preprocessed_images_on_delete(sender, instance, **kwargs):
 	"""Xóa file ảnh khi xóa PreprocessedBallot"""
-	# Xóa flattened_image
-	if instance.flattened_image:
-		file_path = os.path.join(settings.MEDIA_ROOT, instance.flattened_image)
+	# Xóa detection_image
+	if instance.detection_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, instance.detection_image)
 		if os.path.isfile(file_path):
 			os.remove(file_path)
 	
-	# Xóa histogram_image
-	if instance.histogram_image:
-		file_path = os.path.join(settings.MEDIA_ROOT, instance.histogram_image)
-		if os.path.isfile(file_path):
-			os.remove(file_path)
+	# Xóa các file debug (edges, histogram) nếu có
+	ballot_id = instance.ballot.ballot_id
+	ballot_dir = os.path.join(settings.MEDIA_ROOT, 'ballots')
+	
+	edges_file = os.path.join(ballot_dir, f"ballot_{ballot_id}_edges.jpg")
+	if os.path.isfile(edges_file):
+		os.remove(edges_file)
+	
+	histogram_file = os.path.join(ballot_dir, f"ballot_{ballot_id}_histogram.png")
+	if os.path.isfile(histogram_file):
+		os.remove(histogram_file)
 
 
 @receiver(pre_save, sender=PreprocessedBallot)
@@ -92,15 +94,9 @@ def delete_old_preprocessed_images_on_update(sender, instance, **kwargs):
 	except PreprocessedBallot.DoesNotExist:
 		return
 	
-	# Xóa flattened_image cũ nếu thay đổi
-	if old_instance.flattened_image and old_instance.flattened_image != instance.flattened_image:
-		file_path = os.path.join(settings.MEDIA_ROOT, old_instance.flattened_image)
-		if os.path.isfile(file_path):
-			os.remove(file_path)
-	
-	# Xóa histogram_image cũ nếu thay đổi
-	if old_instance.histogram_image and old_instance.histogram_image != instance.histogram_image:
-		file_path = os.path.join(settings.MEDIA_ROOT, old_instance.histogram_image)
+	# Xóa detection_image cũ nếu thay đổi
+	if old_instance.detection_image and old_instance.detection_image != instance.detection_image:
+		file_path = os.path.join(settings.MEDIA_ROOT, old_instance.detection_image)
 		if os.path.isfile(file_path):
 			os.remove(file_path)
 

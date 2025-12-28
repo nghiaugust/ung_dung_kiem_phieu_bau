@@ -98,18 +98,12 @@ def process_single_ballot(ballot, preprocessing_dir):
 		# Xóa các file cũ trước khi xử lý lại
 		print(f"[INFO] Ballot {ballot_id} đã được xử lý trước đó, xóa dữ liệu cũ...")
 		
-		# Xóa file ảnh flattened và histogram cũ
-		if preprocessed.flattened_image:
-			old_flattened_path = os.path.join(settings.MEDIA_ROOT, preprocessed.flattened_image)
-			if os.path.exists(old_flattened_path):
-				os.remove(old_flattened_path)
-				print(f"[INFO] Đã xóa ảnh flattened cũ: {old_flattened_path}")
-		
-		if preprocessed.histogram_image:
-			old_histogram_path = os.path.join(settings.MEDIA_ROOT, preprocessed.histogram_image)
-			if os.path.exists(old_histogram_path):
-				os.remove(old_histogram_path)
-				print(f"[INFO] Đã xóa ảnh histogram cũ: {old_histogram_path}")
+		# Xóa file ảnh detection cũ
+		if preprocessed.detection_image:
+			old_detection_path = os.path.join(settings.MEDIA_ROOT, preprocessed.detection_image)
+			if os.path.exists(old_detection_path):
+				os.remove(old_detection_path)
+				print(f"[INFO] Đã xóa ảnh detection cũ: {old_detection_path}")
 		
 		# Xóa các file ảnh cell cũ
 		old_cells = BallotCell.objects.filter(preprocessed_ballot=preprocessed)
@@ -118,11 +112,6 @@ def process_single_ballot(ballot, preprocessing_dir):
 			if os.path.exists(old_cell_path):
 				os.remove(old_cell_path)
 		print(f"[INFO] Đã xóa {old_cells.count()} ảnh cell cũ")
-		
-		# Xóa các ảnh debug (edges, edge_projection) nếu có
-		edges_path = os.path.join(preprocessing_dir, f"{ballot_id}_edges.jpg")
-		if os.path.exists(edges_path):
-			os.remove(edges_path)
 		
 		# Xóa records trong database
 		old_cells.delete()
@@ -139,48 +128,24 @@ def process_single_ballot(ballot, preprocessing_dir):
 	)
 	
 	try:
-		# Đường dẫn ảnh gốc
+		# Đường dẫn ảnh gốc (đã được làm phẳng khi upload)
 		input_image_path = ballot.ballot_image.path
 		
 		if not os.path.exists(input_image_path):
 			raise FileNotFoundError(f"Không tìm thấy ảnh ballot: {input_image_path}")
 		
+		# Đọc ảnh đã được làm phẳng từ trước
+		warped = cv2.imread(input_image_path)
+		if warped is None:
+			raise ValueError(f"Không thể đọc ảnh từ: {input_image_path}")
+		
+		print(f"[INFO] Đọc ảnh đã làm phẳng từ: {input_image_path}")
+		
 		# Định nghĩa đường dẫn output
-		temp_flattened_path = os.path.join(preprocessing_dir, f"{ballot_id}_temp.jpg")
-		edge_projection_path = os.path.join(preprocessing_dir, f"{ballot_id}_edge_projection.jpg")
-		histogram_path = os.path.join(preprocessing_dir, f"{ballot_id}_projection_histogram.png")
+		temp_flattened_path = input_image_path  # Sử dụng ảnh gốc đã làm phẳng
 		
-		# B1: Làm phẳng ảnh
-		print(f"[INFO] B1: Làm phẳng ảnh ballot {ballot_id}...")
-		
-		# Lấy kích thước từ BallotDocument của poll
-		try:
-			ballot_doc = BallotDocument.objects.get(poll=ballot.poll)
-			chieu_ngang_cm = ballot_doc.marker_distance_horizontal
-			chieu_doc_cm = ballot_doc.marker_distance_vertical
-			
-			if chieu_ngang_cm is None or chieu_doc_cm is None:
-				raise ValueError("BallotDocument không có thông tin kích thước marker")
-			
-			print(f"[INFO] Sử dụng kích thước từ BallotDocument: {chieu_ngang_cm}cm x {chieu_doc_cm}cm")
-		except BallotDocument.DoesNotExist:
-			# Fallback về kích thước mặc định nếu không tìm thấy BallotDocument
-			chieu_ngang_cm = 18.0
-			chieu_doc_cm = 25.5
-			print(f"[WARNING] Không tìm thấy BallotDocument cho poll {ballot.poll.poll_id}, sử dụng kích thước mặc định: {chieu_ngang_cm}cm x {chieu_doc_cm}cm")
-		
-		warped = lam_phang_anh(
-			duong_dan_anh_dau_vao=input_image_path,
-			duong_dan_anh_dau_ra=temp_flattened_path,
-			chieu_ngang_cm=chieu_ngang_cm,
-			chieu_doc_cm=chieu_doc_cm,
-			dpi=300
-		)
-		
-		print(f"[INFO] Đã làm phẳng ảnh")
-		
-		# B2: Phát hiện grid và cắt ô (lưu ảnh có grid detection)
-		print(f"[INFO] B2: Phát hiện grid và cắt ô ballot {ballot_id}...")
+		# B1: Phát hiện grid và cắt ô (lưu ảnh có grid detection)
+		print(f"[INFO] B1: Phát hiện grid và cắt ô ballot {ballot_id}...")
 		
 		# Lấy số hàng và cột từ BallotDocument của poll (created_at gần nhất)
 		try:
@@ -228,10 +193,6 @@ def process_single_ballot(ballot, preprocessing_dir):
 		if len(grid) == 0:
 			raise ValueError("Grid rỗng, không có ô nào")
 		
-		# Xóa ảnh temp và đổi tên ảnh edge_projection
-		if os.path.exists(temp_flattened_path):
-			os.remove(temp_flattened_path)
-		
 		print(f"[INFO] Đã lưu ảnh grid detection và histogram")
 		
 		# Cắt các ô và lưu
@@ -267,9 +228,15 @@ def process_single_ballot(ballot, preprocessing_dir):
 		
 		print(f"[INFO] Đã cắt và lưu {cell_count} ô")
 		
+		# Lưu đường dẫn detection_image (file được tạo bởi phat_hien_duong_ke_edge_projection)
+		# File detection được lưu tại: <ballot_image_path_without_ext>_detection.jpg
+		# Ví dụ: ballots/123.jpg -> ballots/123_detection.jpg
+		ballot_image_relative = ballot.ballot_image.name  # Ví dụ: 'ballots/123.jpg'
+		base_name_relative = os.path.splitext(ballot_image_relative)[0]  # 'ballots/123'
+		detection_relative = f"{base_name_relative}_detection.jpg"  # 'ballots/123_detection.jpg'
+		
 		# Cập nhật PreprocessedBallot
-		preprocessed.flattened_image = os.path.join('preprocessing', f"{ballot_id}_temp_edge_projection.jpg")
-		preprocessed.histogram_image = os.path.join('preprocessing', f"{ballot_id}_temp_projection_histogram.png")
+		preprocessed.detection_image = detection_relative
 		preprocessed.status = 'completed'
 		preprocessed.cell_count = cell_count
 		preprocessed.error_message = None
@@ -281,8 +248,7 @@ def process_single_ballot(ballot, preprocessing_dir):
 			'ballot_id': ballot_id,
 			'status': 'success',
 			'cell_count': cell_count,
-			'flattened_image': preprocessed.flattened_image,
-			'histogram_image': preprocessed.histogram_image
+			'detection_image': preprocessed.detection_image
 		}
 		
 	except Exception as e:
