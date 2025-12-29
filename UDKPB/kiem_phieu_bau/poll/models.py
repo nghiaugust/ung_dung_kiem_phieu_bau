@@ -126,10 +126,6 @@ class Voter(models.Model): # cử tri
         # Ràng buộc duy nhất theo cặp (Poll + Hash) thay vì plaintext
         # Trong 1 cuộc bỏ phiếu, mã code_id này chỉ xuất hiện 1 lần.
 		unique_together = [['poll', 'code_id_hash'], ['poll', 'email_hash']]
-		indexes = [
-            models.Index(fields=['poll', 'code_id_hash']), # Index để search check-in cho nhanh
-			models.Index(fields=['full_name']),
-        ]
 	
 	@staticmethod
 	def hash_value(value: str) -> str:
