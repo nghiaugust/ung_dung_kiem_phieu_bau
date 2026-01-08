@@ -41,14 +41,11 @@ def optimize_ballot_image(uploaded_file, max_size_kb=500, quality=85):
         if img is None:
             raise ValueError("Không thể đọc ảnh")
         
-        # 2. Giữ nguyên kích thước (không resize để đảm bảo chất lượng tốt nhất)
-        height, width = img.shape[:2]
-        
-        # 3. Lọc nhiễu nhẹ để giảm dung lượng khi nén
+        # 2. Lọc nhiễu nhẹ để giảm dung lượng khi nén
         # Sử dụng bilateral filter để giữ cạnh sắc nét (quan trọng cho YOLO)
         denoised = cv2.bilateralFilter(img, d=5, sigmaColor=50, sigmaSpace=50)
         
-        # 4. Tăng độ tương phản nhẹ để chữ rõ hơn (tốt cho TrOCR)
+        # 3. Tăng độ tương phản nhẹ để chữ rõ hơn (tốt cho TrOCR)
         # Convert to LAB color space
         lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
@@ -61,12 +58,12 @@ def optimize_ballot_image(uploaded_file, max_size_kb=500, quality=85):
         enhanced = cv2.merge([l, a, b])
         final_img = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
         
-        # 5. Encode thành JPEG với quality được chỉ định
+        # 4. Encode thành JPEG với quality được chỉ định
         # JPEG tốt hơn WebP về độ tương thích và vẫn nén tốt
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
         _, buffer = cv2.imencode('.jpg', final_img, encode_param)
         
-        # 6. Kiểm tra kích thước, nếu vẫn quá lớn thì giảm quality
+        # 5. Kiểm tra kích thước, nếu vẫn quá lớn thì giảm quality
         current_size_kb = len(buffer) / 1024
         
         if current_size_kb > max_size_kb and quality > 60:
@@ -75,7 +72,7 @@ def optimize_ballot_image(uploaded_file, max_size_kb=500, quality=85):
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), new_quality]
             _, buffer = cv2.imencode('.jpg', final_img, encode_param)
         
-        # 7. Convert sang BytesIO để trả về
+        # 6. Convert sang BytesIO để trả về
         result = BytesIO(buffer.tobytes())
         result.seek(0)
         

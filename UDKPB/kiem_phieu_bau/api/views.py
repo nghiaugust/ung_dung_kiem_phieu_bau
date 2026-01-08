@@ -17,7 +17,6 @@ from django.utils import timezone
 
 from .models import APIToken
 from .authentication import require_api_token
-from .image_optimizer import optimize_ballot_image
 from .verify_file_signature import verify_file_signature
 from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot
@@ -952,24 +951,9 @@ def api_upload_ballot(request, poll_id):
                 except:
                     pass  # Ignore error if file doesn't exist
             
-            # Tối ưu ảnh trước khi lưu (giảm dung lượng nhưng vẫn đảm bảo TrOCR, YOLO nhận diện tốt)
+            # Lưu file trực tiếp không qua tối ưu
             uploaded_file.seek(0)
-            optimized_bytes = optimize_ballot_image(uploaded_file)
-            
-            # Tạo InMemoryUploadedFile từ BytesIO đã tối ưu
-            from django.core.files.uploadedfile import InMemoryUploadedFile
-            
-            optimized_bytes.seek(0)
-            optimized_file = InMemoryUploadedFile(
-                optimized_bytes,
-                'ballot_image',
-                f'{ballot.ballot_id}.jpg',
-                'image/jpeg',
-                optimized_bytes.getbuffer().nbytes,
-                None
-            )
-            
-            ballot.ballot_image = optimized_file
+            ballot.ballot_image = uploaded_file
             ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
             
             # Chuẩn bị và update metadata
@@ -1360,41 +1344,15 @@ def api_upload_ballots_batch(request, poll_id):
                             except:
                                 pass
                         
-                        # Tối ưu ảnh đã làm phẳng để giảm dung lượng
+                        # Lưu file đã làm phẳng trực tiếp không qua tối ưu
                         from django.core.files import File
-                        from django.core.files.uploadedfile import InMemoryUploadedFile
                         
-                        # Đọc file đã làm phẳng vào BytesIO
                         with open(temp_output_path, 'rb') as f:
-                            temp_file_for_optimize = InMemoryUploadedFile(
-                                BytesIO(f.read()),
-                                'ballot_image',
-                                uploaded_file.name,
-                                'image/jpeg',
-                                os.path.getsize(temp_output_path),
-                                None
+                            ballot.ballot_image.save(
+                                f'{ballot.ballot_id}.jpg',
+                                File(f),
+                                save=False
                             )
-                        
-                        # Tối ưu ảnh
-                        optimized_bytes = optimize_ballot_image(temp_file_for_optimize)
-                        
-                        # Tạo InMemoryUploadedFile từ BytesIO đã tối ưu
-                        optimized_bytes.seek(0)
-                        optimized_file = InMemoryUploadedFile(
-                            optimized_bytes,
-                            'ballot_image',
-                            f'{ballot.ballot_id}.jpg',
-                            'image/jpeg',
-                            optimized_bytes.getbuffer().nbytes,
-                            None
-                        )
-                        
-                        # Save ảnh đã tối ưu
-                        ballot.ballot_image.save(
-                            f'{ballot.ballot_id}.jpg',
-                            optimized_file,
-                            save=False
-                        )
                         
                         ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
                         #ballot.timestamp = timezone.now()

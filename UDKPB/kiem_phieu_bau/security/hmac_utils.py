@@ -260,7 +260,7 @@ def generate_qr_data(ballot_id: int, hmac_signature: str, marker_id: int = 0) ->
     """
     return f"{marker_id}:{ballot_id}:{hmac_signature}"
 
-
+# Hàm khởi tạo HMAC key cho Poll
 def initialize_poll_hmac_key(poll) -> str:
     """
     Khởi tạo HMAC secret key cho một poll mới.
