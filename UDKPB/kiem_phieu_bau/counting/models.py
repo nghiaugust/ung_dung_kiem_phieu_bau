@@ -5,15 +5,22 @@ from poll.models import Poll
 class AIModelResult(models.Model):
 	"""
 	Lưu kết quả từ các AI models (TrOCR, YOLO, etc.)
+	result_model chứa cả thông tin cấu hình và kết quả:
+	{
+		'config': {'type': 'config1' hoặc 'config2', ...},
+		'results': [...]
+	}
 	"""
 	result_id = models.AutoField(primary_key=True)
 	poll = models.ForeignKey(Poll, on_delete=models.CASCADE, related_name='ai_results')
 	
-	# ID/tên của model (VD: 'trocr', 'yolo', 'trocr-v2', etc.)
-	model_id = models.CharField(max_length=100, db_index=True)
-	
-	# Kết quả JSON từ model
+	# Kết quả JSON từ model (chứa cả config và results)
 	result_model = models.JSONField()
+	
+	# Tự động kiểm phiếu
+	auto_check_enabled = models.BooleanField(default=False, help_text='Bật/tắt tự động kiểm phiếu')
+	auto_check_max_ballots = models.IntegerField(null=True, blank=True, help_text='Số lượng phiếu tối đa cần kiểm (None = tất cả)')
+	auto_check_processed = models.IntegerField(default=0, help_text='Số phiếu đã kiểm tự động')
 	
 	# Metadata
 	created_at = models.DateTimeField(auto_now_add=True)
@@ -32,9 +39,10 @@ class AIModelResult(models.Model):
 		verbose_name = 'Kết quả AI Model'
 		verbose_name_plural = 'Kết quả AI Models'
 		indexes = [
-			models.Index(fields=['poll', 'model_id']),
+			models.Index(fields=['poll']),
 			models.Index(fields=['created_at']),
 		]
 	
 	def __str__(self):
-		return f"{self.model_id} - Poll {self.poll_id} - {self.status}"
+		config_type = self.result_model.get('config', {}).get('type', 'unknown')
+		return f"{config_type} - Poll {self.poll_id} - {self.status}"

@@ -30,6 +30,7 @@ class Ballot(models.Model): # phiếu bầu
 
 	timestamp = models.DateTimeField(auto_now_add=True)  # Thời gian tạo phiếu (chỉ set khi tạo, không thay đổi sau đó)
 	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
+	is_post_checked = models.BooleanField(default=False)  # Đã hậu kiểm chưa
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
 	ballot_image = EncryptedImageField(upload_to=ballot_image_upload_path, null=True, blank=True)  # Đường dẫn ảnh được mã hóa
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu

@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.conf import settings
@@ -181,57 +182,96 @@ def save_ballot_selections_from_results(poll: Poll, result_data: Dict):
 	ballot_ids = Ballot.objects.filter(poll=poll).values_list('ballot_id', flat=True)
 	BallotSelection.objects.filter(ballot_id__in=ballot_ids).delete()
 	
-	# 2. Lấy danh sách candidates của poll
-	candidates = Candidate.objects.filter(poll=poll)
+	# 2. Lấy danh sách candidates của poll (theo thứ tự candidate_id)
+	candidates = Candidate.objects.filter(poll=poll).order_by('candidate_id')
 	candidate_names = {c.candidate_id: c.name for c in candidates}
+	candidate_list = list(candidates)  # Danh sách theo thứ tự cho config2
 	
 	if not candidate_names:
 		return  # Không có candidate thì không làm gì
+	
+	# Lấy loại cấu hình
+	config = result_data.get('config', {})
+	config_type = config.get('type', 'config1')  # Mặc định config1
 	
 	# 3. Xử lý từng dòng results
 	results = result_data.get('results', [])
 	selections_to_create = []
 	
-	for item in results:
-		ballot_id = item.get('ballot_id')
-		results_list = item.get('results', [])
-		
-		# Cần ít nhất 2 phần tử: results[0]=tên, results[1]=đồng ý
-		if len(results_list) < 2:
-			continue
-		
-		recognized_name = results_list[0]  # Tên từ TrOCR
-		agree_vote = results_list[1]  # Kết quả cột đồng ý từ YOLO
-		
-		# Kiểm tra xem có dấu X ở cột đồng ý không
-		if 'x_mark' not in agree_vote.lower():
-			continue  # Không có dấu X thì bỏ qua
-		
-		# Loại bỏ các ký tự đặc biệt từ recognized_name (chỉ giữ chữ và số)
-		recognized_name_clean = recognized_name.strip()
-		
-		# Tìm candidate giống nhất với recognized_name
-		best_match_id = None
-		best_match_ratio = 0.0
-		
-		for candidate_id, candidate_name in candidate_names.items():
-			# Sử dụng difflib để so sánh tên
-			ratio = difflib.SequenceMatcher(None, 
-												recognized_name_clean.upper(), 
-												candidate_name.upper()).ratio()
+	if config_type == 'config1':
+		# CONFIG 1: TrOCR nhận diện tên + YOLO detect dấu X
+		for item in results:
+			ballot_id = item.get('ballot_id')
+			results_list = item.get('results', [])
 			
-			if ratio > best_match_ratio:
-				best_match_ratio = ratio
-				best_match_id = candidate_id
-		
-		# Chỉ tạo BallotSelection nếu tỉ lệ khớp >= 0.6 (60%)
-		if best_match_id and best_match_ratio >= 0.6:
-			selections_to_create.append(
-				BallotSelection(
-					ballot_id=ballot_id,
-					candidate_id=best_match_id
+			# Cần ít nhất 2 phần tử: results[0]=tên, results[1]=đồng ý
+			if len(results_list) < 2:
+				continue
+			
+			recognized_name = results_list[0]  # Tên từ TrOCR
+			agree_vote = results_list[1]  # Kết quả cột đồng ý từ YOLO
+			
+			# Kiểm tra xem có dấu X ở cột đồng ý không
+			if 'x_mark' not in agree_vote.lower():
+				continue  # Không có dấu X thì bỏ qua
+			
+			# Loại bỏ các ký tự đặc biệt từ recognized_name (chỉ giữ chữ và số)
+			recognized_name_clean = recognized_name.strip()
+			
+			# Tìm candidate giống nhất với recognized_name
+			best_match_id = None
+			best_match_ratio = 0.0
+			
+			for candidate_id, candidate_name in candidate_names.items():
+				# Sử dụng difflib để so sánh tên
+				ratio = difflib.SequenceMatcher(None, 
+											recognized_name_clean.upper(), 
+											candidate_name.upper()).ratio()
+				
+				if ratio > best_match_ratio:
+					best_match_ratio = ratio
+					best_match_id = candidate_id
+			
+			# Chỉ tạo BallotSelection nếu tỉ lệ khớp >= 0.6 (60%)
+			if best_match_id and best_match_ratio >= 0.6:
+				selections_to_create.append(
+					BallotSelection(
+						ballot_id=ballot_id,
+						candidate_id=best_match_id
+					)
 				)
-			)
+	
+	elif config_type == 'config2':
+		# CONFIG 2: Họ tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
+		for item in results:
+			ballot_id = item.get('ballot_id')
+			row = item.get('row')  # Dòng hiện tại (bắt đầu từ 0)
+			results_list = item.get('results', [])
+			
+			# Cần ít nhất 2 phần tử: results[0]=đồng ý, results[1]=không đồng ý
+			if len(results_list) < 2:
+				continue
+			
+			agree_vote = results_list[0]  # Kết quả cột đồng ý từ YOLO
+			
+			# Kiểm tra xem có dấu X ở cột đồng ý không
+			if 'x_mark' not in agree_vote.lower():
+				continue  # Không có dấu X thì bỏ qua
+			
+			# Tính chỉ số candidate dựa trên row
+			# row được truyền từ process_counting (đã trừ start_row)
+			start_row = config.get('start_row', 1)  # Giá trị DB (bắt đầu từ 0)
+			candidate_index = row - start_row  # Chỉ số trong danh sách candidate
+			
+			# Kiểm tra xem candidate_index có hợp lệ không
+			if 0 <= candidate_index < len(candidate_list):
+				candidate = candidate_list[candidate_index]
+				selections_to_create.append(
+					BallotSelection(
+						ballot_id=ballot_id,
+						candidate_id=candidate.candidate_id
+					)
+				)
 	
 	# 4. Bulk create để tối ưu performance
 	if selections_to_create:
@@ -271,13 +311,23 @@ def counting_form_view(request, poll_id):
 	trocr_status = False
 	yolo_status = False
 	try:
-		health_response = requests.get('http://localhost:8080/api/health/', timeout=5)
+		health_response = requests.get('http://localhost:8080/api/health/', timeout=0.5)
 		if health_response.status_code == 200:
 			health_data = health_response.json()
 			trocr_status = health_data.get('services', {}).get('trocr', False)
 			yolo_status = health_data.get('services', {}).get('yolo', False)
 	except:
 		pass  # Nếu lỗi thì để mặc định False
+	
+	# Lấy thông tin tự động kiểm (nếu có)
+	auto_check_enabled = False
+	auto_check_max_ballots = ballots_count
+	auto_check_processed = 0
+	latest_result = AIModelResult.objects.filter(poll=poll).order_by('-created_at').first()
+	if latest_result:
+		auto_check_enabled = latest_result.auto_check_enabled
+		auto_check_max_ballots = latest_result.auto_check_max_ballots or ballots_count
+		auto_check_processed = latest_result.auto_check_processed
 	
 	context = {
 		'poll': poll,
@@ -289,6 +339,9 @@ def counting_form_view(request, poll_id):
 		'preprocessed_count': preprocessed_count,
 		'trocr_status': trocr_status,
 		'yolo_status': yolo_status,
+		'auto_check_enabled': auto_check_enabled,
+		'auto_check_max_ballots': auto_check_max_ballots,
+		'auto_check_processed': auto_check_processed,
 	}
 	
 	return render(request, 'counting/counting_form.html', context)
@@ -304,11 +357,20 @@ def process_counting(request, poll_id):
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	
 	# Parse dữ liệu từ form
-	config_vote_table = request.POST.get('config_vote_table') == '1'
+	config1 = request.POST.get('config1') == '1'
+	config2 = request.POST.get('config2') == '1'
 	
-	if not config_vote_table:
-		messages.warning(request, 'Vui lòng chọn cấu hình bảng biểu quyết!')
+	# Kiểm tra phải chọn đúng 1 cấu hình
+	if not config1 and not config2:
+		messages.warning(request, 'Vui lòng chọn một cấu hình!')
 		return redirect('counting_form', poll_id=poll_id)
+	
+	if config1 and config2:
+		messages.warning(request, 'Chỉ được chọn một cấu hình!')
+		return redirect('counting_form', poll_id=poll_id)
+	
+	# Xác định loại cấu hình
+	config_type = 'config1' if config1 else 'config2'
 	
 	# Lấy điều kiện
 	start_row = int(request.POST.get('start_row', 2)) - 1  # Trừ 1 vì DB bắt đầu từ 0
@@ -337,14 +399,21 @@ def process_counting(request, poll_id):
 		messages.error(request, 'Không tìm thấy dữ liệu dòng nào để xử lý!')
 		return redirect('counting_form', poll_id=poll_id)
 	
-	# Lấy cấu hình từ form (linh hoạt cho các config khác sau này)
-	# Chuyển đổi từ UI (bắt đầu từ 1) sang DB (bắt đầu từ 0)
-	trocr_col_ui = int(request.POST.get('vote_table_trocr_col', 2))
-	yolo_cols_ui_str = request.POST.get('vote_table_yolo_cols', '3,4')
-	
-	# Chuyển đổi sang index DB (trừ 1)
-	trocr_col = trocr_col_ui - 1
-	yolo_cols = [int(col.strip()) - 1 for col in yolo_cols_ui_str.split(',')]
+	# Lấy cấu hình từ form dựa trên loại config
+	if config_type == 'config1':
+		# CONFIG 1: TrOCR + YOLO
+		trocr_col_ui = int(request.POST.get('config1_trocr_col', 2))
+		yolo_cols_ui_str = request.POST.get('config1_yolo_cols', '3,4')
+		
+		# Chuyển đổi từ UI (bắt đầu từ 1) sang DB (bắt đầu từ 0)
+		trocr_col = trocr_col_ui - 1
+		yolo_cols = [int(col.strip()) - 1 for col in yolo_cols_ui_str.split(',')]
+	else:
+		# CONFIG 2: Chỉ YOLO (không có TrOCR)
+		trocr_col = None
+		trocr_col_ui = None
+		yolo_cols_ui_str = request.POST.get('config2_yolo_cols', '3,4')
+		yolo_cols = [int(col.strip()) - 1 for col in yolo_cols_ui_str.split(',')]
 	
 	# Lấy tất cả ballot trong poll
 	ballots = Ballot.objects.filter(poll=poll)
@@ -359,20 +428,6 @@ def process_counting(request, poll_id):
 		
 		# Xử lý từng dòng
 		for row in rows_to_process:
-			# 1. Lấy ảnh cột 2 (tên) - TrOCR
-			trocr_cells = BallotCell.objects.filter(
-				preprocessed_ballot__ballot_id=ballot_id,
-				row=row,
-				col=trocr_col
-			).select_related('preprocessed_ballot')
-			
-			# 2. Lấy ảnh cột 3, 4 (đồng ý, không đồng ý) - YOLO
-			yolo_cells = BallotCell.objects.filter(
-				preprocessed_ballot__ballot_id=ballot_id,
-				row=row,
-				col__in=yolo_cols
-			).select_related('preprocessed_ballot').order_by('col')
-			
 			# Tạo đường dẫn ảnh
 			trocr_image_path = None
 			yolo_image_paths = []
@@ -383,22 +438,37 @@ def process_counting(request, poll_id):
 				'results': []
 			}
 			
-			# Xử lý TrOCR
-			if trocr_cells.exists():
-				trocr_cell = trocr_cells.first()
-				trocr_image_path = os.path.join(settings.MEDIA_ROOT, trocr_cell.cell_image)
-				if os.path.exists(trocr_image_path):
-					cell_info['images'].append(os.path.basename(trocr_cell.cell_image))
-					
-					# Gọi TrOCR API
-					start_time = time.time()
-					trocr_result = call_trocr_api([trocr_image_path])
-					
-					if trocr_result.get('success') and trocr_result.get('results'):
-						recognized_text = trocr_result['results'][0].get('text', '')
-						cell_info['results'].append(f"{recognized_text}")
-					else:
-						cell_info['results'].append("[Lỗi]")
+			# Xử lý TrOCR (chỉ cho config1)
+			if config_type == 'config1' and trocr_col is not None:
+				# 1. Lấy ảnh cột tên - TrOCR
+				trocr_cells = BallotCell.objects.filter(
+					preprocessed_ballot__ballot_id=ballot_id,
+					row=row,
+					col=trocr_col
+				).select_related('preprocessed_ballot')
+				
+				if trocr_cells.exists():
+					trocr_cell = trocr_cells.first()
+					trocr_image_path = os.path.join(settings.MEDIA_ROOT, trocr_cell.cell_image)
+					if os.path.exists(trocr_image_path):
+						cell_info['images'].append(os.path.basename(trocr_cell.cell_image))
+						
+						# Gọi TrOCR API
+						start_time = time.time()
+						trocr_result = call_trocr_api([trocr_image_path])
+						
+						if trocr_result.get('success') and trocr_result.get('results'):
+							recognized_text = trocr_result['results'][0].get('text', '')
+							cell_info['results'].append(f"{recognized_text}")
+						else:
+							cell_info['results'].append("[Lỗi]")
+			
+			# 2. Lấy ảnh các cột YOLO (đồng ý, không đồng ý) - YOLO
+			yolo_cells = BallotCell.objects.filter(
+				preprocessed_ballot__ballot_id=ballot_id,
+				row=row,
+				col__in=yolo_cols
+			).select_related('preprocessed_ballot').order_by('col')
 			
 			# Xử lý YOLO
 			for yolo_cell in yolo_cells:
@@ -437,10 +507,10 @@ def process_counting(request, poll_id):
 	
 	# Lưu kết quả tổng hợp vào database
 	if combined_results:
-		result_data = {
-			'success': True,
-			'config': {
-				'type': 'vote_table',
+		# Tạo config data dựa trên loại cấu hình
+		if config_type == 'config1':
+			config_data = {
+				'type': 'config1',
 				'trocr_col': trocr_col,  # Giá trị DB (bắt đầu từ 0)
 				'trocr_col_ui': trocr_col_ui,  # Giá trị UI (bắt đầu từ 1)
 				'yolo_cols': yolo_cols,  # Giá trị DB (bắt đầu từ 0)
@@ -448,21 +518,41 @@ def process_counting(request, poll_id):
 				'start_row': start_row,  # Giá trị DB (bắt đầu từ 0)
 				'end_row': end_row,  # Giá trị DB (bắt đầu từ 0)
 				'yolo_confidence': yolo_confidence
-			},
+			}
+		else:  # config2
+			config_data = {
+				'type': 'config2',
+				'yolo_cols': yolo_cols,  # Giá trị DB (bắt đầu từ 0)
+				'yolo_cols_ui': yolo_cols_ui_str,  # Giá trị UI (bắt đầu từ 1)
+				'start_row': start_row,  # Giá trị DB (bắt đầu từ 0)
+				'end_row': end_row,  # Giá trị DB (bắt đầu từ 0)
+				'yolo_confidence': yolo_confidence
+			}
+		
+		result_data = {
+			'success': True,
+			'config': config_data,
 			'total_rows': total_processed,
 			'results': combined_results
 		}
+		
+		# Lấy thông tin tự động kiểm từ form
+		auto_check_enabled = request.POST.get('auto_check_enabled') == 'on'
+		auto_check_max_ballots_str = request.POST.get('auto_check_max_ballots', '').strip()
+		auto_check_max_ballots = int(auto_check_max_ballots_str) if auto_check_max_ballots_str else None
 		
 		# Xóa kết quả cũ của poll này trước khi tạo kết quả mới
 		AIModelResult.objects.filter(poll=poll).delete()
 		
 		AIModelResult.objects.create(
 			poll=poll,
-			model_id='vote_table_combined',
 			result_model=result_data,
 			processing_time=0,  # Tổng thời gian đã được tính trong quá trình xử lý
 			status='success',
-			error_message=None
+			error_message=None,
+			auto_check_enabled=auto_check_enabled,
+			auto_check_max_ballots=auto_check_max_ballots,
+			auto_check_processed=total_processed  # Số phiếu đã kiểm lần này
 		)
 		
 		# Tự động tạo BallotSelection từ kết quả
@@ -504,4 +594,97 @@ def counting_results_view(request, poll_id):
 	}
 	
 	return render(request, 'counting/counting_results.html', context)
+
+
+def save_config_only(request, poll_id):
+	"""
+	Lưu cấu hình cho tự động kiểm mà không chạy AI
+	"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+	
+	poll = get_object_or_404(Poll, poll_id=poll_id)
+	
+	# Parse dữ liệu từ form
+	config1 = request.POST.get('config1') == '1'
+	config2 = request.POST.get('config2') == '1'
+	
+	# Kiểm tra phải chọn đúng 1 cấu hình
+	if not config1 and not config2:
+		return JsonResponse({'success': False, 'error': 'Vui lòng chọn một cấu hình!'}, status=400)
+	
+	if config1 and config2:
+		return JsonResponse({'success': False, 'error': 'Chỉ được chọn một cấu hình!'}, status=400)
+	
+	# Xác định loại cấu hình
+	config_type = 'config1' if config1 else 'config2'
+	
+	# Lấy các tham số
+	start_row = int(request.POST.get('start_row', 2)) - 1
+	end_row_str = request.POST.get('end_row', '').strip()
+	end_row = (int(end_row_str) - 1) if end_row_str else None
+	yolo_confidence = int(request.POST.get('yolo_confidence', 50))
+	auto_check_max_ballots_str = request.POST.get('auto_check_max_ballots', '').strip()
+	auto_check_max_ballots = int(auto_check_max_ballots_str) if auto_check_max_ballots_str else None
+	
+	# Lấy cấu hình từ form dựa trên loại config
+	if config_type == 'config1':
+		trocr_col_ui = int(request.POST.get('config1_trocr_col', 2))
+		yolo_cols_ui_str = request.POST.get('config1_yolo_cols', '3,4')
+		trocr_col = trocr_col_ui - 1
+		yolo_cols = [int(col.strip()) - 1 for col in yolo_cols_ui_str.split(',')]
+		
+		config_data = {
+			'type': 'config1',
+			'trocr_col': trocr_col,
+			'trocr_col_ui': trocr_col_ui,
+			'yolo_cols': yolo_cols,
+			'yolo_cols_ui': yolo_cols_ui_str,
+			'start_row': start_row,
+			'end_row': end_row,
+			'yolo_confidence': yolo_confidence
+		}
+	else:
+		trocr_col = None
+		trocr_col_ui = None
+		yolo_cols_ui_str = request.POST.get('config2_yolo_cols', '3,4')
+		yolo_cols = [int(col.strip()) - 1 for col in yolo_cols_ui_str.split(',')]
+		
+		config_data = {
+			'type': 'config2',
+			'yolo_cols': yolo_cols,
+			'yolo_cols_ui': yolo_cols_ui_str,
+			'start_row': start_row,
+			'end_row': end_row,
+			'yolo_confidence': yolo_confidence
+		}
+	
+	# Tạo result_data rỗng (chỉ chứa config, chưa có results)
+	result_data = {
+		'success': True,
+		'config': config_data,
+		'total_rows': 0,
+		'results': []  # Rỗng vì chưa chạy AI
+	}
+	
+	# Xóa cấu hình cũ (nếu có)
+	AIModelResult.objects.filter(poll=poll).delete()
+	
+	# Lưu cấu hình mới
+	AIModelResult.objects.create(
+		poll=poll,
+		result_model=result_data,
+		processing_time=0,
+		status='success',
+		error_message=None,
+		auto_check_enabled=False,  # Mặc định tắt, user sẽ bật bằng toggle
+		auto_check_max_ballots=auto_check_max_ballots,
+		auto_check_processed=0
+	)
+	
+	return JsonResponse({
+		'success': True,
+		'message': f'Đã lưu cấu hình {config_type}. Bạn có thể bật tự động kiểm ngay bây giờ!',
+		'config_type': config_type
+	})
 

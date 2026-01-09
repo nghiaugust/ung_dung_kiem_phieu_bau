@@ -9,7 +9,6 @@ from ballot.models import Ballot
 from poll.models import Poll
 from form.models import BallotDocument
 from .models import PreprocessedBallot, BallotCell
-from .b1_lam_phang_anh import lam_phang_anh
 
 
 def preprocess_poll_ballots(request, poll_id):
@@ -259,6 +258,28 @@ def process_single_ballot(ballot, preprocessing_dir):
 		
 		print(f"[ERROR] Lỗi xử lý ballot {ballot_id}: {e}")
 		
+		raise e
+
+
+def process_single_ballot_wrapper(ballot):
+	"""
+	Wrapper function để tiền xử lý 1 ballot đơn lẻ (dùng cho auto processing)
+	
+	Args:
+		ballot: Ballot object
+		
+	Returns:
+		dict: Kết quả xử lý
+	"""
+	# Tạo thư mục preprocessing trong media nếu chưa có
+	preprocessing_dir = os.path.join(settings.MEDIA_ROOT, 'preprocessing')
+	os.makedirs(preprocessing_dir, exist_ok=True)
+	
+	try:
+		result = process_single_ballot(ballot, preprocessing_dir)
+		return result
+	except Exception as e:
+		print(f"[ERROR] Lỗi tiền xử lý ballot {ballot.ballot_id}: {e}")
 		raise e
 
 

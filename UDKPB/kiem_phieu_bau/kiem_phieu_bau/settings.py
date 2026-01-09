@@ -34,17 +34,20 @@ CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv('CSRF_TRUSTED_ORIGINS', '')
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # Django Channels ASGI server (phải đặt đầu tiên)
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',  # Django Channels for WebSocket
     'account',  # Account models
     'poll',  # Poll, PollMember, Candidate, Voter models
     'ballot',  # Ballot, BallotSelection models
     'quan_ly_phieu_bau',
     'api',  # API cho mobile app
+    'websocket',  # WebSocket notifications
     'security',  # Cryptographic operations for QR code verification
     'form',  # Ballot form editor
     'preprocessing',  # Image preprocessing for AI
@@ -84,6 +87,23 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'kiem_phieu_bau.wsgi.application'
+
+# Django Channels Configuration
+ASGI_APPLICATION = 'kiem_phieu_bau.asgi.application'
+
+# Channel layers (sử dụng Redis cho production hoặc InMemory cho development)
+CHANNEL_LAYERS = {
+    'default': {
+        # Dùng Redis cho production (cần cài redis-server)
+        # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        # 'CONFIG': {
+        #     "hosts": [(os.getenv('REDIS_HOST', '127.0.0.1'), int(os.getenv('REDIS_PORT', 6379)))],
+        # },
+        
+        # Dùng InMemoryChannelLayer cho development/testing (không cần Redis)
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 # MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
 # Database

@@ -6,7 +6,6 @@ Kết hợp Preprocessing + Edge Projection
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
 import os
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
@@ -26,8 +25,8 @@ def tien_xu_ly_anh(gray):
     """
     print("[INFO] Bước 1: Tiền xử lý ảnh (Denoise + Sharpen)...")
     
-    # 1. Khử nhiễu
-    denoised = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    # 1. Khử nhiễu (COMMENTED - tối ưu tốc độ)
+    # denoised = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
     
     # 2. Làm nét đường kẻ bằng kernel sharpen
     sharpen_kernel = np.array([
@@ -35,7 +34,7 @@ def tien_xu_ly_anh(gray):
         [-1,  9, -1],
         [-1, -1, -1]
     ])
-    sharpened = cv2.filter2D(denoised, -1, sharpen_kernel)
+    sharpened = cv2.filter2D(gray, -1, sharpen_kernel)  # Sử dụng gray trực tiếp
     
     # 3. Tăng độ tương phản
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
