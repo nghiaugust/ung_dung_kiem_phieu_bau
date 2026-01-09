@@ -7,3 +7,4 @@ class CountingConfig(AppConfig):
     
     def ready(self):
         import counting.signals  # Import signals để đăng ký
+        # Scheduler sẽ được khởi động thủ công khi user bật toggle "Tự động kiểm phiếu"

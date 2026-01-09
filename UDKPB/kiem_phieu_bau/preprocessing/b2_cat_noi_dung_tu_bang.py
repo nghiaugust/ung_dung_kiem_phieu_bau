@@ -8,6 +8,8 @@ import cv2
 import numpy as np
 import os
 from scipy.signal import find_peaks
+import matplotlib
+matplotlib.use('Agg')  # QUAN TRỌNG: Sử dụng backend không cần GUI, an toàn cho threading
 import matplotlib.pyplot as plt
 
 

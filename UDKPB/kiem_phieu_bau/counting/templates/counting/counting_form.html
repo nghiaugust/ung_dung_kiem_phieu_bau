@@ -254,6 +254,15 @@
                 </label>
               </div>
             </div>
+            
+            <!-- Trạng thái scheduler -->
+            <div class="alert alert-sm mb-2 p-2" id="scheduler-status" style="display:none;">
+              <small>
+                <i class="bi bi-clock-history"></i> <strong>Scheduler:</strong> 
+                <span id="scheduler-status-text">Đang kiểm tra...</span>
+              </small>
+            </div>
+            
             <div class="mb-2" id="auto-check-progress" {% if not auto_check_enabled %}style="display:none;"{% endif %}>
               <small class="text-muted">
                 <i class="bi bi-check-circle"></i> Số phiếu đã kiểm được: <strong id="auto-check-processed-count">{{ auto_check_processed|default:0 }}</strong>
@@ -265,7 +274,7 @@
               <span class="input-group-text">/ {{ ballots_count }} phiếu</span>
             </div>
             <small class="text-muted d-block mt-1">
-              <i class="bi bi-info-circle"></i> Khi bật, hệ thống sẽ tự động kiểm các phiếu mới được upload
+              <i class="bi bi-info-circle"></i> Khi bật, hệ thống sẽ tự động kiểm các phiếu mới được upload và quét mỗi 15 giây
             </small>
             <button
               type="button"
@@ -397,8 +406,28 @@
   const autoCheckMaxInput = document.getElementById("auto_check_max_ballots");
   const autoCheckProgress = document.getElementById("auto-check-progress");
   const autoCheckProcessedCount = document.getElementById("auto-check-processed-count");
+  const schedulerStatus = document.getElementById("scheduler-status");
+  const schedulerStatusText = document.getElementById("scheduler-status-text");
+  
+  function updateSchedulerStatus(isEnabled, message) {
+    if (schedulerStatus && schedulerStatusText) {
+      schedulerStatus.style.display = "block";
+      if (isEnabled) {
+        schedulerStatus.className = "alert alert-success alert-sm mb-2 p-2";
+        schedulerStatusText.innerHTML = '<i class="bi bi-play-circle-fill"></i> ' + (message || 'Scheduler đang chạy (quét mỗi 15s)');
+      } else {
+        schedulerStatus.className = "alert alert-secondary alert-sm mb-2 p-2";
+        schedulerStatusText.innerHTML = '<i class="bi bi-pause-circle"></i> ' + (message || 'Scheduler đã dừng');
+      }
+    }
+  }
   
   if (autoCheckToggle) {
+    // Hiển thị trạng thái ban đầu
+    if (autoCheckToggle.checked) {
+      updateSchedulerStatus(true);
+    }
+    
     autoCheckToggle.addEventListener("change", function() {
       const isEnabled = this.checked;
       autoCheckStatusText.textContent = isEnabled ? "Đang bật" : "Đang tắt";
@@ -407,6 +436,9 @@
       if (autoCheckProgress) {
         autoCheckProgress.style.display = isEnabled ? "block" : "none";
       }
+      
+      // Hiển thị loading cho scheduler
+      updateSchedulerStatus(isEnabled, isEnabled ? 'Đang khởi động scheduler...' : 'Đang dừng scheduler...');
       
       // Gọi API để cập nhật trạng thái
       const formData = new FormData();
@@ -428,11 +460,15 @@
           if (autoCheckProcessedCount && data.auto_check_processed !== undefined) {
             autoCheckProcessedCount.textContent = data.auto_check_processed;
           }
+          
+          // Cập nhật trạng thái scheduler
+          updateSchedulerStatus(isEnabled, isEnabled ? 'Scheduler đang chạy (quét mỗi 15s)' : 'Scheduler đã dừng');
         } else {
           showAlert("Lỗi: " + (data.error || "Không thể cập nhật"));
           // Revert toggle nếu lỗi
           autoCheckToggle.checked = !isEnabled;
           autoCheckStatusText.textContent = !isEnabled ? "Đang bật" : "Đang tắt";
+          updateSchedulerStatus(!isEnabled);
         }
       })
       .catch(error => {
@@ -441,6 +477,7 @@
         // Revert toggle nếu lỗi
         autoCheckToggle.checked = !isEnabled;
         autoCheckStatusText.textContent = !isEnabled ? "Đang bật" : "Đang tắt";
+        updateSchedulerStatus(!isEnabled);
       });
     });
     

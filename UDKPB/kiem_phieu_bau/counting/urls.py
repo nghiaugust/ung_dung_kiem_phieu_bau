@@ -10,4 +10,5 @@ urlpatterns = [
 	# Auto check
 	path('poll/<int:poll_id>/auto-check/toggle/', auto_check_views.toggle_auto_check, name='toggle_auto_check'),
 	path('poll/<int:poll_id>/auto-check/status/', auto_check_views.get_auto_check_status, name='get_auto_check_status'),
+	path('scheduler/status/', auto_check_views.get_scheduler_status, name='scheduler_status'),
 ]

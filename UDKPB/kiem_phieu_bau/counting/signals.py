@@ -228,6 +228,12 @@ def process_single_ballot_auto(ballot, ai_result, config_type, config, rows_to_p
 			# Lock để tránh race condition
 			ai_result = AIModelResult.objects.select_for_update().get(pk=ai_result.pk)
 			
+			# Kiểm tra lại giới hạn SAU KHI lock (tránh race condition)
+			if ai_result.auto_check_max_ballots:
+				if ai_result.auto_check_processed >= ai_result.auto_check_max_ballots:
+					print(f"[WORKFLOW] Ballot {ballot_id}: Reached limit after lock, skip")
+					return
+			
 			# Thêm kết quả mới vào results
 			current_results = ai_result.result_model.get('results', [])
 			current_results.extend(combined_results)
