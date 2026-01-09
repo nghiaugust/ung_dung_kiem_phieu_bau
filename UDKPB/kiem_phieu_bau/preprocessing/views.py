@@ -25,7 +25,7 @@ def preprocess_poll_ballots(request, poll_id):
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	
 	# Lấy tất cả ballot của poll
-	ballots = Ballot.objects.filter(poll=poll, ballot_image__isnull=False)
+	ballots = Ballot.objects.filter(poll=poll, ballot_image__isnull=False).exclude(ballot_image='')
 	
 	if not ballots.exists():
 		return JsonResponse({

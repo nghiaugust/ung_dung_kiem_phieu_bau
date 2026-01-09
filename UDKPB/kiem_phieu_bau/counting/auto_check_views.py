@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def toggle_auto_check(request, poll_id):
 	"""
 	Bật/tắt tự động kiểm phiếu cho poll
-	Đồng thời khởi động/dừng scheduler
+	KHÔNG tự động khởi động/dừng scheduler nữa
 	"""
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	
@@ -39,25 +39,7 @@ def toggle_auto_check(request, poll_id):
 	ai_result.auto_check_max_ballots = auto_check_max_ballots
 	ai_result.save()
 	
-	# Quản lý scheduler
-	if auto_check_enabled:
-		# Bật auto check → Khởi động scheduler nếu chưa chạy
-		scheduler = get_scheduler()
-		if scheduler is None or not scheduler.running:
-			logger.info(f"[AUTO CHECK] Poll {poll_id}: Starting scheduler...")
-			start_scheduler(interval=15)
-			logger.info(f"[AUTO CHECK] Poll {poll_id}: Scheduler started")
-	else:
-		# Tắt auto check → Kiểm tra xem còn poll nào bật auto check không
-		has_active_polls = AIModelResult.objects.filter(auto_check_enabled=True).exists()
-		
-		if not has_active_polls:
-			# Không còn poll nào bật auto check → Dừng scheduler
-			scheduler = get_scheduler()
-			if scheduler and scheduler.running:
-				logger.info(f"[AUTO CHECK] Poll {poll_id}: No active polls, stopping scheduler...")
-				stop_scheduler()
-				logger.info(f"[AUTO CHECK] Scheduler stopped")
+	logger.info(f"[AUTO CHECK] Poll {poll_id}: Auto check {'enabled' if auto_check_enabled else 'disabled'}")
 	
 	return JsonResponse({
 		'success': True,
@@ -112,3 +94,68 @@ def get_scheduler_status(request):
 		'active_polls': active_polls_count,
 		'message': f"Scheduler {'đang chạy' if is_running else 'đã dừng'} (interval: {interval}s, {active_polls_count} poll active)"
 	})
+
+
+@require_http_methods(["POST"])
+def control_scheduler(request):
+	"""
+	Khởi động hoặc dừng scheduler thủ công
+	"""
+	action = request.POST.get('action')  # 'start' hoặc 'stop'
+	
+	if action == 'start':
+		# Kiểm tra xem có poll nào bật auto check không
+		active_polls = AIModelResult.objects.filter(auto_check_enabled=True).count()
+		
+		if active_polls == 0:
+			return JsonResponse({
+				'success': False,
+				'error': 'Không có poll nào bật tự động kiểm phiếu',
+				'message': 'Vui lòng bật "Tự động kiểm phiếu" cho ít nhất 1 poll trước'
+			}, status=400)
+		
+		# Khởi động scheduler
+		scheduler = get_scheduler()
+		if scheduler and scheduler.running:
+			return JsonResponse({
+				'success': False,
+				'error': 'Scheduler đã đang chạy',
+				'message': 'Scheduler hiện đang hoạt động'
+			}, status=400)
+		
+		logger.info(f"[SCHEDULER CONTROL] Starting scheduler manually...")
+		start_scheduler(interval=15)
+		logger.info(f"[SCHEDULER CONTROL] Scheduler started successfully")
+		
+		return JsonResponse({
+			'success': True,
+			'scheduler_running': True,
+			'message': f'Đã khởi động scheduler thành công! Đang quét {active_polls} poll.'
+		})
+	
+	elif action == 'stop':
+		# Dừng scheduler
+		scheduler = get_scheduler()
+		if not scheduler or not scheduler.running:
+			return JsonResponse({
+				'success': False,
+				'error': 'Scheduler chưa chạy',
+				'message': 'Scheduler hiện không hoạt động'
+			}, status=400)
+		
+		logger.info(f"[SCHEDULER CONTROL] Stopping scheduler manually...")
+		stop_scheduler()
+		logger.info(f"[SCHEDULER CONTROL] Scheduler stopped successfully")
+		
+		return JsonResponse({
+			'success': True,
+			'scheduler_running': False,
+			'message': 'Đã dừng scheduler thành công!'
+		})
+	
+	else:
+		return JsonResponse({
+			'success': False,
+			'error': 'Invalid action',
+			'message': 'Action phải là "start" hoặc "stop"'
+		}, status=400)
