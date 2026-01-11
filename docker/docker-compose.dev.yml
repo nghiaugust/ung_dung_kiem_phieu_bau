@@ -1,0 +1,93 @@
+# Docker Compose cho Development
+# Đơn giản hơn, dùng cho dev/test local
+
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: udkpb_mysql_dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: udkpb
+      MYSQL_USER: udkpb_user
+      MYSQL_PASSWORD: udkpb_dev
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: udkpb_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # Django Web (Development mode)
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: udkpb_web_dev
+    restart: unless-stopped
+    environment:
+      DEBUG: "True"
+      SECRET_KEY: "dev-secret-key-not-for-production"
+      DB_ENGINE: django.db.backends.mysql
+      DB_NAME: udkpb
+      DB_USER: udkpb_user
+      DB_PASSWORD: udkpb_dev
+      DB_HOST: mysql
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      ALLOWED_HOSTS: "*"
+    volumes:
+      - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
+      - ../UDKPB/ai_core:/app/ai_core
+      - media_dev_files:/app/kiem_phieu_bau/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+      - redis
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+    container_name: udkpb_celery_dev
+    restart: unless-stopped
+    environment:
+      DEBUG: "True"
+      DB_ENGINE: django.db.backends.mysql
+      DB_NAME: udkpb
+      DB_USER: udkpb_user
+      DB_PASSWORD: udkpb_dev
+      DB_HOST: mysql
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
+      - ../UDKPB/ai_core:/app/ai_core
+      - media_dev_files:/app/kiem_phieu_bau/media
+    depends_on:
+      - mysql
+      - redis
+    command: celery -A kiem_phieu_bau worker --pool=solo -l info
+
+volumes:
+  mysql_dev_data:
+  media_dev_files:

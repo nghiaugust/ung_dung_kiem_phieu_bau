@@ -23,8 +23,9 @@ from ballot.models import Ballot
 from ballot.doc_qr import read_qr_code_only
 from security.hmac_utils import verify_ballot_from_qr
 from form.models import BallotDocument
-# Gọi làm phẳng ảnh
-from preprocessing.b1_lam_phang_anh import lam_phang_anh
+# Import các module preprocessing mới
+from preprocessing.preprocessing_for_upload_step_1 import lam_phang_anh_phieu_bau
+from preprocessing.preprocessing_for_upload_step_2 import cat_va_luu_cac_o_phieu_bau_wrapper
 
 User = get_user_model()
 from kiem_phieu_bau.rate_limiting_decorator import rate_limit
@@ -1007,7 +1008,7 @@ def api_upload_ballot(request, poll_id):
 @require_http_methods(["POST"])
 def api_upload_ballots_batch(request, poll_id):
     """
-    Upload hàng loạt phiếu bầu từ mobile với xác thực chữ ký số
+    Upload hàng loạt phiếu bầu từ mobile với xác thực chữ ký số (ASYNC VERSION)
     
     POST /api/polls/<poll_id>/upload-batch/
     Header: Authorization: Bearer <token>
@@ -1017,26 +1018,35 @@ def api_upload_ballots_batch(request, poll_id):
           Format: {"filename1.jpg": "base64_signature1", "filename2.jpg": "base64_signature2"}
           Chữ ký được tạo bằng RSA-PSS với SHA256 từ private key của client
     
+    Luồng xử lý ASYNC:
+        1. Verify chữ ký (Sync - bắt buộc)
+        2. Đọc QR code để lấy ballot_id (Sync - nhanh)
+        3. Lưu file gốc tạm thời (Sync)
+        4. Tạo/Update Ballot record với status='pending'
+        5. Đẩy task xử lý ảnh vào Redis Queue (Async)
+        6. Trả về Client ngay lập tức
+        => Worker sẽ làm phẳng ảnh + cắt ô sau
+    
     Lưu ý:
         - Public key phải được cung cấp khi đăng nhập (lưu trong APIToken)
         - Mỗi file phải có chữ ký tương ứng
         - Tất cả chữ ký phải hợp lệ trước khi xử lý files
         - Nếu bất kỳ file nào không có chữ ký hoặc chữ ký không hợp lệ, toàn bộ batch sẽ bị từ chối
+        - Client có thể poll API để kiểm tra process_status của ballot
     
-    Response:
+    Response (Trả về ngay sau khi nhận file):
     {
         "success": true,
         "total": 10,
-        "succeeded": 9,
-        "failed": 1,
-        "message": "Upload hoàn tất: 9 thành công, 1 thất bại",
+        "accepted": 10,
+        "message": "Đã nhận 10 phiếu bầu. Hệ thống đang xử lý...",
         "results": [
             {
                 "filename": "image1.jpg",
                 "success": true,
                 "ballot_id": 123,
-                "qr_ballot_id": 123,
-                "is_update": true
+                "process_status": "pending",
+                "message": "Đã tiếp nhận, đang chờ xử lý"
             },
             {
                 "filename": "image2.jpg",
@@ -1097,6 +1107,15 @@ def api_upload_ballots_batch(request, poll_id):
                 'message': 'Vui lòng chọn ít nhất một file ảnh phiếu bầu'
             }, status=400)
         
+        # Validate max files
+        max_files = 50  # Giới hạn tối đa 50 file mỗi lần
+        if len(uploaded_files) > max_files:
+            return JsonResponse({
+                'success': False,
+                'error': 'Too many files',
+                'message': f'Chỉ được upload tối đa {max_files} file mỗi lần'
+            }, status=400)
+        
         # Lấy signatures từ request (JSON string)
         signatures_json = request.POST.get('signatures', '{}')
         try:
@@ -1126,8 +1145,8 @@ def api_upload_ballots_batch(request, poll_id):
                 'message': 'Không tìm thấy token'
             }, status=401)
         
-        # BƯỚC 1: VERIFY CHỮ KÝ CỦA TẤT CẢ FILES TRƯỚC
-        print(f"[INFO] Bắt đầu verify chữ ký cho {len(uploaded_files)} files...")
+        # BƯỚC 1: VERIFY CHỮ KÝ CỦA TẤT CẢ FILES TRƯỚC (BẮT BUỘC - SYNC)
+        print(f"[API] Bắt đầu verify chữ ký cho {len(uploaded_files)} files...")
         
         for uploaded_file in uploaded_files:
             filename = uploaded_file.name
@@ -1159,27 +1178,21 @@ def api_upload_ballots_batch(request, poll_id):
                     'verify_error': verify_result.get('error', 'Unknown error')
                 }, status=400)
             
-            print(f"[INFO] ✓ Verified signature for: {filename}")
+            print(f"[API] ✓ Verified signature for: {filename}")
         
-        print(f"[SUCCESS] Tất cả {len(uploaded_files)} files đã được verify thành công!")
+        print(f"[API SUCCESS] Tất cả {len(uploaded_files)} files đã được verify thành công!")
         
-        # Validate and process files
+        # BƯỚC 2: VALIDATE VÀ LƯU FILE TẠM, ĐẨY TASK VÀO QUEUE (ASYNC)
+        from ballot.tasks import process_ballot_image_task
+        
         allowed_extensions = ['jpg', 'jpeg', 'png', 'bmp', 'tiff']
         max_size = 10 * 1024 * 1024  # 10MB
-        max_files = 50  # Giới hạn tối đa 50 file mỗi lần
-        
-        if len(uploaded_files) > max_files:
-            return JsonResponse({
-                'success': False,
-                'error': 'Too many files',
-                'message': f'Chỉ được upload tối đa {max_files} file mỗi lần'
-            }, status=400)
         
         results = []
-        succeeded = 0
-        failed = 0
+        accepted = 0
+        rejected = 0
         
-        # Xử lý từng file riêng biệt, không dùng transaction chung
+        # Xử lý từng file: validate nhanh, đọc QR, lưu file tạm, đẩy task
         for uploaded_file in uploaded_files:
             result = {
                 'filename': uploaded_file.name,
@@ -1187,240 +1200,154 @@ def api_upload_ballots_batch(request, poll_id):
             }
             
             temp_file_path = None
-            temp_output_path = None
             
             try:
-                print(f"[DEBUG] Processing file: {uploaded_file.name}")
+                print(f"[API] Processing file: {uploaded_file.name}")
                 
                 # Validate file type
                 file_ext = uploaded_file.name.split('.')[-1].lower()
                 
                 if file_ext not in allowed_extensions:
                     result['error'] = f'Định dạng file không hợp lệ. Chỉ chấp nhận: {", ".join(allowed_extensions)}'
-                    failed += 1
+                    rejected += 1
                     results.append(result)
-                    print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                    continue  # Skip file này và tiếp tục file tiếp theo
+                    print(f"[API ERROR] {uploaded_file.name}: {result['error']}")
+                    continue
                 
                 # Validate file size
                 if uploaded_file.size > max_size:
                     result['error'] = 'Kích thước file vượt quá 10MB'
-                    failed += 1
+                    rejected += 1
                     results.append(result)
-                    print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                    continue  # Skip file này và tiếp tục file tiếp theo
+                    print(f"[API ERROR] {uploaded_file.name}: {result['error']}")
+                    continue
                 
-                # Lưu file tạm để xử lý làm phẳng ảnh
+                # Đọc QR code nhanh từ file gốc để lấy ballot_id
+                # Lưu file tạm để đọc QR
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_input:
                     for chunk in uploaded_file.chunks():
                         temp_input.write(chunk)
                     temp_file_path = temp_input.name
                 
+                # Đọc QR code từ file gốc (không cần làm phẳng)
+                qr_ballot_id = None
+                qr_code_raw = None
+                
                 try:
-                    # Lấy kích thước từ BallotDocument của poll (lấy mới nhất nếu có nhiều)
-                    try:
-                        ballot_doc = BallotDocument.objects.filter(poll=poll).order_by('-created_at').first()
-                        if ballot_doc:
-                            chieu_ngang_cm = ballot_doc.marker_distance_horizontal
-                            chieu_doc_cm = ballot_doc.marker_distance_vertical
-                            
-                            if chieu_ngang_cm is None or chieu_doc_cm is None:
-                                raise ValueError("BallotDocument không có thông tin kích thước marker")
-                            
-                            print(f"[INFO] Sử dụng kích thước từ BallotDocument: {chieu_ngang_cm}cm x {chieu_doc_cm}cm")
-                        else:
-                            raise BallotDocument.DoesNotExist()
-                    except BallotDocument.DoesNotExist:
-                        # Fallback về kích thước mặc định nếu không tìm thấy BallotDocument
-                        chieu_ngang_cm = 18.0
-                        chieu_doc_cm = 25.5
-                        print(f"[WARNING] Không tìm thấy BallotDocument cho poll {poll.poll_id}, sử dụng kích thước mặc định: {chieu_ngang_cm}cm x {chieu_doc_cm}cm")
-                    
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_output:
-                        temp_output_path = temp_output.name
-                    
-                    # Làm phẳng ảnh và lấy data QR
-                    _, qr_data_raw = lam_phang_anh(
-                        temp_file_path,
-                        temp_output_path,
-                        chieu_ngang_cm=chieu_ngang_cm,
-                        chieu_doc_cm=chieu_doc_cm,
-                        dpi=300
-                    )
-                    
-                    # Parse QR data nếu có
-                    qr_result = {'success': True, 'qr_count': 0}
-                    if qr_data_raw:
-                        qr_result['qr_count'] = 1
-                        qr_result['qr_codes'] = [{'data': qr_data_raw}]
-                    
-                    # Kiểm tra kết quả làm phẳng ảnh
-                    print(f"[DEBUG] QR result for {uploaded_file.name}: {qr_result}")
-                    
-                    if qr_result.get('qr_count', 0) == 0:
-                        result['error'] = 'Không tìm thấy QR code trên phiếu bầu hoặc không đủ 4 markers'
-                        print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                        failed += 1
-                        results.append(result)
-                        continue  # Skip file này và tiếp tục file tiếp theo
-                    
-                    # Lấy thông tin QR code
-                    qr_codes = qr_result.get('qr_codes', [])
-                    if qr_codes:
-                        result['qr_detected'] = True
-                        result['qr_data_raw'] = qr_codes[0].get('data', '')
-                    else:
-                        result['error'] = 'Không thể đọc dữ liệu từ QR code'
-                        print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                        failed += 1
-                        results.append(result)
-                        continue  # Skip file này và tiếp tục file tiếp theo
+                    qr_data = read_qr_code_only(temp_file_path)
+                    if qr_data and qr_data.get('qr_codes'):
+                        qr_code_raw = qr_data['qr_codes'][0].get('data', '')
                         
-                except ValueError as straighten_error:
-                    # Lỗi từ làm phẳng ảnh (thiếu markers)
-                    result['error'] = f'Lỗi làm phẳng ảnh: {str(straighten_error)}'
-                    print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                    failed += 1
+                        # Parse QR code có dạng "poll_id:ballot_id:hash"
+                        if qr_code_raw:
+                            parts = qr_code_raw.split(':')
+                            if len(parts) >= 2:
+                                qr_ballot_id = int(parts[1])
+                                result['qr_ballot_id'] = qr_ballot_id
+                                print(f"[API] Đọc được ballot_id={qr_ballot_id} từ QR code")
+                except Exception as qr_error:
+                    print(f"[API WARNING] Không đọc được QR code từ {uploaded_file.name}: {qr_error}")
+                
+                # Kiểm tra phải có ballot_id từ QR
+                if not qr_ballot_id:
+                    result['error'] = 'Không tìm thấy QR code hoặc không đọc được ballot_id'
+                    rejected += 1
                     results.append(result)
-                    continue  # Skip file này và tiếp tục file tiếp theo
-                except Exception as process_error:
-                    # Lỗi khác trong quá trình xử lý ảnh
-                    result['error'] = f'Lỗi xử lý ảnh: {str(process_error)}'
-                    print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                    failed += 1
-                    results.append(result)
-                    continue  # Skip file này và tiếp tục file tiếp theo
-                finally:
-                    # Xóa file tạm input
+                    # Xóa file tạm
                     if temp_file_path and os.path.exists(temp_file_path):
                         try:
                             os.unlink(temp_file_path)
                         except:
                             pass
+                    continue
                 
-                # Trích xuất ballot_id từ QR code
-                qr_ballot_id = None
-                qr_code_raw = result.get('qr_data_raw')
-                
-                # Parse QR code có dạng "poll_id:ballot_id:hash" -> ballot_id = parts[1]
-                if qr_code_raw:
-                    try:
-                        parts = qr_code_raw.split(':')
-                        if len(parts) < 2:
-                            result['error'] = f'Định dạng QR code không hợp lệ: {qr_code_raw}'
-                            print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                            failed += 1
-                            results.append(result)
-                            continue  # Skip file này và tiếp tục file tiếp theo
-                        
-                        qr_ballot_id = int(parts[1])
-                        result['qr_ballot_id'] = qr_ballot_id
-                    except (ValueError, IndexError) as parse_error:
-                        result['error'] = f'Không thể parse ballot_id từ QR code: {qr_code_raw}'
-                        print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                        failed += 1
-                        results.append(result)
-                        continue  # Skip file này và tiếp tục file tiếp theo
-                
-                # Chuẩn bị metadata
-                metadata = {
-                    'uploaded_by': user.username,
-                    'upload_method': 'mobile_api_batch',
-                    'original_filename': uploaded_file.name,
-                    'qr_code_raw': qr_code_raw
-                }
-                
-                # Kiểm tra phải có ballot_id từ QR
-                if not qr_ballot_id:
-                    result['error'] = 'Không tìm thấy ballot_id trong QR code'
-                    print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                    failed += 1
-                    results.append(result)
-                    continue  # Skip file này và tiếp tục file tiếp theo
-                
-                # Tìm ballot để update (CHỈ CHO PHÉP UPDATE)
+                # Tìm hoặc tạo ballot record
                 try:
                     ballot = Ballot.objects.using('api_pool').get(ballot_id=qr_ballot_id, poll=poll)
+                    is_update = True
+                    
+                    # Xóa ảnh cũ nếu có
+                    if ballot.ballot_image:
+                        try:
+                            ballot.ballot_image.delete(save=False)
+                        except:
+                            pass
+                    
                 except Ballot.DoesNotExist:
                     result['error'] = f'Không tìm thấy ballot_id {qr_ballot_id} trong cuộc bỏ phiếu này'
-                    print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                    failed += 1
+                    rejected += 1
                     results.append(result)
-                    continue  # Skip file này và tiếp tục file tiếp theo
+                    # Xóa file tạm
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        try:
+                            os.unlink(temp_file_path)
+                        except:
+                            pass
+                    continue
                 
-                # Delete old image file if exists
-                if ballot.ballot_image:
-                    try:
-                        ballot.ballot_image.delete(save=False)
-                    except:
-                        pass
+                # Cập nhật metadata
+                metadata = {
+                    'uploaded_by': user.username,
+                    'upload_method': 'mobile_api_batch_async',
+                    'original_filename': uploaded_file.name,
+                    'qr_code_raw': qr_code_raw,
+                    'uploaded_at': timezone.now().isoformat()
+                }
                 
-                
-                # Lưu file đã làm phẳng trực tiếp không qua tối ưu
-                from django.core.files import File
-                
-                with open(temp_output_path, 'rb') as f:
-                    ballot.ballot_image.save(
-                        f'{ballot.ballot_id}.jpg',
-                        File(f),
-                        save=False
-                    )
-                
-                ballot.input_by_id = user.pk  # Dùng _id để tránh lỗi database router
-                #ballot.timestamp = timezone.now()
-                
-                # Update metadata
                 if ballot.metadata:
-                    ballot.metadata.update({
-                        'updated_by': user.username,
-                        'last_update_method': 'mobile_api_batch',
-                        'last_updated_filename': uploaded_file.name,
-                        'last_updated_at': timezone.now().isoformat(),
-                        'qr_code_raw': qr_code_raw
-                    })
+                    ballot.metadata.update(metadata)
                 else:
                     ballot.metadata = metadata
                 
+                # Set status = pending và lưu
+                ballot.input_by_id = user.pk
+                ballot.process_status = 'pending'
+                ballot.process_error = None
                 ballot.save()
                 
-                # Xóa file tạm output SAU KHI save thành công
-                if temp_output_path and os.path.exists(temp_output_path):
-                    try:
-                        os.unlink(temp_output_path)
-                    except:
-                        pass
+                # ĐẨY TASK VÀO REDIS QUEUE (không chờ kết quả)
+                print(f"[API] Đẩy task xử lý ảnh vào queue cho ballot_id={ballot.ballot_id}")
+                process_ballot_image_task.delay(
+                    ballot_id=ballot.ballot_id,
+                    temp_input_path=temp_file_path,
+                    poll_id=poll.poll_id,
+                    file_ext=file_ext
+                )
+                
+                # File tạm sẽ được xóa bởi Celery task sau khi xử lý xong
+                temp_file_path = None  # Không xóa ở đây
                 
                 result['success'] = True
                 result['ballot_id'] = ballot.ballot_id
-                result['is_update'] = True
-                result['message'] = 'Đã cập nhật phiếu bầu từ QR code'
-                succeeded += 1
-                print(f"[SUCCESS] {uploaded_file.name}: Upload thành công (ballot_id={ballot.ballot_id})")
+                result['process_status'] = 'pending'
+                result['is_update'] = is_update
+                result['message'] = 'Đã tiếp nhận, đang chờ xử lý'
+                accepted += 1
+                print(f"[API SUCCESS] {uploaded_file.name}: Đã tiếp nhận (ballot_id={ballot.ballot_id})")
                 
             except Exception as e:
-                # Lỗi không xử lý được ở trên (lỗi save hoặc lỗi khác)
-                result['error'] = f'Lỗi không xác định: {str(e)}'
-                print(f"[ERROR] {uploaded_file.name}: {result['error']}")
-                failed += 1
-            finally:
-                # Đảm bảo xóa file tạm nếu còn
-                if temp_output_path and os.path.exists(temp_output_path):
+                result['error'] = f'Lỗi: {str(e)}'
+                print(f"[API ERROR] {uploaded_file.name}: {result['error']}")
+                rejected += 1
+                
+                # Xóa file tạm nếu có lỗi
+                if temp_file_path and os.path.exists(temp_file_path):
                     try:
-                        os.unlink(temp_output_path)
+                        os.unlink(temp_file_path)
                     except:
                         pass
             
             results.append(result)
         
-        # Trả về kết quả tổng hợp
+        # Trả về kết quả ngay lập tức
         return JsonResponse({
-            'success': succeeded > 0,  # Thành công nếu có ít nhất 1 file upload được
+            'success': accepted > 0,
             'total': len(uploaded_files),
-            'succeeded': succeeded,
-            'failed': failed,
-            'message': f'Upload hoàn tất: {succeeded} thành công, {failed} thất bại',
+            'accepted': accepted,
+            'rejected': rejected,
+            'message': f'Đã nhận {accepted}/{len(uploaded_files)} phiếu bầu. Hệ thống đang xử lý...',
             'results': results
-        }, status=201 if succeeded > 0 else 400)
+        }, status=202 if accepted > 0 else 400)  # 202 Accepted
         
     except Poll.DoesNotExist:
         return JsonResponse({
@@ -1428,6 +1355,193 @@ def api_upload_ballots_batch(request, poll_id):
             'error': 'Poll not found',
             'message': 'Không tìm thấy cuộc bỏ phiếu'
         }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_ballot_status(request, ballot_id):
+    """
+    Kiểm tra trạng thái xử lý của một ballot (ASYNC UPLOAD)
+    
+    GET /api/ballots/<ballot_id>/status/
+    Header: Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "ballot_id": 123,
+        "process_status": "completed" | "pending" | "processing" | "failed",
+        "process_error": null | "error message",
+        "has_image": true,
+        "timestamp": "2026-01-11T10:30:00+07:00",
+        "poll_id": 1,
+        "is_checked": false,
+        "is_valid": true
+    }
+    """
+    try:
+        user = request.api_user
+        ballot = Ballot.objects.select_related('poll').get(ballot_id=ballot_id)
+        
+        # Kiểm tra quyền truy cập
+        poll = ballot.poll
+        has_permission = False
+        
+        if user.is_superuser:
+            has_permission = True
+        elif poll.created_by == user:
+            has_permission = True
+        else:
+            try:
+                poll_member = PollMember.objects.get(poll=poll, account=user, status='active')
+                if poll_member.role in ['manager', 'operator', 'viewer']:
+                    has_permission = True
+            except PollMember.DoesNotExist:
+                pass
+        
+        if not has_permission:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Bạn không có quyền xem ballot này'
+            }, status=403)
+        
+        return JsonResponse({
+            'success': True,
+            'ballot_id': ballot.ballot_id,
+            'process_status': ballot.process_status,
+            'process_error': ballot.process_error,
+            'has_image': bool(ballot.ballot_image),
+            'timestamp': ballot.timestamp.isoformat() if ballot.timestamp else None,
+            'poll_id': poll.poll_id,
+            'is_checked': ballot.is_checked,
+            'is_valid': ballot.is_valid,
+            'metadata': ballot.metadata
+        })
+        
+    except Ballot.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Not found',
+            'message': 'Không tìm thấy ballot'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_api_token
+@require_http_methods(["POST"])
+def api_ballot_status_batch(request):
+    """
+    Kiểm tra trạng thái xử lý của nhiều ballots (ASYNC UPLOAD)
+    
+    POST /api/ballots/status-batch/
+    Header: Authorization: Bearer <token>
+    Body: 
+    {
+        "ballot_ids": [123, 124, 125, ...]
+    }
+    
+    Response:
+    {
+        "success": true,
+        "total": 3,
+        "ballots": [
+            {
+                "ballot_id": 123,
+                "process_status": "completed",
+                "has_image": true
+            },
+            {
+                "ballot_id": 124,
+                "process_status": "processing",
+                "has_image": false
+            },
+            {
+                "ballot_id": 125,
+                "process_status": "failed",
+                "process_error": "Không đủ 4 markers",
+                "has_image": false
+            }
+        ]
+    }
+    """
+    try:
+        user = request.api_user
+        
+        # Parse request body
+        try:
+            data = json.loads(request.body)
+            ballot_ids = data.get('ballot_ids', [])
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON'
+            }, status=400)
+        
+        if not ballot_ids:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_ids'
+            }, status=400)
+        
+        # Limit max 100 ballots per request
+        if len(ballot_ids) > 100:
+            return JsonResponse({
+                'success': False,
+                'error': 'Too many ballot_ids',
+                'message': 'Tối đa 100 ballot_ids mỗi lần'
+            }, status=400)
+        
+        # Query ballots
+        ballots = Ballot.objects.select_related('poll').filter(ballot_id__in=ballot_ids)
+        
+        # Filter by permission
+        result_ballots = []
+        for ballot in ballots:
+            poll = ballot.poll
+            has_permission = False
+            
+            if user.is_superuser:
+                has_permission = True
+            elif poll.created_by == user:
+                has_permission = True
+            else:
+                try:
+                    poll_member = PollMember.objects.get(poll=poll, account=user, status='active')
+                    if poll_member.role in ['manager', 'operator', 'viewer']:
+                        has_permission = True
+                except PollMember.DoesNotExist:
+                    pass
+            
+            if has_permission:
+                result_ballots.append({
+                    'ballot_id': ballot.ballot_id,
+                    'poll_id': poll.poll_id,
+                    'process_status': ballot.process_status,
+                    'process_error': ballot.process_error,
+                    'has_image': bool(ballot.ballot_image),
+                    'is_checked': ballot.is_checked,
+                    'is_valid': ballot.is_valid
+                })
+        
+        return JsonResponse({
+            'success': True,
+            'total': len(result_ballots),
+            'requested': len(ballot_ids),
+            'ballots': result_ballots
+        })
+        
     except Exception as e:
         return JsonResponse({
             'success': False,

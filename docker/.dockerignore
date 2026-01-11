@@ -1,0 +1,74 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker/
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Database
+*.sqlite3
+*.db
+
+# Media files (sẽ dùng volume)
+UDKPB/kiem_phieu_bau/media/
+UDKPB/kiem_phieu_bau/staticfiles/
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+
+# Documentation
+*.md
+*.txt
+!requirements.txt
+!celery_requirements.txt
+!UDKPB/ai_core/ai_server/requirements.txt
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Model files (nếu quá lớn, sẽ download trong Dockerfile)
+# UDKPB/ai_core/model_trocr/models--microsoft--trocr-base-printed/
+# UDKPB/ai_core/model_yolo_x/best.pt
+
+# Backups
+*.bak
+*.backup

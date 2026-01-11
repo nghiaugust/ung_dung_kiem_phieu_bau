@@ -1,0 +1,247 @@
+version: '3.8'
+
+services:
+  # ================================
+  # MySQL Database
+  # ================================
+  mysql:
+    image: mysql:8.0
+    container_name: udkpb_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-udkpb}
+      MYSQL_USER: ${DB_USER:-udkpb_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-udkpb_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    networks:
+      - udkpb_network
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ================================
+  # Redis (Message Broker + Cache)
+  # ================================
+  redis:
+    image: redis:7-alpine
+    container_name: udkpb_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - udkpb_network
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ================================
+  # Django Web Application
+  # ================================
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: udkpb_web
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
+      - media_files:/app/kiem_phieu_bau/media
+      - static_files:/app/kiem_phieu_bau/staticfiles
+      - ../UDKPB/ai_core:/app/ai_core
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    networks:
+      - udkpb_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/login/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ================================
+  # Celery Worker (AI Processing)
+  # ================================
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+    container_name: udkpb_celery_worker
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
+      - media_files:/app/kiem_phieu_bau/media
+      - ../UDKPB/ai_core:/app/ai_core
+    networks:
+      - udkpb_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A kiem_phieu_bau worker
+      --pool=gevent
+      --concurrency=10
+      --loglevel=info
+      --max-tasks-per-child=20
+      --time-limit=1800
+      --soft-time-limit=1500
+      --hostname=worker@%h
+
+  # ================================
+  # Celery Worker 2 (Scale thêm nếu cần)
+  # ================================
+  celery-worker-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+    container_name: udkpb_celery_worker_2
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
+      - media_files:/app/kiem_phieu_bau/media
+      - ../UDKPB/ai_core:/app/ai_core
+    networks:
+      - udkpb_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A kiem_phieu_bau worker
+      --pool=gevent
+      --concurrency=10
+      --loglevel=info
+      --max-tasks-per-child=20
+      --time-limit=1800
+      --soft-time-limit=1500
+      --hostname=worker2@%h
+    profiles:
+      - scale  # Chỉ chạy khi cần scale: docker-compose --profile scale up
+
+  # ================================
+  # Celery Beat (Scheduler - Optional)
+  # ================================
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+    container_name: udkpb_celery_beat
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
+      - celerybeat_data:/app/kiem_phieu_bau/celerybeat-schedule
+    networks:
+      - udkpb_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A kiem_phieu_bau beat
+      --loglevel=info
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    profiles:
+      - beat  # Chỉ chạy khi cần scheduler: docker-compose --profile beat up
+
+  # ================================
+  # Flower (Celery Monitoring)
+  # ================================
+  flower:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+    container_name: udkpb_flower
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    networks:
+      - udkpb_network
+    depends_on:
+      - redis
+      - celery-worker
+    command: >
+      celery -A kiem_phieu_bau flower
+      --port=5555
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    profiles:
+      - monitoring  # docker-compose --profile monitoring up
+
+  # ================================
+  # Nginx (Reverse Proxy + Static Files)
+  # ================================
+  nginx:
+    image: nginx:alpine
+    container_name: udkpb_nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx-site.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_files:/app/staticfiles:ro
+      - media_files:/app/media:ro
+      - ./ssl:/etc/nginx/ssl:ro  # SSL certificates (nếu có)
+    networks:
+      - udkpb_network
+    depends_on:
+      - web
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ================================
+# Networks
+# ================================
+networks:
+  udkpb_network:
+    driver: bridge
+
+# ================================
+# Volumes (Persistent Data)
+# ================================
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  media_files:
+    driver: local
+  static_files:
+    driver: local
+  celerybeat_data:
+    driver: local

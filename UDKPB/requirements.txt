@@ -11,3 +11,11 @@ cryptography
 pdf2image
 waitress
 qreader
+channels
+daphne
+asgiref
+qrcode
+matplotlib
+scipy
+requests
+daphne

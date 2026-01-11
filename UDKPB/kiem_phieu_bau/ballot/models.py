@@ -36,6 +36,16 @@ class Ballot(models.Model): # phiếu bầu
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
 	metadata = models.JSONField(null=True)  # Thông tin mở rộng
 	
+	# Trạng thái xử lý asynchronous
+	PROCESSING_STATUS = (
+		('pending', 'Chờ xử lý'),
+		('processing', 'Đang xử lý'),
+		('completed', 'Hoàn thành'),
+		('failed', 'Lỗi'),
+	)
+	process_status = models.CharField(max_length=20, choices=PROCESSING_STATUS, default='pending')
+	process_error = models.TextField(null=True, blank=True)  # Lưu lỗi nếu có
+	
 	# QR Code HMAC fields
 	qr_hmac = models.CharField(max_length=64, null=True, blank=True)  # HMAC signature (hex string)
 	qr_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo QR HMAC

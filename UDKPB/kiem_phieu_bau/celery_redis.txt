@@ -1,0 +1,51 @@
+Celery - Task Queue Worker
+Xử lý các công việc nặng bất đồng bộ (async), tách ra khỏi luồng xử lý chính của web server.
+
+Redis - Message Broker + Result Backend
+
+Lưu trữ queue các tasks đang chờ xử lý
+API đẩy task vào Redis → Celery worker lấy task từ Redis
+
+
+[User] → [Django API]
+              ↓
+         Save to DB (ballot.process_status = 'pending')
+              ↓
+         [Redis Queue] ← Push task
+              ↓
+    [Celery Worker] ← Pull task
+              ↓
+    Xử lý ảnh (20s)
+              ↓
+         Update DB (ballot.process_status = 'completed')
+
+1 Redis Server = 16 Databases
+Redis Server (localhost:6379)
+├── Database 0  ← Task Queue (Celery Broker)
+├── Database 1  ← Task Results (Celery Backend)
+├── Database 2  ← Django Cache (Rate Limiting)
+├── Database 3  ← Django Channels (WebSocket)
+├── Database 4  ← (Dự phòng)
+├── ...
+└── Database 15
+
+
+kiểm phiếu 
+luồng xử lý khi phiếu upload
+Upload Phiếu
+    ↓
+[upload_queue] - Xử lý ảnh (làm phẳng + cắt ô)
+    ↓
+process_status = 'completed'
+    ↓
+Check: is_counting_started? 
+    ├─ Yes → Push to [counting_queue]
+    └─ No  → Chờ bật thủ công
+         ↓
+    [counting_queue] - Kiểm phiếu tự động
+         ↓
+    Check AI health?
+    ├─ OK  → Xử lý kiểm phiếu
+    └─ Fail → Retry 30s
+         ↓
+    is_checked = True ✅

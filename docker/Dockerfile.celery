@@ -1,0 +1,80 @@
+# Dockerfile cho Celery Worker (AI Processing)
+FROM python:3.11-slim
+
+# Metadata
+LABEL maintainer="domanhnghiaforwork@gmail.com"
+LABEL description="UDKPB - Celery Worker for AI Image Processing"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for AI/ML
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # MySQL client
+    default-libmysqlclient-dev \
+    build-essential \
+    pkg-config \
+    # OpenCV dependencies
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # PDF processing
+    poppler-utils \
+    # Git for downloading models
+    git \
+    wget \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY UDKPB/requirements.txt /app/requirements.txt
+COPY UDKPB/kiem_phieu_bau/celery_requirements.txt /app/celery_requirements.txt
+COPY UDKPB/ai_core/ai_server/requirements.txt /app/ai_requirements.txt
+
+# Install all Python dependencies (including AI libraries)
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt && \
+    pip install -r celery_requirements.txt && \
+    pip install -r ai_requirements.txt
+
+# Copy project files
+COPY UDKPB/kiem_phieu_bau /app/kiem_phieu_bau
+COPY UDKPB/ai_core /app/ai_core
+
+# Download TrOCR model (if not using volume mount)
+WORKDIR /app/ai_core/model_trocr
+RUN python -c "from transformers import TrOCRProcessor, VisionEncoderDecoderModel; \
+    model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-printed'); \
+    processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-printed'); \
+    print('TrOCR model downloaded successfully')" || echo "Model download skipped"
+
+# Create necessary directories
+WORKDIR /app/kiem_phieu_bau
+RUN mkdir -p media logs
+
+# Create non-root user
+RUN useradd -m -u 1000 celeryuser && \
+    chown -R celeryuser:celeryuser /app
+
+USER celeryuser
+
+# Expose ports (not really needed for Celery, but for monitoring)
+EXPOSE 5555
+
+# Default command for Celery worker with gevent pool
+CMD ["celery", "-A", "kiem_phieu_bau", "worker", \
+     "--pool=gevent", \
+     "--concurrency=10", \
+     "--loglevel=info", \
+     "--max-tasks-per-child=20", \
+     "--time-limit=1800", \
+     "--soft-time-limit=1500"]

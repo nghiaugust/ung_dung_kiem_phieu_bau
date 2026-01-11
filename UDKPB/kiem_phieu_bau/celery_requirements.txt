@@ -1,0 +1,22 @@
+# Requirements cho Asynchronous Upload với Celery + Redis
+
+# Celery - Task queue
+celery==5.3.4
+
+# Redis client for Python
+redis==5.0.1
+
+# Django Celery Results - Store task results in database (optional)
+django-celery-results==2.5.1
+
+# Gevent - Async library (tương thích Python 3.12, tốt cho production)
+gevent==23.9.1
+
+# Flower - Web-based monitoring tool for Celery (optional)
+flower==2.0.1
+
+# Note: Install these packages with:
+# pip install -r celery_requirements.txt
+#
+# Chạy Celery Worker với gevent:
+# celery -A kiem_phieu_bau worker --pool=gevent --concurrency=10 -l info

@@ -15,6 +15,7 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	total_ballots_issued = models.IntegerField(default=0) # Tổng số phiếu phát ra (dùng để đối soát)
 	total_ballots_received = models.IntegerField(default=0) # Tổng số phiếu thu về (trong hòm phiếu)
 
+	is_counting_started = models.BooleanField(default=False) # cờ kiểm tự động
 	created_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True)  # Người tạo (id tài khoản)
 	# nên để choices sau này dễ quản lý trạng thái hơn
 	status = models.CharField(max_length=32, null=True)  # Trạng thái
@@ -25,6 +26,12 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	public_key = models.TextField(null=True, blank=True)   # RSA Public Key (DEPRECATED - kept for backward compatibility)
 	hmac_secret_key = models.TextField(null=True, blank=True)  # HMAC Secret Key (encrypted with Fernet)
 	key_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo HMAC key
+	
+	# Cấu hình kiểm phiếu
+	config_number = models.IntegerField(null=True, blank=True, choices=[
+		(1, 'Cấu hình 1: TrOCR + YOLO'),
+		(2, 'Cấu hình 2: Theo thứ tự + YOLO'),
+	], help_text='Cấu hình AI model đã sử dụng để kiểm phiếu')
 	
 	def save(self, *args, **kwargs):
 		# Tự động sinh mã tham gia nếu chưa có

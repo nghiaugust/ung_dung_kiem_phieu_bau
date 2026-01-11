@@ -11,7 +11,9 @@
     >
       <i class="bi bi-arrow-left"></i> Back
     </a>
-    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and trocr_status and yolo_status %}
+    
+    <!-- Nút Kiểm Phiếu Bầu -->
+    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and trocr_status and yolo_status and not poll.is_counting_started and config_number %}
     <button
       type="submit"
       form="counting-form"
@@ -24,11 +26,37 @@
       type="button"
       class="btn btn-lg btn-secondary me-2"
       disabled
+      {% if poll.is_counting_started %}
+      title="Không thể kiểm thủ công khi kiểm tự động đang bật"
+      {% elif not config_number %}
+      title="Vui lòng lưu cấu hình trước khi kiểm phiếu"
+      {% else %}
       title="Vui lòng hoàn thành tất cả các điều kiện"
+      {% endif %}
     >
       <i class="bi bi-check2-circle"></i> Kiểm Phiếu Bầu
     </button>
     {% endif %}
+    
+    <!-- Nút Kiểm tự động -->
+    {% if config_number %}
+    <a
+      href="{% url 'auto_counting' poll.poll_id %}"
+      class="btn btn-lg btn-warning me-2"
+    >
+      <i class="bi bi-lightning-charge-fill"></i> Kiểm tự động
+    </a>
+    {% else %}
+    <button
+      type="button"
+      class="btn btn-lg btn-secondary me-2"
+      disabled
+      title="Vui lòng lưu cấu hình trước khi bật kiểm tự động"
+    >
+      <i class="bi bi-lightning-charge-fill"></i> Kiểm tự động
+    </button>
+    {% endif %}
+    
     <a
       href="{% url 'counting_results' poll.poll_id %}"
       class="btn btn-lg btn-secondary"
@@ -65,105 +93,128 @@
     <!-- Danh sách cấu hình (Bên trái) -->
     <div class="col-md-6">
       <div class="card mb-4 h-100 shadow-lg">
-        <div class="card-header bg-primary text-white">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
           <h5 class="mb-0"><i class="bi bi-gear"></i> Danh sách cấu hình</h5>
+          <div>
+            {% if not is_counted %}
+            <button type="button" id="save-config-btn" class="btn btn-sm btn-light">
+              <i class="bi bi-save"></i> Lưu cấu hình
+            </button>
+            <button type="button" id="edit-config-btn" class="btn btn-sm btn-light" style="display: none;">
+              <i class="bi bi-pencil"></i> Sửa
+            </button>
+            {% else %}
+            <span class="badge bg-success">
+              <i class="bi bi-lock-fill"></i> Đã lưu cấu hình {{ config_number }}
+            </span>
+            {% endif %}
+          </div>
         </div>
         <div class="card-body">
           <!-- Cấu hình 1: TrOCR + YOLO -->
-          <div class="form-check mb-3">
-            <input
-              class="form-check-input"
-              type="radio"
-              name="config_type"
-              id="config1"
-              value="1"
-              checked
-            />
-            <label class="form-check-label fw-bold" for="config1">
-              Cấu hình 1: TrOCR nhận diện tên + YOLO detect dấu X
-            </label>
-          </div>
+          <div id="config1-container" {% if config_number == 2 and is_counted %}style="display: none;"{% endif %}>
+            <div class="form-check mb-3">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="config_type"
+                id="config1"
+                value="1"
+                {% if config_number == 1 or not config_number %}checked{% endif %}
+                {% if is_counted %}disabled{% endif %}
+              />
+              <label class="form-check-label fw-bold" for="config1">
+                Cấu hình 1: TrOCR nhận diện tên + YOLO detect dấu X
+                {% if config_number == 1 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
+              </label>
+            </div>
 
-          <div class="ms-4 mb-3">
-            <table class="table table-bordered table-sm">
-              <thead class="table-light">
-                <tr>
-                  <th>STT</th>
-                  <th>Họ và Tên</th>
-                  <th>Đồng ý</th>
-                  <th>Không đồng ý</th>
-                </tr>
-                <tr>
-                  <th class="text-center">Cột 1</th>
-                  <th class="text-center">Cột 2</th>
-                  <th class="text-center">Cột 3</th>
-                  <th class="text-center">Cột 4</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colspan="4" class="text-muted small">
-                    <strong>Cấu hình:</strong>
-                    <ul class="mb-0 mt-2">
-                      <li>
-                        <strong>TrOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
-                      </li>
-                      <li>
-                        <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
-                      </li>
-                    </ul>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="ms-4 mb-3">
+              <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>STT</th>
+                    <th>Họ và Tên</th>
+                    <th>Đồng ý</th>
+                    <th>Không đồng ý</th>
+                  </tr>
+                  <tr>
+                    <th class="text-center">Cột 1</th>
+                    <th class="text-center">Cột 2</th>
+                    <th class="text-center">Cột 3</th>
+                    <th class="text-center">Cột 4</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="4" class="text-muted small">
+                      <strong>Cấu hình:</strong>
+                      <ul class="mb-0 mt-2">
+                        <li>
+                          <strong>TrOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
+                        </li>
+                        <li>
+                          <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
+                        </li>
+                      </ul>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <!-- Cấu hình 2: Tên theo thứ tự + YOLO -->
-          <div class="form-check mb-3">
-            <input
-              class="form-check-input"
-              type="radio"
-              name="config_type"
-              id="config2"
-              value="2"
-            />
-            <label class="form-check-label fw-bold" for="config2">
-              Cấu hình 2: Tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
-            </label>
-          </div>
+          <div id="config2-container" {% if config_number == 1 and is_counted %}style="display: none;"{% endif %}>
+            <div class="form-check mb-3">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="config_type"
+                id="config2"
+                value="2"
+                {% if config_number == 2 %}checked{% endif %}
+                {% if is_counted %}disabled{% endif %}
+              />
+              <label class="form-check-label fw-bold" for="config2">
+                Cấu hình 2: Tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
+                {% if config_number == 2 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
+              </label>
+            </div>
 
-          <div class="ms-4 mb-3">
-            <table class="table table-bordered table-sm">
-              <thead class="table-light">
-                <tr>
-                  <th>STT</th>
-                  <th>Họ và Tên</th>
-                  <th>Đồng ý</th>
-                  <th>Không đồng ý</th>
-                </tr>
-                <tr>
-                  <th class="text-center">Cột 1</th>
-                  <th class="text-center">Cột 2</th>
-                  <th class="text-center">Cột 3</th>
-                  <th class="text-center">Cột 4</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colspan="4" class="text-muted small">
-                    <strong>Cấu hình:</strong>
-                    <ul class="mb-0 mt-2">
-                      <li>
-                        Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng TrOCR)
-                      </li>
-                      <li>
-                        <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
-                      </li>
-                    </ul>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="ms-4 mb-3">
+              <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>STT</th>
+                    <th>Họ và Tên</th>
+                    <th>Đồng ý</th>
+                    <th>Không đồng ý</th>
+                  </tr>
+                  <tr>
+                    <th class="text-center">Cột 1</th>
+                    <th class="text-center">Cột 2</th>
+                    <th class="text-center">Cột 3</th>
+                    <th class="text-center">Cột 4</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="4" class="text-muted small">
+                      <strong>Cấu hình:</strong>
+                      <ul class="mb-0 mt-2">
+                        <li>
+                          Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng TrOCR)
+                        </li>
+                        <li>
+                          <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
+                        </li>
+                      </ul>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -176,6 +227,22 @@
           <h5 class="mb-0"><i class="bi bi-filter"></i> Danh sách điều kiện</h5>
         </div>
         <div class="card-body">
+          <!-- Cảnh báo kiểm tự động -->
+          {% if poll.is_counting_started %}
+          <div class="alert alert-warning mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Kiểm tự động đang bật, không thể kiểm thủ công</strong>
+          </div>
+          {% endif %}
+
+          <!-- Cảnh báo chưa cấu hình -->
+          {% if not config_number %}
+          <div class="alert alert-danger mb-3" role="alert">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            <strong>Chưa cấu hình - Vui lòng lưu cấu hình trước khi kiểm phiếu</strong>
+          </div>
+          {% endif %}
+
           <!-- Điều kiện 1: Ứng viên -->
           <p class="mb-2">
             <strong>Ứng viên:</strong>
@@ -243,77 +310,6 @@
             {% endif %}
           </p>
 
-          <!-- Tự động kiểm phiếu -->
-          <div class="border-top pt-3 mt-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <strong>Tự động kiểm phiếu:</strong>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="auto_check_enabled" name="auto_check_enabled" {% if auto_check_enabled %}checked{% endif %}>
-                <label class="form-check-label" for="auto_check_enabled">
-                  <span id="auto-check-status-text">{% if auto_check_enabled %}Đang bật{% else %}Đang tắt{% endif %}</span>
-                </label>
-              </div>
-            </div>
-            
-            <div class="mb-2" id="auto-check-progress" {% if not auto_check_enabled %}style="display:none;"{% endif %}>
-              <small class="text-muted">
-                <i class="bi bi-check-circle"></i> Số phiếu đã kiểm được: <strong id="auto-check-processed-count">{{ auto_check_processed|default:0 }}</strong>
-              </small>
-            </div>
-            <div class="input-group input-group-sm mb-2">
-              <span class="input-group-text">Số phiếu tối đa</span>
-              <input type="number" class="form-control" id="auto_check_max_ballots" name="auto_check_max_ballots" value="{{ auto_check_max_ballots|default:ballots_count }}" min="1" max="{{ ballots_count }}" placeholder="{{ ballots_count }}">
-              <span class="input-group-text">/ {{ ballots_count }} phiếu</span>
-            </div>
-            <small class="text-muted d-block">
-              <i class="bi bi-info-circle"></i> Khi bật, phiếu mới được upload sẽ tự động kiểm
-            </small>
-            <button
-              type="button"
-              id="save-config-btn"
-              class="btn btn-primary btn-sm w-100 mt-2"
-            >
-              <i class="bi bi-floppy"></i> Lưu cấu hình
-            </button>
-            
-            <!-- Scheduler Control -->
-            <div class="border-top pt-3 mt-3">
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <strong>
-                  <i class="bi bi-clock-history"></i> Scheduler (Quét tự động):
-                </strong>
-                <span class="badge bg-secondary" id="scheduler-badge">Đang kiểm tra...</span>
-              </div>
-              
-              <div class="alert alert-sm p-2 mb-2" id="scheduler-info" style="display:none;">
-                <small id="scheduler-info-text"></small>
-              </div>
-              
-              <div class="d-grid gap-2">
-                <button
-                  type="button"
-                  id="start-scheduler-btn"
-                  class="btn btn-success btn-sm"
-                  style="display:none;"
-                >
-                  <i class="bi bi-play-circle-fill"></i> Khởi động Scheduler
-                </button>
-                <button
-                  type="button"
-                  id="stop-scheduler-btn"
-                  class="btn btn-danger btn-sm"
-                  style="display:none;"
-                >
-                  <i class="bi bi-stop-circle-fill"></i> Dừng Scheduler
-                </button>
-              </div>
-              
-              <small class="text-muted d-block mt-2">
-                <i class="bi bi-info-circle"></i> Scheduler quét phiếu chưa kiểm mỗi 15 giây
-              </small>
-            </div>
-          </div>
-
           <input type="hidden" name="start_row" value="2" />
           <input type="hidden" name="end_row" value="" />
           <input type="hidden" name="yolo_confidence" value="20" />
@@ -333,64 +329,9 @@
 {% block scripts %}
 <script>
   const tienXuLyButton = document.getElementById("tien-xu-ly-btn");
-  const saveConfigBtn = document.getElementById("save-config-btn");
   const loadingOverlay = document.getElementById("loading-overlay");
   const loadingText = document.getElementById("loading-text");
   const countingForm = document.getElementById("counting-form");
-
-  // XỨ LÝ NÚT LƯƯu CẤU HÌNH
-  if (saveConfigBtn) {
-    saveConfigBtn.addEventListener("click", function(event) {
-      event.preventDefault();
-      
-      const config1Radio = document.getElementById("config1");
-      const config2Radio = document.getElementById("config2");
-      const autoCheckMaxInput = document.getElementById("auto_check_max_ballots");
-      
-      if (!config1Radio.checked && !config2Radio.checked) {
-        showAlert("⚠️ Vui lòng chọn một cấu hình!");
-        return;
-      }
-      
-      // Tạo form data
-      const formData = new FormData();
-      formData.append('config1', config1Radio.checked ? '1' : '0');
-      formData.append('config2', config2Radio.checked ? '1' : '0');
-      formData.append('start_row', document.querySelector('input[name="start_row"]').value);
-      formData.append('end_row', document.querySelector('input[name="end_row"]').value);
-      formData.append('yolo_confidence', document.querySelector('input[name="yolo_confidence"]').value);
-      formData.append('config1_trocr_col', document.querySelector('input[name="config1_trocr_col"]').value);
-      formData.append('config1_yolo_cols', document.querySelector('input[name="config1_yolo_cols"]').value);
-      formData.append('config2_yolo_cols', document.querySelector('input[name="config2_yolo_cols"]').value);
-      formData.append('auto_check_max_ballots', autoCheckMaxInput.value);
-      formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-      
-      // Hiển thị loading
-      loadingText.innerText = "Đang lưu cấu hình...";
-      loadingOverlay.style.display = "flex";
-      
-      // Gọi API lưu cấu hình
-      fetch("/counting/poll/{{ poll.poll_id }}/save-config/", {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        loadingOverlay.style.display = "none";
-        
-        if (data.success) {
-          showAlert("✅ " + data.message);
-        } else {
-          showAlert("❌ Lỗi: " + (data.error || "Không thể lưu cấu hình"));
-        }
-      })
-      .catch(error => {
-        loadingOverlay.style.display = "none";
-        console.error("Lỗi lưu cấu hình:", error);
-        showAlert("❌ Lỗi kết nối server!");
-      });
-    });
-  }
 
   // XỬ LÝ NÚT TIỀN XỬ LÝ
   if (tienXuLyButton) {
@@ -429,208 +370,6 @@
     });
   }
 
-  // XỬ LÝ TOGGLE TỰ ĐỘNG KIỂM
-  const autoCheckToggle = document.getElementById("auto_check_enabled");
-  const autoCheckStatusText = document.getElementById("auto-check-status-text");
-  const autoCheckMaxInput = document.getElementById("auto_check_max_ballots");
-  const autoCheckProgress = document.getElementById("auto-check-progress");
-  const autoCheckProcessedCount = document.getElementById("auto-check-processed-count");
-  const schedulerBadge = document.getElementById("scheduler-badge");
-  const schedulerInfo = document.getElementById("scheduler-info");
-  const schedulerInfoText = document.getElementById("scheduler-info-text");
-  const startSchedulerBtn = document.getElementById("start-scheduler-btn");
-  const stopSchedulerBtn = document.getElementById("stop-scheduler-btn");
-  
-  // Hàm cập nhật trạng thái scheduler
-  function updateSchedulerStatus() {
-    fetch("/counting/scheduler/status/")
-      .then(response => response.json())
-      .then(data => {
-        if (data.scheduler_running) {
-          schedulerBadge.className = "badge bg-success";
-          schedulerBadge.innerHTML = '<i class="bi bi-play-circle-fill"></i> Đang chạy';
-          
-          schedulerInfo.style.display = "block";
-          schedulerInfo.className = "alert alert-success alert-sm p-2 mb-2";
-          schedulerInfoText.innerHTML = `
-            <i class="bi bi-check-circle"></i> Scheduler đang hoạt động<br>
-            <i class="bi bi-clock"></i> Quét mỗi ${data.interval}s | 
-            <i class="bi bi-card-checklist"></i> ${data.active_polls} poll đang bật auto check
-          `;
-          
-          startSchedulerBtn.style.display = "none";
-          stopSchedulerBtn.style.display = "block";
-        } else {
-          schedulerBadge.className = "badge bg-secondary";
-          schedulerBadge.innerHTML = '<i class="bi bi-pause-circle"></i> Đã dừng';
-          
-          schedulerInfo.style.display = "block";
-          schedulerInfo.className = "alert alert-secondary alert-sm p-2 mb-2";
-          schedulerInfoText.innerHTML = `
-            <i class="bi bi-info-circle"></i> Scheduler chưa chạy<br>
-            <small>Nhấn nút bên dưới để khởi động</small>
-          `;
-          
-          startSchedulerBtn.style.display = "block";
-          stopSchedulerBtn.style.display = "none";
-        }
-      })
-      .catch(error => {
-        console.error("Lỗi kiểm tra scheduler:", error);
-        schedulerBadge.className = "badge bg-warning";
-        schedulerBadge.textContent = "Không rõ";
-      });
-  }
-  
-  // Kiểm tra trạng thái ban đầu
-  updateSchedulerStatus();
-  
-  // Tự động refresh trạng thái mỗi 5 giây
-  setInterval(updateSchedulerStatus, 5000);
-  
-  // XỬ LÝ NÚT KHỞI ĐỘNG SCHEDULER
-  if (startSchedulerBtn) {
-    startSchedulerBtn.addEventListener("click", function() {
-      const formData = new FormData();
-      formData.append('action', 'start');
-      formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-      
-      this.disabled = true;
-      this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang khởi động...';
-      
-      fetch("/counting/scheduler/control/", {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showAlert("✅ " + data.message);
-          updateSchedulerStatus();
-        } else {
-          showAlert("❌ Lỗi: " + (data.error || "Không thể khởi động scheduler"));
-        }
-        this.disabled = false;
-        this.innerHTML = '<i class="bi bi-play-circle-fill"></i> Khởi động Scheduler';
-      })
-      .catch(error => {
-        console.error("Lỗi khởi động scheduler:", error);
-        showAlert("❌ Lỗi kết nối server!");
-        this.disabled = false;
-        this.innerHTML = '<i class="bi bi-play-circle-fill"></i> Khởi động Scheduler';
-      });
-    });
-  }
-  
-  // XỬ LÝ NÚT DỪNG SCHEDULER
-  if (stopSchedulerBtn) {
-    stopSchedulerBtn.addEventListener("click", function() {
-      if (!confirm("Bạn có chắc muốn dừng scheduler? Các phiếu sẽ không được tự động quét nữa.")) {
-        return;
-      }
-      
-      const formData = new FormData();
-      formData.append('action', 'stop');
-      formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-      
-      this.disabled = true;
-      this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang dừng...';
-      
-      fetch("/counting/scheduler/control/", {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showAlert("✅ " + data.message);
-          updateSchedulerStatus();
-        } else {
-          showAlert("❌ Lỗi: " + (data.error || "Không thể dừng scheduler"));
-        }
-        this.disabled = false;
-        this.innerHTML = '<i class="bi bi-stop-circle-fill"></i> Dừng Scheduler';
-      })
-      .catch(error => {
-        console.error("Lỗi dừng scheduler:", error);
-        showAlert("❌ Lỗi kết nối server!");
-        this.disabled = false;
-        this.innerHTML = '<i class="bi bi-stop-circle-fill"></i> Dừng Scheduler';
-      });
-    });
-  }
-  
-  if (autoCheckToggle) {
-    autoCheckToggle.addEventListener("change", function() {
-      const isEnabled = this.checked;
-      autoCheckStatusText.textContent = isEnabled ? "Đang bật" : "Đang tắt";
-      
-      // Hiển thị/ẩn phần tiến trình
-      if (autoCheckProgress) {
-        autoCheckProgress.style.display = isEnabled ? "block" : "none";
-      }
-      
-      // Gọi API để cập nhật trạng thái
-      const formData = new FormData();
-      formData.append('auto_check_enabled', isEnabled);
-      formData.append('auto_check_max_ballots', autoCheckMaxInput.value);
-      formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-      
-      fetch("/counting/poll/{{ poll.poll_id }}/auto-check/toggle/", {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          showAlert(data.message);
-          console.log("[AUTO CHECK] Status updated:", data);
-          
-          // Cập nhật số phiếu đã kiểm
-          if (autoCheckProcessedCount && data.auto_check_processed !== undefined) {
-            autoCheckProcessedCount.textContent = data.auto_check_processed;
-          }
-        } else {
-          showAlert("Lỗi: " + (data.error || "Không thể cập nhật"));
-          // Revert toggle nếu lỗi
-          autoCheckToggle.checked = !isEnabled;
-          autoCheckStatusText.textContent = !isEnabled ? "Đang bật" : "Đang tắt";
-        }
-      })
-      .catch(error => {
-        console.error("Lỗi toggle auto check:", error);
-        showAlert("Lỗi kết nối server!");
-        // Revert toggle nếu lỗi
-        autoCheckToggle.checked = !isEnabled;
-        autoCheckStatusText.textContent = !isEnabled ? "Đang bật" : "Đang tắt";
-      });
-    });
-    
-    // Cập nhật khi thay đổi số lượng max ballots
-    if (autoCheckMaxInput) {
-      autoCheckMaxInput.addEventListener("change", function() {
-        if (autoCheckToggle.checked) {
-          // Gọi API để cập nhật
-          const formData = new FormData();
-          formData.append('auto_check_enabled', 'true');
-          formData.append('auto_check_max_ballots', this.value);
-          formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-          
-          fetch("/counting/poll/{{ poll.poll_id }}/auto-check/toggle/", {
-            method: 'POST',
-            body: formData
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              console.log("[AUTO CHECK] Max ballots updated:", data);
-            }
-          });
-        }
-      });
-    }
-  }
-
   // XỬ LÝ SUBMIT FORM - Thêm config type vào form data
   if (countingForm) {
     countingForm.addEventListener("submit", function(event) {
@@ -649,6 +388,108 @@
       configInput2.name = "config2";
       configInput2.value = config2Radio.checked ? "1" : "0";
       countingForm.appendChild(configInput2);
+    });
+  }
+
+  // XỬ LÝ LƯU CẤU HÌNH VÀ SỬA CẤU HÌNH
+  const saveConfigBtn = document.getElementById("save-config-btn");
+  const editConfigBtn = document.getElementById("edit-config-btn");
+  const config1Radio = document.getElementById("config1");
+  const config2Radio = document.getElementById("config2");
+
+  // Lấy các container của từng cấu hình
+  const config1Container = document.getElementById("config1-container");
+  const config2Container = document.getElementById("config2-container");
+  
+  // Kiểm tra trạng thái đã counted
+  const isCounted = {{ is_counted|lower }};
+  const savedConfigNumber = {{ config_number|default:"null" }};
+
+  // Nếu đã counted, ẩn cấu hình không được sử dụng
+  if (isCounted && savedConfigNumber) {
+    if (savedConfigNumber === 1) {
+      config2Container.style.display = "none";
+    } else if (savedConfigNumber === 2) {
+      config1Container.style.display = "none";
+    }
+  }
+
+  if (saveConfigBtn && editConfigBtn && !isCounted) {
+    // Xử lý nút Lưu cấu hình
+    saveConfigBtn.addEventListener("click", function() {
+      // Lấy config type đã chọn
+      const configType = config1Radio.checked ? 1 : 2;
+      
+      // Hiển thị loading
+      if (loadingOverlay && loadingText) {
+        loadingText.innerText = `Đang lưu cấu hình ${configType}...`;
+        loadingOverlay.style.display = "flex";
+      }
+      
+      // Gọi API lưu cấu hình
+      const saveConfigUrl = "{% url 'save_configuration' poll.poll_id %}";
+      
+      fetch(saveConfigUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+          config_type: configType
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (loadingOverlay) {
+          loadingOverlay.style.display = "none";
+        }
+        
+        if (data.status === 'success') {
+          // Hiển thị thông báo thành công
+          showAlert(data.message);
+          
+          // Ẩn cấu hình không được chọn
+          if (config1Radio.checked) {
+            config2Container.style.display = "none";
+          } else if (config2Radio.checked) {
+            config1Container.style.display = "none";
+          }
+
+          // Disable radio buttons để không thể thay đổi
+          config1Radio.disabled = true;
+          config2Radio.disabled = true;
+
+          // Hiện nút Sửa, ẩn nút Lưu
+          saveConfigBtn.style.display = "none";
+          editConfigBtn.style.display = "inline-block";
+        } else {
+          // Hiển thị lỗi
+          showAlert('Lỗi: ' + data.message);
+        }
+      })
+      .catch(error => {
+        if (loadingOverlay) {
+          loadingOverlay.style.display = "none";
+        }
+        console.error('Lỗi lưu cấu hình:', error);
+        showAlert('Lỗi kết nối đến server!');
+      });
+    });
+
+    // Xử lý nút Sửa
+    editConfigBtn.addEventListener("click", function() {
+      // Hiện lại tất cả cấu hình
+      config1Container.style.display = "block";
+      config2Container.style.display = "block";
+
+      // Enable lại radio buttons
+      config1Radio.disabled = false;
+      config2Radio.disabled = false;
+
+      // Hiện nút Lưu, ẩn nút Sửa
+      saveConfigBtn.style.display = "inline-block";
+      editConfigBtn.style.display = "none";
     });
   }
 </script>

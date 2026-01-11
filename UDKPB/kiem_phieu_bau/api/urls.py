@@ -27,6 +27,10 @@ urlpatterns = [
     path('polls/<int:poll_id>/ballots/', views.api_ballot_list, name='ballot_list'),
     path('polls/<int:poll_id>/ballots/<int:ballot_id>/verify-hmac/', views.api_verify_ballot_hmac, name='verify_ballot_hmac'),
     
+    # Ballot Status (Async Upload)
+    path('ballots/<int:ballot_id>/status/', views.api_ballot_status, name='ballot_status'),
+    path('ballots/status-batch/', views.api_ballot_status_batch, name='ballot_status_batch'),
+    
     # Poll Member Management
     path('polls/<int:poll_id>/request-role/', views.api_request_role_upgrade, name='request_role_upgrade'),
     path('polls/<int:poll_id>/role-requests/', views.api_get_role_requests, name='get_role_requests'),

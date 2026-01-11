@@ -98,6 +98,7 @@ CHANNEL_LAYERS = {
         # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
         # 'CONFIG': {
         #     "hosts": [(os.getenv('REDIS_HOST', '127.0.0.1'), int(os.getenv('REDIS_PORT', 6379)))],
+        #     "db": 3,  # ← Database 3 cho WebSocket
         # },
         
         # Dùng InMemoryChannelLayer cho development/testing (không cần Redis)
@@ -121,7 +122,9 @@ DATABASES = {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         },
         'ATOMIC_REQUESTS': True,
-        'CONN_MAX_AGE': 0,
+        # Giảm CONN_MAX_AGE xuống 60s để giải phóng connection nhanh hơn
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,  # Kiểm tra kết nối còn sống không (tránh MySQL server has gone away)
     },
 
     # 2. Kết nối dành riêng cho API cần Pooling
@@ -285,9 +288,50 @@ CACHES = {
     # Nếu muốn dùng Redis cho production (hiệu suất tốt hơn):
     # 'default': {
     #     'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-    #     'LOCATION': 'redis://127.0.0.1:6379/1',
+    #     'LOCATION': 'redis://127.0.0.1:6379/2',
     #     'OPTIONS': {
     #         'CLIENT_CLASS': 'django_redis.client.DefaultClient',
     #     },
     # },
 }
+
+
+# =====================================================
+# CELERY CONFIGURATION (Async Task Queue)
+# =====================================================
+
+# Redis broker URL cho Celery (sử dụng để lưu trữ task queue - database 0)
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+
+# Redis backend URL cho Celery (sử dụng để lưu trữ kết quả task - database 1)
+# Tách riêng database để dễ quản lý, monitor và tối ưu hóa
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+
+# Task serialization (định dạng dữ liệu khi truyền task)
+CELERY_ACCEPT_CONTENT = ['json']  # Chỉ chấp nhận JSON format
+CELERY_TASK_SERIALIZER = 'json'  # Serialize task thành JSON
+CELERY_RESULT_SERIALIZER = 'json'  # Serialize kết quả thành JSON
+
+# Timezone configuration
+CELERY_TIMEZONE = 'Asia/Ho_Chi_Minh'  # Múi giờ Việt Nam
+CELERY_ENABLE_UTC = False  # Không dùng UTC, dùng timezone trên
+
+# Task settings (cấu hình task execution)
+CELERY_TASK_TRACK_STARTED = True  # Theo dõi khi task bắt đầu
+CELERY_TASK_TIME_LIMIT = 30 * 60  # Hard time limit: 30 phút (task sẽ bị kill nếu vượt quá)
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # Soft time limit: 25 phút (task sẽ nhận warning)
+
+# Worker settings (cấu hình worker process)
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Worker chỉ lấy 1 task mỗi lần (phân phối công bằng)
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 20  # Worker tự restart sau 20 tasks (tránh memory leak khi xử lý ảnh lớn)
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = 200000  # Restart worker nếu RAM > 200MB (tránh OOM)
+
+# Result backend settings - TỰ ĐỘNG DỌN DẸP KẾT QUẢ CŨ (quan trọng khi xử lý hàng trăm phiếu)
+CELERY_RESULT_EXPIRES = 3600  # Xóa kết quả sau 1 giờ (3600 giây) để tránh Redis bị đầy
+CELERY_RESULT_BACKEND_ALWAYS_RETRY = True  # Retry khi lưu kết quả thất bại
+CELERY_RESULT_BACKEND_MAX_RETRIES = 3  # Retry tối đa 3 lần
+
+# Optional: Lưu kết quả task vào database thay vì Redis
+# INSTALLED_APPS += ['django_celery_results']
+# CELERY_RESULT_BACKEND = 'django-db'
+# CELERY_CACHE_BACKEND = 'django-cache'
