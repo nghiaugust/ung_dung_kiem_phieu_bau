@@ -96,6 +96,7 @@ class TrOCRService:
         Returns:
             Dict chứa filename và text nhận diện được
         """
+        pil_img = None
         try:
             # Convert bytes to PIL Image
             pil_img = Image.open(io.BytesIO(image_data))
@@ -107,6 +108,9 @@ class TrOCRService:
             # OCR
             result = self._pipe(pil_img)
             text = result[0]['generated_text'] if result else ""
+            
+            # XÓA result để giải phóng tensor memory
+            del result
             
             return {
                 'filename': filename,
@@ -121,6 +125,11 @@ class TrOCRService:
                 'status': 'error',
                 'error': str(e)
             }
+        finally:
+            # CLEANUP: Đóng PIL image để giải phóng memory
+            if pil_img is not None:
+                pil_img.close()
+            del pil_img
     
     def recognize_batch(self, images: List[tuple]) -> List[Dict]:
         """
@@ -133,10 +142,10 @@ class TrOCRService:
             List of results
         """
         results = []
+        pil_images = []
         
         try:
             # Prepare batch
-            pil_images = []
             filenames = []
             
             for image_data, filename in images:
@@ -172,12 +181,24 @@ class TrOCRService:
                         'text': text,
                         'status': 'success'
                     })
+                
+                # XÓA batch_results để giải phóng tensor memory
+                del batch_results
             
         except Exception as e:
             # Fallback to individual processing
             print(f"[TrOCR Service] ⚠️ Batch processing failed, fallback to individual: {e}")
             for image_data, filename in images:
                 results.append(self.recognize_text(image_data, filename))
+        
+        finally:
+            # CLEANUP: Đóng tất cả PIL images
+            for img in pil_images:
+                try:
+                    img.close()
+                except:
+                    pass
+            del pil_images
         
         return results
 
@@ -238,6 +259,10 @@ class YOLOService:
         Returns:
             Dict chứa filename và kết quả detection
         """
+        pil_img = None
+        img_array = None
+        results = None
+        
         try:
             # Convert bytes to PIL Image
             pil_img = Image.open(io.BytesIO(image_data))
@@ -278,6 +303,9 @@ class YOLOService:
                         'bbox': box.tolist()
                     })
                 
+                # XÓA numpy arrays ngay sau khi dùng xong
+                del boxes, classes, confidences
+                
                 # Xác định label chính (ưu tiên x_mark)
                 has_x_mark = any(d['class'] == 'x_mark' for d in detections)
                 has_x_cancelled = any(d['class'] == 'x_cancelled' for d in detections)
@@ -288,8 +316,10 @@ class YOLOService:
                     label = "x_cancelled"
             
             # Vẽ bounding box lên ảnh (hoặc "none" nếu không có detection)
+            # CHÚ Ý: _draw_detections sẽ đóng pil_img bên trong
             if image_path:
                 self._draw_detections(pil_img, detections, image_path, label)
+                pil_img = None  # Đã được đóng trong _draw_detections
             
             return {
                 'filename': filename,
@@ -306,17 +336,28 @@ class YOLOService:
                 'status': 'error',
                 'error': str(e)
             }
+        finally:
+            # CLEANUP: Giải phóng memory
+            if pil_img is not None:
+                pil_img.close()
+            del pil_img
+            del img_array
+            if results is not None:
+                del results
     
     def _draw_detections(self, pil_img: Image.Image, detections: List[Dict], image_path: str, label: str = 'none'):
         """
         Vẽ bounding box lên ảnh và lưu lại
         
         Args:
-            pil_img: PIL Image object
+            pil_img: PIL Image object (sẽ bị đóng sau khi save)
             detections: List các detection
             image_path: Đường dẫn để lưu ảnh
             label: Label chính (x_mark, x_cancelled, none)
         """
+        draw = None
+        font = None
+        
         try:
             # Tạo draw object
             draw = ImageDraw.Draw(pil_img)
@@ -371,6 +412,12 @@ class YOLOService:
             
         except Exception as e:
             print(f"[YOLO Service] ⚠️ Lỗi khi vẽ bounding box: {e}")
+        finally:
+            # CLEANUP: Đóng PIL image sau khi save
+            del draw, font
+            if pil_img is not None:
+                pil_img.close()
+            del pil_img
     
     def detect_batch(self, images: List[tuple]) -> List[Dict]:
         """

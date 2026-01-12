@@ -184,6 +184,9 @@ def cat_va_luu_cac_o_phieu_bau(ballot, duong_dan_anh_da_lam_phang):
 				# Lưu ảnh ô
 				cv2.imwrite(cell_path, cropped)
 				
+				# CLEANUP: Xóa cropped ngay sau khi save (tiết kiệm ~1MB/cell)
+				del cropped
+				
 				# 7. Lưu vào database
 				BallotCell.objects.create(
 					preprocessed_ballot=preprocessed,
@@ -193,6 +196,11 @@ def cat_va_luu_cac_o_phieu_bau(ballot, duong_dan_anh_da_lam_phang):
 				)
 				
 				cell_count += 1
+		
+		# CLEANUP: Xóa warped sau khi cắt xong tất cả cells (tiết kiệm ~17MB!)
+		del warped
+		import gc
+		gc.collect()
 		
 		# print(f"[STEP2] Đã cắt và lưu {cell_count} ô vào database")
 		

@@ -348,6 +348,12 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	if not success:
 		raise ValueError(f"Không thể lưu ảnh tại: {duong_dan_anh_dau_ra}")
 	
+	# CLEANUP: Giải phóng memory của ảnh gốc (cực kỳ quan trọng!)
+	# img có thể lên tới 35-50MB (4000x3000x3 bytes)
+	del img
+	import gc
+	gc.collect()
+	
 	# print(f"[STEP1] Đã lưu ảnh làm phẳng tại: {duong_dan_anh_dau_ra}")
 	print(f"[STEP1] ========== HOÀN THÀNH BƯỚC 1: LÀM PHẲNG ẢNH ==========")
 	

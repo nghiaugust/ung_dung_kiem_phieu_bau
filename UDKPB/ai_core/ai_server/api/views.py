@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
+import gc
 from .model_services import TrOCRService, YOLOService
 
 
@@ -59,6 +60,10 @@ def trocr_recognize(request):
         # Process batch
         results = trocr_service.recognize_batch(images)
         
+        # CLEANUP: Xóa images data sau khi xử lý xong
+        del images
+        gc.collect()
+        
         # Response
         return JsonResponse({
             'success': True,
@@ -67,6 +72,8 @@ def trocr_recognize(request):
         })
         
     except Exception as e:
+        # Cleanup on error
+        gc.collect()
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -139,6 +146,10 @@ def yolo_detect(request):
         # Process batch
         results = yolo_service.detect_batch(images)
         
+        # CLEANUP: Xóa images data sau khi xử lý xong
+        del images
+        gc.collect()
+        
         # Response
         return JsonResponse({
             'success': True,
@@ -147,6 +158,8 @@ def yolo_detect(request):
         })
         
     except Exception as e:
+        # Cleanup on error
+        gc.collect()
         return JsonResponse({
             'success': False,
             'error': str(e)

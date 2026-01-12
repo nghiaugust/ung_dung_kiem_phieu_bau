@@ -226,7 +226,13 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 		# Nếu AI server xử lý chậm hơn 5 phút thì có vấn đề nghiêm trọng cần xử lý
 		response = requests.post(api_url, files=files, timeout=300)
 		response.raise_for_status()
-		return response.json()
+		result = response.json()
+		
+		# CLEANUP: Giải phóng memory sau khi nhận response
+		import gc
+		gc.collect()
+		
+		return result
 	except requests.exceptions.RequestException as e:
 		return {
 			'success': False,
@@ -275,7 +281,13 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		# Giảm timeout xuống 300s (5 phút) - tránh worker bị block quá lâu
 		response = requests.post(api_url, files=files, data=data, timeout=300)
 		response.raise_for_status()
-		return response.json()
+		result = response.json()
+		
+		# CLEANUP: Giải phóng memory sau khi nhận response
+		import gc
+		gc.collect()
+		
+		return result
 	except requests.exceptions.RequestException as e:
 		return {
 			'success': False,
