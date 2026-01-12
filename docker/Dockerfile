@@ -1,5 +1,5 @@
 # Dockerfile cho Django Web App (Production)
-FROM python:3.11-slim
+FROM python:3.12.6-slim
 
 # Metadata
 LABEL maintainer="domanhnghiaforwork@gmail.com"
@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     # PDF processing
     poppler-utils \
+    # Network utilities for health checks
+    netcat-openbsd \
+    curl \
     # Cleaning up
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -36,9 +39,7 @@ COPY UDKPB/kiem_phieu_bau/celery_requirements.txt /app/celery_requirements.txt
 # Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
-    pip install -r celery_requirements.txt && \
-    # Additional production packages
-    pip install gunicorn whitenoise
+    pip install -r celery_requirements.txt
 
 # Copy project files
 COPY UDKPB/kiem_phieu_bau /app/kiem_phieu_bau
@@ -55,6 +56,10 @@ WORKDIR /app/kiem_phieu_bau
 # Collect static files (will be overridden by entrypoint, but good for cache)
 RUN python manage.py collectstatic --noinput || true
 
+# Copy entrypoint script
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app
@@ -64,10 +69,6 @@ USER appuser
 
 # Expose port
 EXPOSE 8000
-
-# Copy entrypoint script
-COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]

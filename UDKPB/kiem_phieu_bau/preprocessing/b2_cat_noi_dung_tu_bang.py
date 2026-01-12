@@ -220,7 +220,11 @@ def ve_bieu_do_projection(h_projection, v_projection, h_peaks, v_peaks, duong_da
     base_name = os.path.splitext(duong_dan_anh)[0]
     plt.savefig(f"{base_name}_histogram.png", dpi=150, bbox_inches='tight')
     print(f"[INFO] Đã lưu đồ thị projection: {base_name}_histogram.png")
-    plt.close()
+    
+    # CLEANUP: Đóng figure để giải phóng memory (matplotlib leak rất nhiều!)
+    plt.close('all')
+    import gc
+    gc.collect()
 
 
 def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_lines=None, target_v_lines=None):
@@ -435,6 +439,16 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
         cv2.imwrite(edges_output, edges)
         print(f"[INFO] Đã lưu ảnh edges kết hợp: {edges_output}")
     
+    print("[INFO] ========== HOÀN TẤT PHÁT HIỆN GRID ==========")
+    
+    # CLEANUP: Giải phóng tất cả ảnh tạm (cực kỳ quan trọng!)
+    # img có thể lên tới 17MB, binary/edges ~5MB mỗi cái
+    del img, gray, enhanced, binary, h_lines_img, v_lines_img, edges
+    if hien_thi:
+        del result_img
+    import gc
+    gc.collect()
+    
     return {
         'horizontal_lines': merged_h_lines,
         'vertical_lines': merged_v_lines,
@@ -584,7 +598,16 @@ def cat_cac_o_tu_grid(duong_dan_anh, grid, thu_muc_luu):
             
             # Lưu
             cv2.imwrite(filepath, cropped)
+            
+            # CLEANUP: Xóa cropped ngay sau khi lưu
+            del cropped
+            
             count += 1
+    
+    # CLEANUP: Giải phóng img sau khi cắt xong tất cả cells
+    del img
+    import gc
+    gc.collect()
     
     print(f"[INFO] Đã cắt {count} ô và lưu vào: {thu_muc_luu}")
     return count
@@ -731,6 +754,7 @@ if __name__ == "__main__":
     print(f"📦 Tổng số ô:   {total_cells} ô")
     print(f"📁 Kết quả tại: {os.path.abspath(output_dir)}")
     print("=" * 70)
+
 
 
 

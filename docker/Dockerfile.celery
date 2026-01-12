@@ -1,5 +1,5 @@
 # Dockerfile cho Celery Worker (AI Processing)
-FROM python:3.11-slim
+FROM python:3.12.6-slim
 
 # Metadata
 LABEL maintainer="domanhnghiaforwork@gmail.com"
@@ -32,13 +32,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Git for downloading models
     git \
     wget \
+    # Network utilities
+    netcat-openbsd \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY UDKPB/requirements.txt /app/requirements.txt
 COPY UDKPB/kiem_phieu_bau/celery_requirements.txt /app/celery_requirements.txt
-COPY UDKPB/ai_core/ai_server/requirements.txt /app/ai_requirements.txt
+COPY UDKPB/ai_core/ai_server/ai_requirements.txt /app/ai_requirements.txt
 
 # Install all Python dependencies (including AI libraries)
 RUN pip install --upgrade pip && \
@@ -48,14 +50,9 @@ RUN pip install --upgrade pip && \
 
 # Copy project files
 COPY UDKPB/kiem_phieu_bau /app/kiem_phieu_bau
-COPY UDKPB/ai_core /app/ai_core
-
-# Download TrOCR model (if not using volume mount)
-WORKDIR /app/ai_core/model_trocr
-RUN python -c "from transformers import TrOCRProcessor, VisionEncoderDecoderModel; \
-    model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-printed'); \
-    processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-printed'); \
-    print('TrOCR model downloaded successfully')" || echo "Model download skipped"
+COPY UDKPB/ai_core/processors /app/ai_core/processors
+COPY UDKPB/ai_core/model_trocr /app/ai_core/model_trocr
+COPY UDKPB/ai_core/model_yolo_x /app/ai_core/model_yolo_x
 
 # Create necessary directories
 WORKDIR /app/kiem_phieu_bau
