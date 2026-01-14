@@ -79,8 +79,6 @@ class TrOCRService:
                 device=device
             )
             
-            print(f"[TrOCR Service] ✅ Model loaded từ: {model_path}")
-            
         except Exception as e:
             print(f"[TrOCR Service] ❌ Lỗi load model: {e}")
             raise
@@ -235,8 +233,6 @@ class YOLOService:
             # Load model
             self._model = YOLO(model_path)
             
-            print(f"[YOLO Service] ✅ Model loaded từ: {model_path}")
-            
             # Check GPU
             if torch.cuda.is_available():
                 print("[YOLO Service] ✅ Sử dụng GPU")
@@ -315,11 +311,10 @@ class YOLOService:
                 elif has_x_cancelled:
                     label = "x_cancelled"
             
-            # Vẽ bounding box lên ảnh (hoặc "none" nếu không có detection)
-            # CHÚ Ý: _draw_detections sẽ đóng pil_img bên trong
-            if image_path:
-                self._draw_detections(pil_img, detections, image_path, label)
-                pil_img = None  # Đã được đóng trong _draw_detections
+            # BỎ PHẦN VẼ BOX - chỉ trả về kết quả detection
+            # if image_path:
+            #     self._draw_detections(pil_img, detections, image_path, label)
+            #     pil_img = None  # Đã được đóng trong _draw_detections
             
             return {
                 'filename': filename,
@@ -433,7 +428,7 @@ class YOLOService:
         
         # YOLO batch processing có thể không hoạt động tốt với model này
         # Xử lý từng ảnh để đảm bảo kết quả chính xác
-        print(f"[YOLO Service] Processing {len(images)} images individually for better accuracy...")
+        print(f"[YOLO Service] Processing {len(images)} ")
         
         for item in images:
             # Hỗ trợ cả 2 format: (data, name) và (data, name, path)

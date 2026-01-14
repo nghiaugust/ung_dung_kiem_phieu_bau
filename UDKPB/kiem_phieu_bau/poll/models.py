@@ -16,6 +16,8 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	total_ballots_received = models.IntegerField(default=0) # Tổng số phiếu thu về (trong hòm phiếu)
 
 	is_counting_started = models.BooleanField(default=False) # cờ kiểm tự động
+	total_ballots_count = models.IntegerField(default=0) # Tổng số phiếu sẽ kiểm
+
 	created_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True)  # Người tạo (id tài khoản)
 	# nên để choices sau này dễ quản lý trạng thái hơn
 	status = models.CharField(max_length=32, null=True)  # Trạng thái

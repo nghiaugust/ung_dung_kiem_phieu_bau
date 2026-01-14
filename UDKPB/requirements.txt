@@ -11,7 +11,6 @@ drf-yasg==1.21.7
 torch==2.9.0
 torchvision==0.24.0
 transformers==4.54.1
-tensorflow_intel==2.18.0
 tf_keras==2.20.1
 
 # Computer Vision & OCR

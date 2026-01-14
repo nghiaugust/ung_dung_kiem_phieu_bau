@@ -58,6 +58,7 @@ def trocr_recognize(request):
             images.append((image_data, filename))
         
         # Process batch
+        print(f"[TrOCR Service] Processing {len(images)}")
         results = trocr_service.recognize_batch(images)
         
         # CLEANUP: Xóa images data sau khi xử lý xong

@@ -682,8 +682,12 @@ def auto_counting_view(request, poll_id):
 	"""
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	
+	# Đếm tổng số ballot
+	total_ballots = Ballot.objects.filter(poll=poll).count()
+	
 	context = {
 		'poll': poll,
+		'total_ballots': total_ballots,
 	}
 	
 	return render(request, 'counting/auto_counting.html', context)
@@ -703,17 +707,41 @@ def toggle_auto_counting(request, poll_id):
 	
 	# Toggle trạng thái
 	poll.is_counting_started = not poll.is_counting_started
+	
+	# Nếu đang BẬT, lưu total_ballots_count từ form (hoặc mặc định = tổng ballot)
+	if poll.is_counting_started:
+		total_ballots = Ballot.objects.filter(poll=poll).count()
+		
+		# Lấy giá trị từ form, nếu không có thì dùng mặc định
+		total_ballots_count = request.POST.get('total_ballots_count', total_ballots)
+		
+		try:
+			total_ballots_count = int(total_ballots_count)
+			
+			# Validate: không được vượt quá tổng số ballot thực tế
+			if total_ballots_count > total_ballots:
+				total_ballots_count = total_ballots
+			
+			# Validate: phải >= 0
+			if total_ballots_count < 0:
+				total_ballots_count = 0
+			
+			poll.total_ballots_count = total_ballots_count
+		except (ValueError, TypeError):
+			# Nếu lỗi convert, dùng giá trị mặc định
+			poll.total_ballots_count = total_ballots
+	
 	poll.save()
 	
 	if poll.is_counting_started:
-		# KHI BẬT: Đẩy tất cả phiếu đã xử lý xong (completed) nhưng chưa kiểm (is_checked=False) vào queue
+		# KHI BẬT: Đẩy tất cả phiếu đã xử lý xong (process_status='completed') nhưng chưa kiểm (counting_status='pending') vào queue
 		from counting.tasks import counting_queue
 		
 		# Lấy tất cả ballot đã completed nhưng chưa kiểm
 		pending_ballots = Ballot.objects.filter(
 			poll=poll,
 			process_status='completed',
-			is_checked=False
+			counting_status='pending'
 		).values_list('ballot_id', flat=True)
 		
 		# Đẩy vào queue
@@ -735,49 +763,84 @@ def toggle_auto_counting(request, poll_id):
 def get_counting_stats(request, poll_id):
 	"""
 	API trả về thống kê số lượng phiếu upload và kiểm thành công
+	Trả về stats riêng cho 2 luồng: Upload và Counting
 	"""
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	
 	# Đếm tổng số phiếu
 	total_ballots = Ballot.objects.filter(poll=poll).count()
 	
-	# Đếm số phiếu upload thành công (process_status='completed')
-	uploaded_success = Ballot.objects.filter(
-		poll=poll,
-		process_status='completed'
-	).count()
-	
-	# Đếm số phiếu kiểm thành công (is_checked=True)
-	checked_success = Ballot.objects.filter(
-		poll=poll,
-		is_checked=True
-	).count()
-	
-	# Đếm số phiếu đang xử lý (process_status='processing')
-	processing = Ballot.objects.filter(
-		poll=poll,
-		process_status='processing'
-	).count()
-	
-	# Đếm số phiếu pending
-	pending = Ballot.objects.filter(
+	# === LUỒNG UPLOAD ===
+	# Đếm số phiếu chờ upload (process_status='pending')
+	upload_pending = Ballot.objects.filter(
 		poll=poll,
 		process_status='pending'
 	).count()
 	
-	# Đếm số phiếu failed
-	failed = Ballot.objects.filter(
+	# Đếm số phiếu đang upload (process_status='processing')
+	upload_processing = Ballot.objects.filter(
+		poll=poll,
+		process_status='processing'
+	).count()
+	
+	# Đếm số phiếu upload thành công (process_status='completed')
+	upload_success = Ballot.objects.filter(
+		poll=poll,
+		process_status='completed'
+	).count()
+	
+	# Đếm số phiếu upload thất bại (process_status='failed')
+	upload_failed = Ballot.objects.filter(
 		poll=poll,
 		process_status='failed'
 	).count()
 	
+	# === LUỒNG COUNTING ===
+	# Đếm số phiếu chờ kiểm (process_status='completed' và counting_status='pending')
+	counting_pending = Ballot.objects.filter(
+		poll=poll,
+		process_status='completed',
+		counting_status='pending'
+	).count()
+	
+	# Đếm số phiếu đang kiểm (counting_status='processing')
+	counting_processing = Ballot.objects.filter(
+		poll=poll,
+		counting_status='processing'
+	).count()
+	
+	# Đếm số phiếu kiểm thành công (counting_status='completed')
+	counting_success = Ballot.objects.filter(
+		poll=poll,
+		counting_status='completed'
+	).count()
+	
+	# Đếm số phiếu kiểm thất bại (counting_status='failed')
+	counting_failed = Ballot.objects.filter(
+		poll=poll,
+		counting_status='failed'
+	).count()
+	
 	return JsonResponse({
 		'total': total_ballots,
-		'uploaded_success': uploaded_success,
-		'checked_success': checked_success,
-		'processing': processing,
-		'pending': pending,
-		'failed': failed,
+		'total_ballots_count': poll.total_ballots_count or total_ballots,
+		
+		# Upload stats
+		'upload': {
+			'pending': upload_pending,
+			'processing': upload_processing,
+			'success': upload_success,
+			'failed': upload_failed,
+		},
+		
+		# Counting stats
+		'counting': {
+			'pending': counting_pending,
+			'processing': counting_processing,
+			'success': counting_success,
+			'failed': counting_failed,
+		},
+		
 		'is_counting_started': poll.is_counting_started,
 	})
 

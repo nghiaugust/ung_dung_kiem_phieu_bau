@@ -10,25 +10,61 @@
     </h2>
     <p class="text-muted mb-0">{{ poll.title }}</p>
   </div>
-  <div class="col-md-6 text-end">
-    <form method="POST" action="{% url 'toggle_auto_counting' poll.poll_id %}" id="toggle-form" style="display: inline-block;">
-      {% csrf_token %}
-      {% if poll.is_counting_started %}
-      <button type="submit" class="btn btn-lg btn-danger me-2">
-        <i class="bi bi-stop-circle-fill"></i> TẮT Kiểm Tự Động
-      </button>
-      {% else %}
-      <button type="submit" class="btn btn-lg btn-success me-2" {% if not poll.config_number %}disabled{% endif %}>
-        <i class="bi bi-play-circle-fill"></i> BẬT Kiểm Tự Động
-      </button>
-      {% endif %}
-    </form>
-    <a
-      href="{% url 'counting_form' poll.poll_id %}"
-      class="btn btn-lg btn-secondary"
-    >
-      <i class="bi bi-arrow-left"></i> Quay lại
-    </a>
+  <div class="col-md-6">
+    <div class="d-flex align-items-center justify-content-end gap-3">
+      <form method="POST" action="{% url 'toggle_auto_counting' poll.poll_id %}" id="toggle-form" class="d-flex align-items-center gap-3">
+        {% csrf_token %}
+        
+        {% if not poll.is_counting_started %}
+        <!-- Input để chỉnh số lượng phiếu cần kiểm -->
+        <div>
+          <label for="total_ballots_count" class="form-label mb-0 small">Số phiếu cần kiểm:</label>
+          <input 
+            type="number" 
+            name="total_ballots_count" 
+            id="total_ballots_count"
+            class="form-control form-control-sm" 
+            style="width: 100px;"
+            value="{{ poll.total_ballots_count|default:total_ballots }}"
+            min="0"
+            max="{{ total_ballots }}"
+            {% if not poll.config_number %}disabled{% endif %}
+          >
+        </div>
+        {% endif %}
+        
+        <!-- Trạng thái kiểm tự động -->
+        <div>
+          <label class="form-label mb-0 small">Chế độ kiểm tự động:</label>
+          <div>
+            {% if poll.is_counting_started %}
+            <span class="badge bg-success fs-6">
+              <i class="bi bi-play-circle-fill"></i> Đang bật
+            </span>
+            {% else %}
+            <span class="badge bg-secondary fs-6">
+              <i class="bi bi-stop-circle-fill"></i> Tắt
+            </span>
+            {% endif %}
+          </div>
+        </div>
+        
+        <!-- Nút BẬT/TẮT -->
+        {% if poll.is_counting_started %}
+        <button type="submit" class="btn btn-danger">
+          <i class="bi bi-stop-circle-fill"></i> Tắt
+        </button>
+        {% else %}
+        <button type="submit" class="btn btn-success" {% if not poll.config_number %}disabled{% endif %}>
+          <i class="bi bi-play-circle-fill"></i> Bật
+        </button>
+        {% endif %}
+      </form>
+      
+      <a href="{% url 'counting_form' poll.poll_id %}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Quay lại
+      </a>
+    </div>
   </div>
 </div>
 
@@ -49,89 +85,140 @@
 {% endif %}
 
 <div class="row">
-  <div class="col-md-8 offset-md-2">
+  <div class="col-md-12">
     <div class="card shadow-lg">
-      <div class="card-header bg-warning text-dark">
-        <h4 class="mb-0">
-          <i class="bi bi-gear-fill"></i> Quản lý Kiểm Phiếu Tự Động
-        </h4>
-      </div>
       <div class="card-body">
-        <!-- Trạng thái hiện tại -->
-        <div class="alert {% if poll.is_counting_started %}alert-success{% else %}alert-secondary{% endif %} mb-4" id="status-alert">
-          <div class="d-flex align-items-center">
-            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
-            <strong class="me-2">Chế độ kiểm tự động:</strong>
-            <span id="counting-status">
-            {% if poll.is_counting_started %}
-            <span class="badge bg-success fs-6">
-              <i class="bi bi-play-circle-fill"></i> ĐANG BẬT
-            </span>
-            {% else %}
-            <span class="badge bg-secondary fs-6">
-              <i class="bi bi-stop-circle-fill"></i> TẮT
-            </span>
-            {% endif %}
-            </span>
-          </div>
-        </div>
-
         <!-- Thống kê phiếu bầu -->
         <div class="mb-4">
-          <h5><i class="bi bi-graph-up"></i> Thống kê xử lý</h5>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <div class="card border-primary">
-                <div class="card-body text-center">
-                  <i class="bi bi-upload fs-1 text-primary"></i>
-                  <h3 class="mt-2 mb-0" id="uploaded-count">0</h3>
-                  <p class="text-muted mb-0">Upload thành công</p>
-                  <small class="text-muted">(<span id="total-count">0</span> tổng)</small>
-                </div>
-              </div>
+          <h5 class="mb-3"><i class="bi bi-graph-up"></i> Thống kê xử lý</h5>
+          
+          <!-- LUỒNG UPLOAD -->
+          <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+              <strong><i class="bi bi-cloud-upload"></i> Luồng Upload Phiếu</strong>
             </div>
-            <div class="col-md-6">
-              <div class="card border-success">
-                <div class="card-body text-center">
-                  <i class="bi bi-check-circle fs-1 text-success"></i>
-                  <h3 class="mt-2 mb-0" id="checked-count">0</h3>
-                  <p class="text-muted mb-0">Kiểm phiếu thành công</p>
-                  <small class="text-muted">(<span id="uploaded-count-2">0</span> đã upload)</small>
+            <div class="card-body">
+              <div class="d-flex align-items-center gap-3">
+                <!-- Thất bại ở bên trái -->
+                <div class="text-center" style="width: 180px;">
+                  <div class="card border-danger">
+                    <div class="card-body p-3">
+                      <i class="bi bi-x-circle fs-3 text-danger"></i>
+                      <h5 class="mt-2 mb-0" id="upload-failed">0</h5>
+                      <small class="text-muted">Thất bại</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Quy trình chính với mũi tên -->
+                <div class="d-flex align-items-center justify-content-center gap-2 flex-grow-1">
+                  <div class="text-center" style="flex: 1; max-width: 200px;">
+                    <div class="card border-info">
+                      <div class="card-body p-3">
+                        <i class="bi bi-clock fs-3 text-info"></i>
+                        <h5 class="mt-2 mb-0" id="upload-pending">0</h5>
+                        <small class="text-muted">Phiếu chờ xử lý</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <i class="bi bi-arrow-right fs-2 text-muted"></i>
+                  
+                  <div class="text-center" style="flex: 1; max-width: 200px;">
+                    <div class="card border-warning">
+                      <div class="card-body p-3">
+                        <i class="bi bi-hourglass-split fs-3 text-warning"></i>
+                        <h5 class="mt-2 mb-0" id="upload-processing">0</h5>
+                        <small class="text-muted">Phiếu đang xử lý</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <i class="bi bi-arrow-right fs-2 text-muted"></i>
+                  
+                  <div class="text-center" style="flex: 1; max-width: 200px;">
+                    <div class="card border-success">
+                      <div class="card-body p-3">
+                        <i class="bi bi-check-circle fs-3 text-success"></i>
+                        <h5 class="mt-2 mb-0">
+                          <span id="upload-success">0</span>/<span id="total-ballots-count-1">0</span>
+                        </h5>
+                        <small class="text-muted">Phiếu tải lên thành công</small>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="row g-3 mt-2">
-            <div class="col-md-4">
-              <div class="card border-warning">
-                <div class="card-body text-center">
-                  <i class="bi bi-hourglass-split fs-3 text-warning"></i>
-                  <h5 class="mt-2 mb-0" id="processing-count">0</h5>
-                  <p class="text-muted mb-0 small">Đang xử lý</p>
-                </div>
-              </div>
+          
+          <!-- LUỒNG COUNTING -->
+          <div class="card mb-3">
+            <div class="card-header bg-success text-white">
+              <strong><i class="bi bi-calculator"></i> Luồng Kiểm Phiếu</strong>
             </div>
-            <div class="col-md-4">
-              <div class="card border-info">
-                <div class="card-body text-center">
-                  <i class="bi bi-clock fs-3 text-info"></i>
-                  <h5 class="mt-2 mb-0" id="pending-count">0</h5>
-                  <p class="text-muted mb-0 small">Chờ xử lý</p>
+            <div class="card-body">
+              <div class="d-flex align-items-center gap-3">
+                <!-- Thất bại ở bên trái -->
+                <div class="text-center" style="width: 180px;">
+                  <div class="card border-danger">
+                    <div class="card-body p-3">
+                      <i class="bi bi-x-circle fs-3 text-danger"></i>
+                      <h5 class="mt-2 mb-0" id="counting-failed">0</h5>
+                      <small class="text-muted">Thất bại</small>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <div class="card border-danger">
-                <div class="card-body text-center">
-                  <i class="bi bi-x-circle fs-3 text-danger"></i>
-                  <h5 class="mt-2 mb-0" id="failed-count">0</h5>
-                  <p class="text-muted mb-0 small">Thất bại</p>
+                
+                <!-- Quy trình chính với mũi tên -->
+                <div class="d-flex align-items-center justify-content-center gap-2 flex-grow-1">
+                  <div class="text-center" style="flex: 1; max-width: 200px;">
+                    <div class="card border-info">
+                      <div class="card-body p-3">
+                        <i class="bi bi-clock fs-3 text-info"></i>
+                        <h5 class="mt-2 mb-0" id="counting-pending">0</h5>
+                        <small class="text-muted">Phiếu chờ kiểm</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <i class="bi bi-arrow-right fs-2 text-muted"></i>
+                  
+                  <div class="text-center" style="flex: 1; max-width: 200px;">
+                    <div class="card border-warning">
+                      <div class="card-body p-3">
+                        <i class="bi bi-hourglass-split fs-3 text-warning"></i>
+                        <h5 class="mt-2 mb-0" id="counting-processing">0</h5>
+                        <small class="text-muted">Phiếu đang kiểm</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <i class="bi bi-arrow-right fs-2 text-muted"></i>
+                  
+                  <div class="text-center" style="flex: 1; max-width: 200px;">
+                    <div class="card border-success">
+                      <div class="card-body p-3">
+                        <i class="bi bi-check-circle fs-3 text-success"></i>
+                        <h5 class="mt-2 mb-0">
+                          <span id="counting-success">0</span>/<span id="total-ballots-count-2">0</span>
+                        </h5>
+                        <small class="text-muted">Phiếu kiểm thành công</small>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+          
           <p class="text-muted text-center mt-3 mb-0">
-            <small><i class="bi bi-arrow-clockwise"></i> <span id="refresh-status">Cập nhật mỗi 30 giây</span></small>
+            <small>
+              <i class="bi bi-info-circle"></i> 
+              Tổng số phiếu: <strong id="total-ballots">0</strong> |
+              <i class="bi bi-arrow-clockwise"></i> 
+              <span id="refresh-status">Cập nhật mỗi 30 giây</span>
+            </small>
           </p>
         </div>
 
@@ -192,28 +279,48 @@
     fetch(`/counting/poll/${pollId}/stats/`)
       .then(response => response.json())
       .then(data => {
-        // Cập nhật số liệu
-        document.getElementById('total-count').textContent = data.total;
-        document.getElementById('uploaded-count').textContent = data.uploaded_success;
-        document.getElementById('uploaded-count-2').textContent = data.uploaded_success;
-        document.getElementById('checked-count').textContent = data.checked_success;
-        document.getElementById('processing-count').textContent = data.processing;
-        document.getElementById('pending-count').textContent = data.pending;
-        document.getElementById('failed-count').textContent = data.failed;
+        // Cập nhật tổng số
+        document.getElementById('total-ballots').textContent = data.total;
+        document.getElementById('total-ballots-count-1').textContent = data.total_ballots_count;
+        document.getElementById('total-ballots-count-2').textContent = data.total_ballots_count;
         
-        // Cập nhật trạng thái
-        const statusAlert = document.getElementById('status-alert');
-        const countingStatus = document.getElementById('counting-status');
+        // Cập nhật stats UPLOAD
+        document.getElementById('upload-pending').textContent = data.upload.pending;
+        document.getElementById('upload-processing').textContent = data.upload.processing;
+        document.getElementById('upload-success').textContent = data.upload.success;
+        document.getElementById('upload-failed').textContent = data.upload.failed;
+        
+        // Cập nhật stats COUNTING
+        document.getElementById('counting-pending').textContent = data.counting.pending;
+        document.getElementById('counting-processing').textContent = data.counting.processing;
+        document.getElementById('counting-success').textContent = data.counting.success;
+        document.getElementById('counting-failed').textContent = data.counting.failed;
+        
+        // Kiểm tra điều kiện tự động tắt
+        if (data.is_counting_started && 
+            data.upload.success >= data.total_ballots_count && 
+            data.counting.success >= data.total_ballots_count &&
+            data.total_ballots_count > 0) {
+          // Dừng auto refresh
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+          }
+          
+          // Thông báo và tự động tắt
+          alert(`Đã hoàn thành kiểm ${data.total_ballots_count} phiếu!\nHệ thống sẽ tự động tắt chế độ kiểm tự động.`);
+          
+          // Tự động submit form để tắt (bỏ qua confirm)
+          const form = document.getElementById('toggle-form');
+          form.removeEventListener('submit', arguments.callee);
+          form.submit();
+          return;
+        }
+        
+        // Cập nhật refresh interval
         const refreshStatus = document.getElementById('refresh-status');
         
         if (data.is_counting_started) {
-          statusAlert.className = 'alert alert-success mb-4';
-          countingStatus.innerHTML = `
-            <span class="badge bg-success fs-6">
-              <i class="bi bi-play-circle-fill"></i> ĐANG BẬT
-            </span>
-          `;
-          
           // Nếu đang bật kiểm tự động, chuyển sang refresh nhanh (10 giây)
           if (refreshInterval) {
             clearInterval(refreshInterval);
@@ -221,19 +328,12 @@
           refreshInterval = setInterval(loadStats, 10000);
           refreshStatus.textContent = 'Cập nhật mỗi 10 giây';
         } else {
-          statusAlert.className = 'alert alert-secondary mb-4';
-          countingStatus.innerHTML = `
-            <span class="badge bg-secondary fs-6">
-              <i class="bi bi-stop-circle-fill"></i> TẮT
-            </span>
-          `;
-          
-          // Nếu tắt kiểm tự động, chuyển sang refresh chậm (30 giây)
+          // Nếu tắt kiểm tự động, dừng auto refresh
           if (refreshInterval) {
             clearInterval(refreshInterval);
+            refreshInterval = null;
           }
-          refreshInterval = setInterval(loadStats, 30000);
-          refreshStatus.textContent = 'Cập nhật mỗi 30 giây';
+          refreshStatus.textContent = 'Đã tắt tự động cập nhật';
         }
       })
       .catch(error => {

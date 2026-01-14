@@ -36,7 +36,7 @@ class Ballot(models.Model): # phiếu bầu
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
 	metadata = models.JSONField(null=True)  # Thông tin mở rộng
 	
-	# Trạng thái xử lý asynchronous
+	# Trạng thái xử lý asynchronous - UPLOAD PROCESS
 	PROCESSING_STATUS = (
 		('pending', 'Chờ xử lý'),
 		('processing', 'Đang xử lý'),
@@ -45,6 +45,16 @@ class Ballot(models.Model): # phiếu bầu
 	)
 	process_status = models.CharField(max_length=20, choices=PROCESSING_STATUS, default='pending')
 	process_error = models.TextField(null=True, blank=True)  # Lưu lỗi nếu có
+	
+	# Trạng thái kiểm phiếu asynchronous - COUNTING PROCESS (riêng biệt với upload)
+	COUNTING_STATUS = (
+		('pending', 'Chờ kiểm'),
+		('processing', 'Đang kiểm'),
+		('completed', 'Đã kiểm'),
+		('failed', 'Lỗi kiểm'),
+	)
+	counting_status = models.CharField(max_length=20, choices=COUNTING_STATUS, default='pending')
+	counting_error = models.TextField(null=True, blank=True)  # Lưu lỗi kiểm phiếu nếu có
 	
 	# QR Code HMAC fields
 	qr_hmac = models.CharField(max_length=64, null=True, blank=True)  # HMAC signature (hex string)

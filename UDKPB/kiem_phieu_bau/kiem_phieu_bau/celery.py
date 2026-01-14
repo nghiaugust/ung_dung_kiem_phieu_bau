@@ -3,6 +3,7 @@ Celery configuration for kiem_phieu_bau project
 """
 import os
 from celery import Celery
+from kombu import Queue
 
 # Set default Django settings module for 'celery' program
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kiem_phieu_bau.settings')
@@ -14,6 +15,25 @@ app = Celery('kiem_phieu_bau')
 # - namespace='CELERY' means all celery-related config keys
 #   should have a `CELERY_` prefix in settings.py
 app.config_from_object('django.conf:settings', namespace='CELERY')
+
+# ==========================================
+# Cấu hình Queues riêng biệt cho từng loại task
+# ==========================================
+app.conf.task_queues = (
+    Queue('upload_queue', routing_key='upload.#'),
+    Queue('counting_queue', routing_key='counting.#'),
+    Queue('default', routing_key='default.#'),  # Queue mặc định cho các task khác
+)
+
+# Routing: Chỉ định task nào vào queue nào
+app.conf.task_routes = {
+    'upload_queue': {'queue': 'upload_queue', 'routing_key': 'upload.process'},
+    'counting_queue': {'queue': 'counting_queue', 'routing_key': 'counting.process'},
+}
+
+# Default queue nếu task không có routing
+app.conf.task_default_queue = 'default'
+app.conf.task_default_routing_key = 'default.task'
 
 # Load task modules from all registered Django apps
 # autodiscover_tasks() sẽ tự động tìm file tasks.py trong mỗi app

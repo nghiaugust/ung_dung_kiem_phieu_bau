@@ -102,12 +102,12 @@ services:
     command: >
       celery -A kiem_phieu_bau worker
       --pool=gevent
-      --concurrency=10
+      --concurrency=1
       --loglevel=info
       --max-tasks-per-child=20
       --time-limit=1800
       --soft-time-limit=1500
-      --hostname=worker@%h
+      --hostname=worker1@%h
 
   # ================================
   # Celery Worker 2 (Scale thêm nếu cần)
@@ -134,7 +134,7 @@ services:
     command: >
       celery -A kiem_phieu_bau worker
       --pool=gevent
-      --concurrency=10
+      --concurrency=1
       --loglevel=info
       --max-tasks-per-child=20
       --time-limit=1800
