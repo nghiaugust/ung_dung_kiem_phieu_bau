@@ -131,8 +131,20 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
         print(f"[TASK] Bắt đầu cắt cells cho ballot_id={ballot_id}")
         ballot_image_full_path = os.path.join(settings.MEDIA_ROOT, ballot.ballot_image.name)
         
-        cat_va_luu_cac_o_phieu_bau_wrapper(ballot, ballot_image_full_path)
+        preprocessing_result = cat_va_luu_cac_o_phieu_bau_wrapper(ballot, ballot_image_full_path)
         print(f"[TASK] Hoàn thành cắt cells cho ballot_id={ballot_id}")
+        
+        # Lưu tọa độ các đường kẻ ngang vào metadata
+        if preprocessing_result.get('status') == 'success':
+            horizontal_lines = preprocessing_result.get('horizontal_lines', [])
+            vertical_lines = preprocessing_result.get('vertical_lines', [])
+            
+            # Cập nhật metadata với thông tin đường kẻ
+            ballot.metadata['horizontal_lines'] = horizontal_lines
+            ballot.metadata['vertical_lines'] = vertical_lines
+            ballot.save(update_fields=['metadata'])
+            
+            print(f"[TASK] Đã lưu tọa độ {len(horizontal_lines)} đường ngang và {len(vertical_lines)} đường dọc vào metadata")
         
         # Giải phóng memory sau khi cắt cells xong
         gc.collect()

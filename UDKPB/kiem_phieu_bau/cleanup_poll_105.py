@@ -18,7 +18,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kiem_phieu_bau.settings')
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 django.setup()
 
-from ballot.models import Ballot
+from ballot.models import Ballot, BallotSelection
 from preprocessing.models import PreprocessedBallot, BallotCell
 from counting.models import AIModelResult
 from django.db import transaction
@@ -34,7 +34,7 @@ def cleanup_poll_105():
     5. Xóa tất cả ai_model_result
     """
     
-    poll_id = 103
+    poll_id = 105
     
     print(f"Bắt đầu cleanup dữ liệu cho Poll {poll_id}")
     
@@ -155,11 +155,24 @@ def cleanup_poll_105():
             preprocessed_ballots.delete()
             print(f"   - Đã xóa {deleted_preprocessed} preprocessed ballots")
             
-            # 5. Xử lý xóa AIModelResult
+            # 5. Xóa BallotSelection
+            ballot_selections = BallotSelection.objects.filter(ballot__poll_id=poll_id)
+            selections_count = ballot_selections.count()
+            
+            print(f"\n5. Xóa BallotSelection:")
+            print(f"   - Số ballot selections: {selections_count}")
+            
+            if selections_count > 0:
+                ballot_selections.delete()
+                print(f"   - Đã xóa {selections_count} ballot selections")
+            else:
+                print(f"   - Không có ballot selections nào để xóa")
+            
+            # 6. Xử lý xóa AIModelResult
             ai_results = AIModelResult.objects.filter(ballot__poll_id=poll_id)
             ai_results_count = ai_results.count()
             
-            print(f"\n5. Xóa AIModelResult:")
+            print(f"\n6. Xóa AIModelResult:")
             print(f"   - Số AI model results: {ai_results_count}")
             
             if ai_results_count > 0:
@@ -175,6 +188,7 @@ def cleanup_poll_105():
             print(f"- Ballots đã reset (is_checked, is_post_checked, input_by, process_status): {updated_ballots}")
             print(f"- Ballot cells đã xóa: {total_cells_deleted}")
             print(f"- Preprocessed ballots đã xóa: {deleted_preprocessed}")
+            print(f"- Ballot selections đã xóa: {selections_count}")
             print(f"- AI model results đã xóa: {ai_results_count}")
             
     except Exception as e:
@@ -189,6 +203,7 @@ def confirm_action():
     print("   - Reset is_checked = False, is_post_checked = False, input_by = null, process_status = pending")
     print("   - Tất cả ballot_cell (ô đã cắt)")
     print("   - Tất cả preprocessed_ballot (dữ liệu xử lý)")
+    print("   - Tất cả ballot_selection (lựa chọn ứng viên)")
     print("   - Tất cả ai_model_result (kết quả AI)")
     print()
     

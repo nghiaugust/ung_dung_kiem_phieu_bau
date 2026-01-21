@@ -201,6 +201,32 @@ class TrOCRService:
         return results
 
 
+def crop_center_horizontal(pil_img: Image.Image) -> Image.Image:
+    """
+    Cắt ảnh theo chiều dọc: bỏ 1/4 trái và 1/4 phải, giữ lại 1/2 giữa
+    
+    Args:
+        pil_img: PIL Image gốc
+        
+    Returns:
+        PIL Image đã được crop
+    """
+    width, height = pil_img.size
+    
+    # Tính toán vùng crop
+    left = width // 4      # Cắt 1/4 bên trái
+    right = 3 * width // 4 # Cắt 1/4 bên phải
+    top = 0                # Giữ nguyên chiều cao
+    bottom = height
+    
+    # Crop ảnh
+    cropped_img = pil_img.crop((left, top, right, bottom))
+    
+    print(f"[Crop] Ảnh gốc: {width}x{height} -> Ảnh crop: {cropped_img.size[0]}x{cropped_img.size[1]}")
+    
+    return cropped_img
+
+
 class YOLOService:
     """Service để quản lý YOLO model"""
     
@@ -256,6 +282,7 @@ class YOLOService:
             Dict chứa filename và kết quả detection
         """
         pil_img = None
+        cropped_img = None
         img_array = None
         results = None
         
@@ -267,8 +294,11 @@ class YOLOService:
             if pil_img.mode != 'RGB':
                 pil_img = pil_img.convert('RGB')
             
-            # Convert to numpy array
-            img_array = np.array(pil_img)
+            # CẮT ảnh: bỏ 1/4 trái và 1/4 phải, giữ 1/2 giữa
+            cropped_img = crop_center_horizontal(pil_img)
+            
+            # Convert to numpy array (dùng ảnh đã crop)
+            img_array = np.array(cropped_img)
             
             # Predict với các tham số 
             results = self._model.predict(
@@ -333,8 +363,11 @@ class YOLOService:
             }
         finally:
             # CLEANUP: Giải phóng memory
+            if cropped_img is not None:
+                cropped_img.close()
             if pil_img is not None:
                 pil_img.close()
+            del cropped_img
             del pil_img
             del img_array
             if results is not None:

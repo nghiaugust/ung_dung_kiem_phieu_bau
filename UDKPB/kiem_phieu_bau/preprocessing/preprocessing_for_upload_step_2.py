@@ -156,6 +156,8 @@ def cat_va_luu_cac_o_phieu_bau(ballot, duong_dan_anh_da_lam_phang):
 			raise ValueError("Không phát hiện được grid từ ảnh")
 		
 		grid = grid_result['grid']
+		horizontal_lines = grid_result.get('horizontal_lines', [])
+		vertical_lines = grid_result.get('vertical_lines', [])
 		
 		if len(grid) == 0:
 			raise ValueError("Grid rỗng, không có ô nào")
@@ -226,7 +228,9 @@ def cat_va_luu_cac_o_phieu_bau(ballot, duong_dan_anh_da_lam_phang):
 			'ballot_id': ballot_id,
 			'status': 'success',
 			'cell_count': cell_count,
-			'detection_image': preprocessed.detection_image
+			'detection_image': preprocessed.detection_image,
+			'horizontal_lines': horizontal_lines,
+			'vertical_lines': vertical_lines
 		}
 		
 	except Exception as e:

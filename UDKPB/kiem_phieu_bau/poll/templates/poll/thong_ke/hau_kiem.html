@@ -1,32 +1,69 @@
-{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title %}Hậu kiểm - Phiếu bầu #{{ current_ballot.ballot_id }}{% endblock %} {% block content %}
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% load static %}
+{% block title %}Hậu kiểm - Phiếu bầu #{{ current_ballot.ballot_id }}{% endblock %}
+
+{% block content %}
 <style>
-  .ballot-review-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-    margin-bottom: 20px;
-    position: relative;
+  .hau-kiem-container {
+    padding: 100px 20px 20px 20px;
+    max-width: 1400px;
+    margin: 0 auto;
   }
 
-  .column-section {
+  .header-section {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: white;
+    z-index: 1001;
     display: flex;
-    flex-direction: column;
-    min-height: 600px;
-  }
-
-  .ballot-image-section {
-    display: flex;
-    flex-direction: column;
+    justify-content: space-between;
     align-items: center;
+    padding: 15px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .ballot-counter {
+    background-color: #0d6efd;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 1.1rem;
+  }
+
+  .approve-btn {
+    padding: 10px 30px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    min-width: 150px;
+  }
+
+  .approve-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .main-content {
+    position: relative;
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+  }
+
+  .ballot-image-container {
+    flex: 0 0 auto;
+    max-width: 800px;
   }
 
   .ballot-image-wrapper {
-    max-width: 100%;
-    max-height: 800px;
-    overflow: auto;
+    position: relative;
     border: 2px solid #ddd;
     border-radius: 8px;
     background-color: #f8f9fa;
+    display: inline-block;
   }
 
   .ballot-image {
@@ -35,224 +72,79 @@
     display: block;
   }
 
-  .section-title {
-    font-size: 1rem;
-    font-weight: 600;
-    text-align: center;
-    margin-bottom: 15px;
-  }
-
-  /* Column 2 - AI Results Grid */
-  .ai-results-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    max-height: 800px;
-    overflow-y: auto;
-    padding: 10px;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    background-color: #fff;
-  }
-
-  .ai-row-item {
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 10px;
-    background-color: #f8f9fa;
-  }
-
-  .ai-row-name {
-    font-weight: 600;
-    margin-bottom: 10px;
-    padding: 5px 10px;
-    background-color: #e9ecef;
-    border-radius: 5px;
-  }
-
-  .ai-yolo-images {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .yolo-image-item {
-    flex: 1;
-    min-width: 80px;
-    text-align: center;
-  }
-
-  .yolo-image-wrapper {
-    border: 2px solid #ddd;
-    border-radius: 5px;
-    overflow: hidden;
-    margin-bottom: 5px;
-  }
-
-  .yolo-image {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-
-  .yolo-label {
-    font-size: 0.85rem;
-    padding: 3px;
-    border-radius: 3px;
-  }
-
-  .yolo-label.x_mark {
-    background-color: #d4edda;
-    color: #155724;
-  }
-
-  .yolo-label.none {
-    background-color: #f8d7da;
-    color: #721c24;
-  }
-
-  /* Candidate Results */
-  .candidate-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    border-bottom: 1px solid #dee2e6;
-    background-color: #fff;
-    transition: background-color 0.2s;
-  }
-
-  .candidate-item:hover {
-    background-color: #f8f9fa;
-  }
-
-  .candidate-info {
-    flex: 1;
-  }
-
-  .candidate-name {
-    font-weight: 500;
-    font-size: 1rem;
-  }
-
-  /* Toggle Switch Container */
-  .toggle-container {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-  }
-
-  .vote-toggle {
-    position: relative;
-    display: inline-block;
-    width: 60px;
-    height: 30px;
-  }
-
-  .vote-toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .toggle-slider {
+  .buttons-overlay {
     position: absolute;
-    cursor: pointer;
     top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #dc3545;
-    transition: 0.3s;
-    border-radius: 15px;
+    width: 140px;
+    left: 100%;
+    margin-left: 10px;
   }
 
-  .toggle-slider:before {
+  .vote-button-row {
     position: absolute;
-    content: "";
-    height: 24px;
-    width: 24px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: 0.3s;
-    border-radius: 50%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    width: auto;
   }
 
-  input:checked + .toggle-slider {
+  .vote-btn {
+    padding: 10px 16px;
+    border: 2px solid;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+    min-width: 140px;
+    white-space: nowrap;
+  }
+
+  .vote-btn.voted {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.4);
+  }
+
+  .vote-btn.not-voted {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.4);
+  }
+
+  .vote-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .confidence-badge {
+    background-color: #6c757d;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    min-width: 100px;
+    text-align: center;
+  }
+  
+  .confidence-badge.voted {
     background-color: #28a745;
   }
-
-  input:checked + .toggle-slider:before {
-    transform: translateX(30px);
+  
+  .confidence-badge.not-voted {
+    background-color: #dc3545;
+  }
+  
+  .confidence-badge.none {
+    background-color: #6c757d;
   }
 
-  .toggle-label-text {
-    font-size: 0.95rem;
-    font-weight: 500;
-    min-width: 100px;
-  }
-
-  .toggle-label-text.agree {
-    color: #28a745;
-  }
-
-  .toggle-label-text.disagree {
-    color: #dc3545;
-  }
-
-  /* Table styles */
-  .results-table {
-    width: 100%;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    overflow: hidden;
-    max-height: 700px;
-    display: block;
-    overflow-y: auto;
-  }
-
-  .results-table thead {
-    background-color: #f8f9fa;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-
-  .results-table th {
-    padding: 10px 12px;
-    font-weight: 600;
-    border-bottom: 2px solid #dee2e6;
-    text-align: left;
-  }
-
-  .results-table th:last-child {
-    padding-left: 0;
-  }
-
-  .results-table tbody {
-    display: table;
-    width: 100%;
-  }
-
-  .results-table td {
-    padding: 8px 12px;
-  }
-
-  .results-table td:last-child {
-    padding-left: 0;
-  }
-
-  .results-table tbody tr:last-child {
-    border-bottom: none;
-  }
-
-  .page-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-  }
-
-  /* Navigation Arrows */
   .nav-arrow {
     position: fixed;
     top: 50%;
@@ -294,73 +186,68 @@
     right: 20px;
   }
 
-  /* Counter Badge */
-  .ballot-counter {
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    background-color: #0d6efd;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 1.1rem;
-    z-index: 1000;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  .no-ballots-message {
+    text-align: center;
+    padding: 60px 20px;
   }
 
-  /* Save Button */
-  .save-changes-btn {
-    margin-top: 15px;
-    width: 100%;
-    padding: 12px;
-    font-size: 1rem;
-    font-weight: 600;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transition: all 0.3s;
-  }
-
-  .save-changes-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .save-changes-btn.has-changes {
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      box-shadow: 0 2px 8px rgba(40, 167, 69, 0.4);
-    }
-    50% {
-      box-shadow: 0 2px 12px rgba(40, 167, 69, 0.8);
-    }
+  .no-ballots-message i {
+    font-size: 4rem;
+    color: #6c757d;
+    margin-bottom: 20px;
   }
 </style>
 
-<div class="container-fluid py-4">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="page-title mb-0">Hậu kiểm - {{ poll.title }}</h2>
-    <a
-      href="{% url 'poll:thong_ke_detail' poll.poll_id %}"
-      class="btn btn-lg btn-primary"
-    >
-      <i class="bi bi-bar-chart-fill"></i> Xem kết quả
+<div class="hau-kiem-container">
+  {% if total_ballots == 0 %}
+  <div class="no-ballots-message">
+    <i class="bi bi-inbox"></i>
+    <h3>Chưa có phiếu nào đã kiểm</h3>
+    <p class="text-muted">Vui lòng kiểm phiếu trước khi hậu kiểm</p>
+    <a href="{% url 'poll:thong_ke_detail' poll.poll_id %}" class="btn btn-primary">
+      <i class="bi bi-arrow-left"></i> Quay lại thống kê
     </a>
   </div>
-
-  <!-- Counter Badge -->
-  <div class="ballot-counter">
-    <span id="current-index">{{ current_index }}</span> / {{ total_ballots }}
+  {% else %}
+  
+  <!-- Header -->
+  <div class="header-section">
+    <div>
+      <h2 class="mb-1">Hậu kiểm - {{ poll.title }}</h2>
+      <p class="text-muted mb-0">Phiếu bầu #{{ current_ballot.ballot_id }}</p>
+    </div>
+    
+    <div class="d-flex align-items-center gap-3">
+      <div class="ballot-counter">
+        <span id="current-index">{{ current_index }}</span> / {{ total_ballots }}
+      </div>
+      
+      <button
+        class="btn btn-success approve-btn"
+        id="approve-btn"
+        onclick="approveBallot()"
+      >
+        <i class="bi bi-check-circle"></i> Duyệt
+      </button>
+      
+      <button
+        class="btn btn-warning approve-btn"
+        id="save-and-approve-btn"
+        onclick="saveAndApprove()"
+        style="display: none;"
+      >
+        <i class="bi bi-save"></i> Lưu thay đổi và duyệt
+      </button>
+      
+      <a href="{% url 'poll:thong_ke_detail' poll.poll_id %}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Thoát
+      </a>
+    </div>
   </div>
 
   <!-- Navigation Arrows -->
   <button
     class="nav-arrow nav-arrow-left"
-    id="prev-ballot"
     onclick="navigateBallot('prev')"
     {% if not prev_ballot_id %}disabled{% endif %}
   >
@@ -369,7 +256,6 @@
 
   <button
     class="nav-arrow nav-arrow-right"
-    id="next-ballot"
     onclick="navigateBallot('next')"
     {% if not next_ballot_id %}disabled{% endif %}
   >
@@ -377,203 +263,183 @@
   </button>
 
   <!-- Main Content -->
-  <div class="ballot-review-container">
-    <!-- Column 1: Ảnh histogram (có grid) -->
-    <div class="column-section ballot-image-section">
-      <h4 class="mb-3 section-title">Phiếu bầu (Grid)</h4>
+  <div class="main-content">
+    <div class="ballot-image-container">
+      {% if detection_image %}
       <div class="ballot-image-wrapper">
-        {% if detection_image %}
         <img
-          src="/media/{{ detection_image }}"
-          alt="Phiếu bầu Grid #{{ current_ballot.ballot_id }}"
+          src="{{ MEDIA_URL }}{{ detection_image }}"
+          alt="Phiếu bầu"
           class="ballot-image"
+          id="ballot-image"
+          onload="positionButtons()"
         />
-        {% else %}
-        <div class="text-center p-4">
-          <p class="text-muted">Chưa có ảnh grid</p>
-        </div>
-        {% endif %}
-      </div>
-      <div class="mt-3 text-center">
-        <span
-          class="badge bg-{% if current_ballot.is_valid %}success{% else %}danger{% endif %}"
-        >
-          {% if current_ballot.is_valid %}Hợp lệ{% else %}Không hợp lệ{% endif %}
-        </span>
-        <span
-          class="badge bg-{% if current_ballot.is_checked %}info{% else %}secondary{% endif %}"
-        >
-          {% if current_ballot.is_checked %}Đã kiểm{% else %}Chưa kiểm{% endif %}
-        </span>
-      </div>
-    </div>
-
-    <!-- Column 2: Kết quả AI (TrOCR + YOLO) -->
-    <div class="column-section">
-      <h4 class="mb-3 section-title">Kết quả AI nhận diện</h4>
-
-      {% if cell_results %}
-      <div class="ai-results-grid">
-        {% for cell in cell_results %}
-        <div class="ai-row-item">
-          <div class="ai-row-name">{{ cell.name }}</div>
-          <div class="ai-yolo-images">
-            {% for i in cell.yolo_images_with_results %}
-            <div class="yolo-image-item">
-              <div class="yolo-image-wrapper">
-                <img
-                  src="/media/preprocessing/{{ i.image }}"
-                  alt="Cell {{ cell.row }}"
-                  class="yolo-image"
-                />
-              </div>
-              <div
-                class="yolo-label {% if 'x_mark' in i.result %}x_mark{% else %}none{% endif %}"
-              >
-                {{ i.result }}
-              </div>
+        
+        <!-- Buttons Overlay -->
+        <div class="buttons-overlay" id="buttons-overlay">
+          {% for result in ballot_results %}
+          <div class="vote-button-row" id="button-row-{{ forloop.counter0 }}" data-row="{{ forloop.counter0 }}">
+            <button
+              class="vote-btn {% if result.voted %}voted{% else %}not-voted{% endif %}"
+              data-candidate-id="{{ result.candidate_id }}"
+              data-voted="{{ result.voted|lower }}"
+              onclick="toggleVote({{ result.candidate_id }})"
+            >
+              <span class="btn-text">{% if result.voted %}Đồng ý{% else %}Không đồng ý{% endif %}</span>
+            </button>
+            <div class="confidence-badge none" id="confidence-{{ forloop.counter0 }}">
+              0% - none
             </div>
-            {% endfor %}
           </div>
+          {% endfor %}
         </div>
-        {% endfor %}
       </div>
       {% else %}
-      <div class="alert alert-warning">Chưa có kết quả AI cho phiếu này</div>
+      <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        Không tìm thấy ảnh phiếu bầu
+      </div>
       {% endif %}
     </div>
-
-    <!-- Column 3: Kết quả kiểm phiếu -->
-    <div class="column-section">
-      <h4 class="mb-3 section-title">Kết quả kiểm phiếu</h4>
-
-      <table class="results-table">
-        <thead>
-          <tr>
-            <th style="width: 60%">Ứng viên</th>
-            <th style="width: 40%">Lựa chọn</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for result in ballot_results %}
-          <tr
-            class="candidate-item"
-            data-candidate-id="{{ result.candidate_id }}"
-          >
-            <td>
-              <div class="candidate-name">{{ result.name }}</div>
-            </td>
-            <td>
-              <div class="toggle-container">
-                <label class="vote-toggle">
-                  <input
-                    type="checkbox"
-                    class="vote-checkbox"
-                    data-candidate-id="{{ result.candidate_id }}"
-                    data-original-state="{{ result.voted|yesno:'true,false' }}"
-                    {% if result.voted %}checked{% endif %}
-                    onchange="markAsChanged(this)"
-                  />
-                  <span class="toggle-slider"></span>
-                </label>
-                <span
-                  class="toggle-label-text {% if result.voted %}agree{% else %}disagree{% endif %}"
-                  data-candidate-id="{{ result.candidate_id }}"
-                >
-                  {% if result.voted %}Đồng ý{% else %}Không đồng ý{% endif %}
-                </span>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-
-      <!-- Save Button inside column 3 -->
-      <button
-        id="save-btn"
-        class="btn btn-success save-changes-btn"
-        disabled
-        onclick="saveChanges()"
-      >
-        <i class="bi bi-save"></i> Lưu thay đổi
-      </button>
-    </div>
   </div>
 
-  <!-- Back Button -->
-  <div class="mt-4">
-    <a
-      href="{% url 'poll:thong_ke_detail' poll.poll_id %}"
-      class="btn btn-secondary"
-    >
-      <i class="bi bi-arrow-left"></i> Quay lại thống kê
-    </a>
-  </div>
+  {% endif %}
 </div>
 
 <script>
-  let hasChanges = false;
   const ballotId = {{ current_ballot.ballot_id }};
   const pollId = {{ poll.poll_id }};
+  const horizontalLines = {{ horizontal_lines_json|safe }};
+  const ballotResults = {{ ballot_results_json|safe }};
+  const yoloResults = {{ yolo_results_json|safe }};
+  
+  let hasChanges = false;
+  let voteStates = {};
 
-  function markAsChanged(checkbox) {
-    const originalState = checkbox.getAttribute('data-original-state') === 'true';
-    const currentState = checkbox.checked;
-    const candidateId = checkbox.getAttribute('data-candidate-id');
+  // Khởi tạo trạng thái ban đầu
+  ballotResults.forEach((result, index) => {
+    voteStates[result.candidate_id] = {
+      original: result.voted,
+      current: result.voted
+    };
+  });
 
-    // Update label text
-    const labelText = document.querySelector(`.toggle-label-text[data-candidate-id="${candidateId}"]`);
-    if (labelText) {
-      if (currentState) {
-        labelText.textContent = 'Đồng ý';
-        labelText.classList.remove('disagree');
-        labelText.classList.add('agree');
-      } else {
-        labelText.textContent = 'Không đồng ý';
-        labelText.classList.remove('agree');
-        labelText.classList.add('disagree');
+  function positionButtons() {
+    const img = document.getElementById('ballot-image');
+    if (!img || horizontalLines.length === 0) return;
+
+    const imgHeight = img.offsetHeight;
+    const imgNaturalHeight = img.naturalHeight;
+    const scale = imgHeight / imgNaturalHeight;
+
+    ballotResults.forEach((result, index) => {
+      if (index + 2 >= horizontalLines.length) {
+        return;
       }
-    }
-
-    // Check if any checkbox has changed
-    hasChanges = false;
-    document.querySelectorAll('.vote-checkbox').forEach(cb => {
-      const orig = cb.getAttribute('data-original-state') === 'true';
-      const curr = cb.checked;
-      if (orig !== curr) {
-        hasChanges = true;
+      
+      const lineTop = horizontalLines[index + 1];
+      const lineBottom = horizontalLines[index + 2];
+      
+      const yTop = lineTop.y * scale;
+      const yBottom = lineBottom.y * scale;
+      const yCenter = (yTop + yBottom) / 2;
+      
+      const buttonRow = document.getElementById(`button-row-${index}`);
+      if (buttonRow) {
+        const topPosition = yCenter - 20;
+        buttonRow.style.top = `${topPosition}px`;
+      }
+      
+      const confidenceBadge = document.getElementById(`confidence-${index}`);
+      if (confidenceBadge && yoloResults[index]) {
+        const conf = yoloResults[index].confidence;
+        const aiVoted = yoloResults[index].ai_voted;
+        const label = aiVoted ? 'Đồng ý' : 'Không đồng ý';
+        
+        if (conf && conf > 0) {
+          confidenceBadge.textContent = `${conf}% - ${label}`;
+          confidenceBadge.className = `confidence-badge ${aiVoted ? 'voted' : 'not-voted'}`;
+          confidenceBadge.style.display = 'block';
+        } else {
+          confidenceBadge.textContent = '0% - none';
+          confidenceBadge.className = 'confidence-badge none';
+          confidenceBadge.style.display = 'block';
+        }
+      } else if (confidenceBadge) {
+        confidenceBadge.textContent = '0% - none';
+        confidenceBadge.className = 'confidence-badge none';
+        confidenceBadge.style.display = 'block';
       }
     });
-
-    // Update save button
-    const saveBtn = document.getElementById('save-btn');
-    saveBtn.disabled = !hasChanges;
-    if (hasChanges) {
-      saveBtn.classList.add('has-changes');
-    } else {
-      saveBtn.classList.remove('has-changes');
-    }
   }
 
-  function saveChanges() {
-    if (!hasChanges) return;
+  function toggleVote(candidateId) {
+    if (!voteStates[candidateId]) {
+      console.error(`Không tìm thấy voteStates cho candidate ${candidateId}`);
+      return;
+    }
+    
+    const currentVoted = voteStates[candidateId].current;
+    const newVoted = !currentVoted;
+    voteStates[candidateId].current = newVoted;
+    
+    const btn = document.querySelector(`.vote-btn[data-candidate-id="${candidateId}"]`);
+    const btnText = btn.querySelector('.btn-text');
+    
+    if (!btn || !btnText) {
+      console.error(`Không tìm thấy nút cho candidate ${candidateId}`);
+      return;
+    }
+    
+    if (newVoted) {
+      btn.classList.remove('not-voted');
+      btn.classList.add('voted');
+      btnText.textContent = 'Đồng ý';
+      btn.setAttribute('data-voted', 'true');
+    } else {
+      btn.classList.remove('voted');
+      btn.classList.add('not-voted');
+      btnText.textContent = 'Không đồng ý';
+      btn.setAttribute('data-voted', 'false');
+    }
+    
+    checkForChanges();
+  }
+
+  function checkForChanges() {
+    hasChanges = false;
+    for (let candidateId in voteStates) {
+      if (voteStates[candidateId].original !== voteStates[candidateId].current) {
+        hasChanges = true;
+        break;
+      }
+    }
+    
+    const approveBtn = document.getElementById('approve-btn');
+    const saveAndApproveBtn = document.getElementById('save-and-approve-btn');
+    
+    if (hasChanges) {
+      approveBtn.style.display = 'none';
+      saveAndApproveBtn.style.display = 'block';
+    } else {
+      approveBtn.style.display = 'block';
+      saveAndApproveBtn.style.display = 'none';
+    }
+  }
+  
+  function saveAndApprove() {
+    const saveAndApproveBtn = document.getElementById('save-and-approve-btn');
+    saveAndApproveBtn.disabled = true;
+    saveAndApproveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang xử lý...';
 
     const votes = [];
-    document.querySelectorAll('.vote-checkbox').forEach(checkbox => {
+    for (let candidateId in voteStates) {
       votes.push({
-        candidate_id: parseInt(checkbox.getAttribute('data-candidate-id')),
-        voted: checkbox.checked
+        candidate_id: parseInt(candidateId),
+        voted: voteStates[candidateId].current
       });
-    });
+    }
 
-    // Show loading
-    const saveBtn = document.getElementById('save-btn');
-    const originalText = saveBtn.innerHTML;
-    saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang lưu...';
-    saveBtn.disabled = true;
-
-    // Send AJAX request
     fetch(`/ballot/hau-kiem/${ballotId}/save/`, {
       method: 'POST',
       headers: {
@@ -585,49 +451,87 @@
     .then(response => response.json())
     .then(data => {
       if (data.success) {
-        // Update original states
-        document.querySelectorAll('.vote-checkbox').forEach(cb => {
-          cb.setAttribute('data-original-state', cb.checked ? 'true' : 'false');
-        });
-
+        // Reset hasChanges để không hiện cảnh báo khi rời trang
         hasChanges = false;
-        saveBtn.disabled = true;
-        saveBtn.classList.remove('has-changes');
-        saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Đã lưu!';
-
+        for (let candidateId in voteStates) {
+          voteStates[candidateId].original = voteStates[candidateId].current;
+        }
+        
+        showAlert('Đã lưu thay đổi và duyệt phiếu thành công!', 'success');
+        
         setTimeout(() => {
-          saveBtn.innerHTML = originalText;
-        }, 2000);
-
-        // Show success message
-        showAlert('Đã lưu thay đổi thành công!', 'success');
+          window.location.href = data.next_url;
+        }, 500);
       } else {
-        saveBtn.innerHTML = originalText;
-        saveBtn.disabled = false;
-        showAlert('Lỗi: ' + (data.message || 'Không thể lưu thay đổi'), 'danger');
+        saveAndApproveBtn.disabled = false;
+        saveAndApproveBtn.innerHTML = '<i class="bi bi-save"></i> Lưu thay đổi và duyệt';
+        showAlert('Có lỗi xảy ra: ' + data.message, 'danger');
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      saveBtn.innerHTML = originalText;
-      saveBtn.disabled = false;
+      saveAndApproveBtn.disabled = false;
+      saveAndApproveBtn.innerHTML = '<i class="bi bi-save"></i> Lưu thay đổi và duyệt';
+      showAlert('Có lỗi xảy ra khi lưu!', 'danger');
+    });
+  }
+
+  function approveBallot() {
+    const approveBtn = document.getElementById('approve-btn');
+    approveBtn.disabled = true;
+    approveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang xử lý...';
+
+    const votes = [];
+    for (let candidateId in voteStates) {
+      votes.push({
+        candidate_id: parseInt(candidateId),
+        voted: voteStates[candidateId].current
+      });
+    }
+
+    fetch(`/ballot/hau-kiem/${ballotId}/save/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: JSON.stringify({ votes: votes })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showAlert('Đã duyệt phiếu thành công!', 'success');
+        
+        setTimeout(() => {
+          window.location.href = data.next_url;
+        }, 500);
+      } else {
+        approveBtn.disabled = false;
+        approveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Duyệt';
+        showAlert('Có lỗi xảy ra: ' + data.message, 'danger');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      approveBtn.disabled = false;
+      approveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Duyệt';
       showAlert('Có lỗi xảy ra khi lưu!', 'danger');
     });
   }
 
   function navigateBallot(direction) {
+    if (hasChanges) {
+      if (!confirm('Bạn có thay đổi chưa lưu. Bạn có chắc muốn chuyển phiếu?')) {
+        return;
+      }
+    }
+
     const url = direction === 'prev'
       ? '{{ prev_ballot_url|safe }}'
       : '{{ next_ballot_url|safe }}';
 
     if (url) {
-      if (hasChanges) {
-        if (confirm('Bạn có thay đổi chưa lưu. Bạn có chắc muốn rời khỏi trang này?')) {
-          window.location.href = url;
-        }
-      } else {
-        window.location.href = url;
-      }
+      window.location.href = url;
     }
   }
 
@@ -643,14 +547,25 @@
 
     setTimeout(() => {
       alertDiv.remove();
-    }, 5000);
+    }, 3000);
   }
 
-  // Warn before leaving if has changes
+  window.addEventListener('resize', positionButtons);
+
   window.addEventListener('beforeunload', function (e) {
     if (hasChanges) {
       e.preventDefault();
       e.returnValue = '';
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft') {
+      navigateBallot('prev');
+    } else if (e.key === 'ArrowRight') {
+      navigateBallot('next');
+    } else if (e.key === 'Enter' && e.ctrlKey) {
+      approveBallot();
     }
   });
 </script>

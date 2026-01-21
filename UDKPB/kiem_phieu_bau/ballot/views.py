@@ -283,9 +283,13 @@ def hau_kiem_ballot(request, ballot_id):
 	if not (request.user.is_superuser and request.user.is_active) and not is_manager:
 		return redirect('permission_denied')
 	
-	# Lấy tất cả phiếu bầu của poll này (đã sắp xếp theo ID)
-	all_ballots = Ballot.objects.filter(poll=poll).order_by('ballot_id')
+	# Lấy tất cả phiếu bầu của poll này đã kiểm phiếu (đã sắp xếp theo ID)
+	all_ballots = Ballot.objects.filter(poll=poll, is_checked=True).order_by('ballot_id')
 	total_ballots = all_ballots.count()
+	
+	# Nếu không có phiếu nào đã kiểm, redirect về trang thống kê
+	if total_ballots == 0:
+		return redirect('poll:thong_ke_detail', poll_id=poll.poll_id)
 	
 	# Tìm vị trí hiện tại
 	ballot_ids = list(all_ballots.values_list('ballot_id', flat=True))
@@ -323,8 +327,8 @@ def hau_kiem_ballot(request, ballot_id):
 			'voted': candidate.candidate_id in selections
 		})
 	
-	# Lấy ảnh histogram (ảnh có grid)
-	from preprocessing.models import PreprocessedBallot, BallotCell
+	# Lấy ảnh detection và metadata
+	from preprocessing.models import PreprocessedBallot
 	from counting.models import AIModelResult
 	
 	detection_image = None
@@ -334,50 +338,66 @@ def hau_kiem_ballot(request, ballot_id):
 	except PreprocessedBallot.DoesNotExist:
 		pass
 	
-	# Lấy kết quả AI để hiển thị các ô
-	ai_result = None
-	cell_results = []
+	# Lấy horizontal_lines từ metadata
+	horizontal_lines = []
+	if ballot.metadata and 'horizontal_lines' in ballot.metadata:
+		horizontal_lines = ballot.metadata['horizontal_lines']
+	
+	# Lấy kết quả YOLO detection từ AIModelResult (CHỈ để hiển thị confidence, không dùng cho voted)
+	yolo_results = []  # List indexed by candidate order: [{'ai_voted': bool, 'confidence': float}, ...]
 	try:
-		ai_model_result = AIModelResult.objects.filter(poll=poll).order_by('-created_at').first()
+		ai_model_result = AIModelResult.objects.filter(ballot=ballot).order_by('-created_at').first()
 		if ai_model_result and ai_model_result.result_model:
-			result_data = ai_model_result.result_model
-			# Lấy results cho ballot này
-			for item in result_data.get('results', []):
-				if item.get('ballot_id') == ballot_id:
-					row = item.get('row')
-					results_list = item.get('results', [])
-					images = item.get('images', [])
-					
-					# results_list[0] = tên từ TrOCR
-					# results_list[1:] = YOLO detections
-					# images[1:] = YOLO images (bỏ ảnh TrOCR đầu tiên)
-					
-					yolo_images = images[1:] if len(images) > 1 else []
-					yolo_results = results_list[1:] if len(results_list) > 1 else []
-					
-					# Zip images và results
-					yolo_images_with_results = []
-					for img, result in zip(yolo_images, yolo_results):
-						yolo_images_with_results.append({
-							'image': img,
-							'result': result
-						})
-					
-					cell_results.append({
-						'row': row,
-						'name': results_list[0] if len(results_list) > 0 else '',
-						'yolo_images_with_results': yolo_images_with_results
-					})
+			cells = ai_model_result.result_model.get('cells', {})
 			
-			# Sắp xếp theo row
-			cell_results.sort(key=lambda x: x['row'])
+			# Tạo dict để lưu kết quả theo row
+			row_results = {}
+			
+			for cell_key, cell_data in cells.items():
+				# cell_key format: "row_col" (ví dụ: "1_2" hoặc "1_3")
+				parts = cell_key.split('_')
+				if len(parts) == 2:
+					row = int(parts[0])  # 1-10 (row index của ứng viên)
+					col = int(parts[1])  # 2=Đồng ý, 3=Không đồng ý
+					
+					result = cell_data.get('result', {})
+					confidence = cell_data.get('confidence', 0)
+					
+					# Kiểm tra nếu có x_mark
+					if isinstance(result, dict):
+						label = result.get('label', '')
+						
+						if row not in row_results:
+							row_results[row] = {'ai_voted': False, 'confidence': 0}
+						
+						# Cột 2 là "Đồng ý" - nếu có x_mark thì AI prediction = True
+						if col == 2 and label == 'x_mark':
+							row_results[row]['ai_voted'] = True
+							row_results[row]['confidence'] = round(confidence * 100, 1)
+						# Cột 3 là "Không đồng ý" - nếu có x_mark thì AI prediction = False  
+						elif col == 3 and label == 'x_mark':
+							row_results[row]['ai_voted'] = False
+							row_results[row]['confidence'] = round(confidence * 100, 1)
+			
+			# Chuyển dict thành list theo thứ tự candidates
+			for idx, candidate in enumerate(candidates):
+				# Row index bắt đầu từ 1, candidate index từ 0
+				row = idx + 1
+				if row in row_results:
+					yolo_results.append(row_results[row])
+				else:
+					yolo_results.append({'ai_voted': False, 'confidence': 0})
+					
 	except Exception as e:
-		print(f"Error loading AI results: {e}")
+		print(f"Error loading YOLO results: {e}")
+		# Tạo list rỗng với số lượng bằng candidates
+		yolo_results = [{'ai_voted': False, 'confidence': 0} for _ in candidates]
 
 	context = {
 		'poll': poll,
 		'current_ballot': ballot,
-		'ballot_results': ballot_results,
+		'ballot_results': ballot_results,  # For template loop
+		'ballot_results_json': json.dumps(ballot_results),  # For JavaScript
 		'total_ballots': total_ballots,
 		'current_index': current_index,
 		'prev_ballot_id': prev_ballot_id,
@@ -385,7 +405,9 @@ def hau_kiem_ballot(request, ballot_id):
 		'prev_ballot_url': prev_ballot_url,
 		'next_ballot_url': next_ballot_url,
 		'detection_image': detection_image,
-		'cell_results': cell_results,
+		'horizontal_lines_json': json.dumps(horizontal_lines),
+		'yolo_results_json': json.dumps(yolo_results),
+		'MEDIA_URL': settings.MEDIA_URL,
 	}
 	
 	return render(request, 'poll/thong_ke/hau_kiem.html', context)
@@ -409,6 +431,48 @@ def save_hau_kiem(request, ballot_id):
 
 		data = json.loads(request.body)
 		votes = data.get('votes', [])
+		
+		# Sử dụng transaction để đảm bảo tính toàn vẹn dữ liệu
+		with transaction.atomic():
+			# Xóa tất cả các lựa chọn cũ
+			BallotSelection.objects.filter(ballot=ballot).delete()
+			
+			# Tạo các lựa chọn mới dựa trên dữ liệu từ form
+			for vote in votes:
+				candidate_id = vote.get('candidate_id')
+				voted = vote.get('voted', False)
+				
+				if voted and candidate_id:
+					BallotSelection.objects.create(
+						ballot=ballot,
+						candidate_id=candidate_id
+					)
+			
+			# Đánh dấu đã hậu kiểm
+			ballot.is_post_checked = True
+			ballot.save(update_fields=['is_post_checked'])
+		
+		# Tìm phiếu tiếp theo để redirect
+		all_ballots = Ballot.objects.filter(poll=poll, is_checked=True).order_by('ballot_id')
+		ballot_ids = list(all_ballots.values_list('ballot_id', flat=True))
+		
+		next_url = None
+		try:
+			current_index = ballot_ids.index(ballot_id)
+			if current_index < len(ballot_ids) - 1:
+				next_ballot_id = ballot_ids[current_index + 1]
+				next_url = reverse('ballot:hau_kiem_ballot', kwargs={'ballot_id': next_ballot_id})
+			else:
+				# Hết phiếu, về trang thống kê
+				next_url = reverse('poll:thong_ke_detail', kwargs={'poll_id': poll.poll_id})
+		except ValueError:
+			next_url = reverse('poll:thong_ke_detail', kwargs={'poll_id': poll.poll_id})
+		
+		return JsonResponse({
+			'success': True,
+			'message': 'Đã duyệt phiếu thành công!',
+			'next_url': next_url
+		})
 		
 		# Sử dụng transaction để đảm bảo tính toàn vẹn dữ liệu
 		with transaction.atomic():

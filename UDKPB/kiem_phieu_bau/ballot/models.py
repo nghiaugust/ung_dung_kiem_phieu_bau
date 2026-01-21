@@ -34,7 +34,22 @@ class Ballot(models.Model): # phiếu bầu
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
 	ballot_image = EncryptedImageField(upload_to=ballot_image_upload_path, null=True, blank=True)  # Đường dẫn ảnh được mã hóa
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
-	metadata = models.JSONField(null=True)  # Thông tin mở rộng
+	
+	# Thông tin mở rộng
+	# Cấu trúc metadata:
+	# {
+	#     "qr_code_raw": str,                    # Dữ liệu QR code thô từ phiếu
+	#     "processed_at": str,                   # Thời gian xử lý (ISO format)
+	#     "horizontal_lines": [                  # Tọa độ các đường kẻ ngang
+	#         {"y": int, "x1": int, "x2": int},  # y: tọa độ Y, x1: điểm bắt đầu, x2: điểm kết thúc
+	#         ...
+	#     ],
+	#     "vertical_lines": [                    # Tọa độ các đường kẻ dọc
+	#         {"x": int, "y1": int, "y2": int},  # x: tọa độ X, y1: điểm bắt đầu, y2: điểm kết thúc
+	#         ...
+	#     ]
+	# }
+	metadata = models.JSONField(null=True)
 	
 	# Trạng thái xử lý asynchronous - UPLOAD PROCESS
 	PROCESSING_STATUS = (
