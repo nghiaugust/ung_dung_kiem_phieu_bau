@@ -2,7 +2,7 @@
 """
 Script để xóa dữ liệu cho poll 105:
 - Xóa tất cả ballot_image của các ballot thuộc poll 105
-- Reset is_checked = False, is_post_checked = False, input_by = null, process_status = pending
+- Reset counting_status = pending, checking_status = NEW, input_by = null, process_status = no_upload
 - Xóa tất cả ballot_cell liên quan đến poll 105
 - Xóa tất cả preprocessed_ballot liên quan đến poll 105
 - Xóa tất cả ai_model_result liên quan đến poll 105
@@ -28,7 +28,7 @@ def cleanup_poll_105():
     """
     Xóa tất cả dữ liệu liên quan đến poll 105:
     1. Xóa ballot_image của tất cả ballots
-    2. Reset is_checked = False, is_post_checked = False, input_by = null, process_status = pending
+    2. Reset counting_status = pending, checking_status = NEW, input_by = null, process_status = no_upload
     3. Xóa tất cả ballot_cell
     4. Xóa tất cả preprocessed_ballot
     5. Xóa tất cả ai_model_result
@@ -75,20 +75,20 @@ def cleanup_poll_105():
             
             print(f"   - Đã xóa {deleted_images} ballot images")
             
-            # 2. Reset trường is_checked, is_post_checked, input_by và process_status
-            print(f"\n2. Reset trường is_checked, is_post_checked, input_by và process_status:")
+            # 2. Reset trường counting_status, checking_status, input_by và process_status
+            print(f"\n2. Reset trường counting_status, checking_status, input_by và process_status:")
             
             updated_ballots = 0
             for ballot in ballots:
-                ballot.is_checked = False
-                ballot.is_post_checked = False
+                # Reset về trạng thái mặc định (is_checked và is_post_checked là properties)
+                ballot.counting_status = 'pending'  # is_checked sẽ tự động = False
+                ballot.checking_status = 'NEW'      # is_post_checked sẽ tự động = False
                 ballot.input_by = None
                 ballot.process_status = 'no_upload'
-                ballot.counting_status = 'pending'
-                ballot.save(update_fields=['is_checked', 'is_post_checked', 'input_by', 'process_status', 'counting_status'])
+                ballot.save(update_fields=['counting_status', 'checking_status', 'input_by', 'process_status'])
                 updated_ballots += 1
             
-            print(f"   - Đã reset {updated_ballots} ballots (is_checked=False, is_post_checked=False, input_by=null, process_status=no_upload, counting_status=pending)")
+            print(f"   - Đã reset {updated_ballots} ballots (counting_status=pending, checking_status=NEW, input_by=null, process_status=no_upload)")
             
             preprocessed_ballots = PreprocessedBallot.objects.filter(ballot__poll_id=poll_id)
             preprocessed_count = preprocessed_ballots.count()
@@ -185,7 +185,7 @@ def cleanup_poll_105():
             print(f"Tóm tắt:")
             print(f"- Ballots được xử lý: {total_ballots}")
             print(f"- Ballot images đã xóa: {deleted_images}")
-            print(f"- Ballots đã reset (is_checked, is_post_checked, input_by, process_status): {updated_ballots}")
+            print(f"- Ballots đã reset (counting_status, checking_status, input_by, process_status): {updated_ballots}")
             print(f"- Ballot cells đã xóa: {total_cells_deleted}")
             print(f"- Preprocessed ballots đã xóa: {deleted_preprocessed}")
             print(f"- Ballot selections đã xóa: {selections_count}")
@@ -200,7 +200,7 @@ def confirm_action():
     """Xác nhận trước khi thực hiện"""
     print("⚠️  CẢNH BÁO: Script này sẽ xóa VĨNH VIỄN dữ liệu sau cho Poll 105:")
     print("   - Tất cả ballot_image (file ảnh gốc)")
-    print("   - Reset is_checked = False, is_post_checked = False, input_by = null, process_status = pending")
+    print("   - Reset counting_status=pending, checking_status=NEW, input_by=null, process_status=no_upload")
     print("   - Tất cả ballot_cell (ô đã cắt)")
     print("   - Tất cả preprocessed_ballot (dữ liệu xử lý)")
     print("   - Tất cả ballot_selection (lựa chọn ứng viên)")

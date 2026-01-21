@@ -51,4 +51,14 @@ urlpatterns = [
     path('polls/<int:poll_id>/voters/<int:voter_id>/checkin/', views.api_voter_checkin, name='voter_checkin'),
     path('polls/<int:poll_id>/voters/<int:voter_id>/undo-checkin/', views.api_voter_undo_checkin, name='voter_undo_checkin'),
     
+    # Checking (Hậu kiểm) - API endpoints
+    path('checking/get-tasks/', views.api_get_checking_tasks, name='get_checking_tasks'),
+    path('checking/submit/', views.api_submit_checking_result, name='submit_checking_result'),
+    path('checking/release/', views.api_release_checking_lock, name='release_checking_lock'),
+    path('checking/statistics/', views.api_checking_statistics, name='checking_statistics'),
+    
+    # Checking (Hậu kiểm) - Web views
+    path('checking/', views.checking_list, name='checking_list'),
+    path('checking/<int:poll_id>/', views.checking_detail, name='checking_detail'),
+    
 ]

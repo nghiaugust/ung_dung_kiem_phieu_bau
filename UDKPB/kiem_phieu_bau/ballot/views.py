@@ -182,9 +182,8 @@ def ballot_detail(request, ballot_id):
 		return redirect('permission_denied')
 	
 	if request.method == 'POST':
-		# Update is_checked
-		is_checked = request.POST.get('is_checked')
-		ballot.is_checked = (is_checked == 'True')
+		# is_checked removed - use counting_status instead
+		# Nếu cần update is_checked, hãy update counting_status = 'completed'
 		# Update is_valid
 		is_valid = request.POST.get('is_valid')
 		ballot.is_valid = (is_valid == 'True')
@@ -449,8 +448,9 @@ def save_hau_kiem(request, ballot_id):
 					)
 			
 			# Đánh dấu đã hậu kiểm
-			ballot.is_post_checked = True
-			ballot.save(update_fields=['is_post_checked'])
+			# is_post_checked is now a property - update checking_status instead
+			ballot.checking_status = 'DONE'
+			ballot.save(update_fields=['checking_status'])
 		
 		# Tìm phiếu tiếp theo để redirect
 		all_ballots = Ballot.objects.filter(poll=poll, is_checked=True).order_by('ballot_id')

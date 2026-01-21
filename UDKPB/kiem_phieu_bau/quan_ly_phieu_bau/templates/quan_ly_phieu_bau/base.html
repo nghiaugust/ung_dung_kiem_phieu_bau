@@ -16,7 +16,7 @@
       .header {
         background: #3d8bfd;
         color: #fff;
-        padding: 0 32px;
+        padding: 0 20px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
         display: flex;
         align-items: center;
@@ -31,11 +31,11 @@
         align-items: center;
       }
       .logo {
-        width: 56px;
-        height: 56px;
+        width: 48px;
+        height: 48px;
         border-radius: 50%;
         background: #fff;
-        margin-right: 18px;
+        margin-right: 12px;
         object-fit: cover;
         box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       }
@@ -45,12 +45,12 @@
         justify-content: center;
       }
       .header-title {
-        font-size: 1.6rem;
+        font-size: 1.35rem;
         font-weight: bold;
         line-height: 1.2;
       }
       .header-sub {
-        font-size: 1.05rem;
+        font-size: 0.95rem;
         font-weight: 400;
         margin-top: 2px;
         color: #fff;
@@ -58,16 +58,17 @@
       }
       .nav-menu {
         display: flex;
-        gap: 24px;
+        gap: 12px;
       }
       .nav-menu a {
         color: #fff;
         text-decoration: none;
-        font-size: 1rem;
+        font-size: 0.95rem;
         font-weight: 500;
-        padding: 8px 16px;
+        padding: 6px 12px;
         border-radius: 4px;
         transition: background 0.2s;
+        white-space: nowrap;
       }
       .nav-menu a:hover, .nav-menu a.active {
         background: #1565c0;
@@ -88,15 +89,17 @@
     <div class="header">
       <div style="display: flex; align-items: center;">
         <img src="{% static 'logo/kma.png' %}" alt="Logo" class="logo" />
-        <div style="display: flex; flex-direction: column; margin-left: 12px;">
-          <span style="font-size: 1.5rem; font-weight: bold;">Học viện Kỹ thuật Mật mã</span>
-          <span style="font-size: 1.05rem; font-weight: 400;">Hệ thống kiểm phiếu bầu</span>
+        <div style="display: flex; flex-direction: column; margin-left: 8px;">
+          <span style="font-size: 1.35rem; font-weight: bold;">Học viện Kỹ thuật Mật mã</span>
+          <span style="font-size: 0.95rem; font-weight: 400;">Hệ thống kiểm phiếu bầu</span>
         </div>
       </div>
       <nav class="nav-menu">
-        <a href="{% url 'home' %}" {% if request.path == '/' %}class="active"{% endif %}>Home</a>
+        <a href="{% url 'home' %}" {% if request.path == '/' %}class="active"{% endif %}>Trang chủ</a>
         <a href="{% url 'poll:tao_cuoc_bo_phieu' %}" {% if 'tao_cuoc_bo_phieu' in request.path %}class="active"{% endif %}>Tạo cuộc bỏ phiếu</a>
         <a href="{% url 'poll:danh_sach_cuoc_bo_phieu' %}" {% if 'danh_sach_cuoc_bo_phieu' in request.path %}class="active"{% endif %}>Danh sách cuộc bỏ phiếu</a>
+        <a href="#" {% if 'cau_hinh_kiem_phieu' in request.path %}class="active"{% endif %}>Cấu hình kiểm phiếu</a>
+        <a href="{% url 'api:checking_list' %}" {% if 'checking' in request.path %}class="active"{% endif %}>Hậu kiểm</a>
         <a href="{% url 'poll:thong_ke' %}" {% if 'thong_ke' in request.path %}class="active"{% endif %}>Thống kê</a>
         {% if request.user.is_authenticated %}
           {% if request.user.is_superuser %}

@@ -14,12 +14,17 @@ from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.shortcuts import render
+from django.core.paginator import Paginator
+from django.db.models import Q, Count, Case, When, IntegerField
+from django.contrib.auth.decorators import login_required
 
 from .models import APIToken
 from .authentication import require_api_token
 from .verify_file_signature import verify_file_signature
+from .checking_logic import CheckingDistributionService
 from poll.models import Poll, Candidate, PollMember, Voter
-from ballot.models import Ballot
+from ballot.models import Ballot, BallotSelection
 from ballot.doc_qr import read_qr_code_only
 from security.hmac_utils import verify_ballot_from_qr
 
@@ -3284,3 +3289,455 @@ def api_voter_undo_checkin(request, poll_id, voter_id):
             'error': 'Server error',
             'message': str(e)
         }, status=500)
+
+
+# =====================================================
+# CHECKING (HẬU KIỂM) APIs
+# =====================================================
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_get_checking_tasks(request):
+    """
+    Lấy phiếu bầu để hậu kiểm
+    
+    GET /api/checking/get-tasks/
+    Header: Authorization: Bearer <token>
+    
+    Query params:
+        - poll_id: int (optional) - Lọc theo cuộc bỏ phiếu
+        - batch_size: int (optional, default 10, max 50) - Số lượng phiếu lấy ra
+    
+    Response:
+    {
+        "success": true,
+        "total": 10,
+        "message": "Đã lấy 10 phiếu để hậu kiểm",
+        "ballots": [
+            {
+                "ballot_id": 123,
+                "poll_id": 1,
+                "poll_title": "Bầu cử...",
+                "timestamp": "2026-01-21T10:30:00+07:00",
+                "checking_locked_at": "2026-01-21T11:00:00+07:00",
+                "is_valid": true,
+                "ballot_image_url": "/media/ballots/ballot_123.jpg",
+                "selections": [
+                    {
+                        "candidate_id": 1,
+                        "candidate_name": "Nguyễn Văn A"
+                    }
+                ]
+            }
+        ]
+    }
+    """
+    try:
+        user = request.api_user
+        
+        # Lấy parameters
+        poll_id = request.GET.get('poll_id')
+        batch_size = request.GET.get('batch_size', 10)
+        
+        # Validate batch_size
+        try:
+            batch_size = int(batch_size)
+            if batch_size < 1:
+                batch_size = 1
+            elif batch_size > 50:
+                batch_size = 50
+        except ValueError:
+            batch_size = 10
+        
+        # Validate poll_id nếu có
+        if poll_id:
+            try:
+                poll_id = int(poll_id)
+            except ValueError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid poll_id',
+                    'message': 'poll_id phải là số nguyên'
+                }, status=400)
+        
+        # Gọi service để lấy phiếu
+        tasks = CheckingDistributionService.get_tasks_for_checking(
+            user=user,
+            poll_id=poll_id,
+            batch_size=batch_size
+        )
+        
+        if not tasks:
+            return JsonResponse({
+                'success': True,
+                'total': 0,
+                'message': 'Hiện tại không còn phiếu nào để hậu kiểm',
+                'ballots': []
+            })
+        
+        # Serialize dữ liệu
+        ballot_list = []
+        for ballot in tasks:
+            # Lấy selections của ballot
+            selections = BallotSelection.objects.filter(ballot=ballot).select_related('candidate')
+            selection_list = [
+                {
+                    'candidate_id': sel.candidate.candidate_id,
+                    'candidate_name': sel.candidate.name,
+                    'candidate_code': sel.candidate.code
+                }
+                for sel in selections
+            ]
+            
+            ballot_data = {
+                'ballot_id': ballot.ballot_id,
+                'poll_id': ballot.poll.poll_id,
+                'poll_title': ballot.poll.title,
+                'timestamp': ballot.timestamp.isoformat() if ballot.timestamp else None,
+                'checking_locked_at': ballot.checking_locked_at.isoformat() if ballot.checking_locked_at else None,
+                'is_valid': ballot.is_valid,
+                'ballot_image_url': ballot.ballot_image.url if ballot.ballot_image else None,
+                'selections': selection_list,
+                'metadata': ballot.metadata
+            }
+            ballot_list.append(ballot_data)
+        
+        return JsonResponse({
+            'success': True,
+            'total': len(ballot_list),
+            'message': f'Đã lấy {len(ballot_list)} phiếu để hậu kiểm',
+            'ballots': ballot_list
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_submit_checking_result(request):
+    """
+    Nộp kết quả hậu kiểm
+    
+    POST /api/checking/submit/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "ballot_id": 123,
+        "is_valid": true,
+        "notes": "Ghi chú nếu có"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Hậu kiểm thành công",
+        "ballot_id": 123
+    }
+    
+    Error Response (nếu phiếu đã hết hạn):
+    {
+        "success": false,
+        "error": "Phiếu này đã hết hạn hoặc không thuộc về bạn. Vui lòng tải lại trang."
+    }
+    """
+    try:
+        user = request.api_user
+        
+        # Parse JSON body
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON',
+                'message': 'Dữ liệu JSON không hợp lệ'
+            }, status=400)
+        
+        # Validate required fields
+        ballot_id = data.get('ballot_id')
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Thiếu thông tin ballot_id'
+            }, status=400)
+        
+        # Prepare result data
+        result_data = {
+            'is_post_checked': True,
+            'is_valid': data.get('is_valid', True),
+            'notes': data.get('notes', '')
+        }
+        
+        # Gọi service để nộp kết quả
+        is_success, message = CheckingDistributionService.submit_checking_result(
+            user=user,
+            ballot_id=ballot_id,
+            result_data=result_data
+        )
+        
+        if is_success:
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'ballot_id': ballot_id
+            })
+        else:
+            # Trả về lỗi 409 Conflict để Frontend biết đường hiển thị popup báo lỗi
+            return JsonResponse({
+                'success': False,
+                'error': message,
+                'ballot_id': ballot_id
+            }, status=409)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_api_token
+@require_http_methods(["POST"])
+def api_release_checking_lock(request):
+    """
+    Mở khóa phiếu đang hậu kiểm (User muốn bỏ qua phiếu này)
+    
+    POST /api/checking/release/
+    Header: Authorization: Bearer <token>
+    Body (JSON):
+    {
+        "ballot_id": 123
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Đã mở khóa phiếu thành công",
+        "ballot_id": 123
+    }
+    """
+    try:
+        user = request.api_user
+        
+        # Parse JSON body
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON',
+                'message': 'Dữ liệu JSON không hợp lệ'
+            }, status=400)
+        
+        # Validate required fields
+        ballot_id = data.get('ballot_id')
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Thiếu thông tin ballot_id'
+            }, status=400)
+        
+        # Gọi service để mở khóa
+        is_success, message = CheckingDistributionService.release_checking_lock(
+            user=user,
+            ballot_id=ballot_id
+        )
+        
+        if is_success:
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'ballot_id': ballot_id
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': message,
+                'ballot_id': ballot_id
+            }, status=400)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_api_token
+@require_http_methods(["GET"])
+def api_checking_statistics(request):
+    """
+    Lấy thống kê hậu kiểm
+    
+    GET /api/checking/statistics/
+    Header: Authorization: Bearer <token>
+    
+    Query params:
+        - poll_id: int (optional) - Lọc theo cuộc bỏ phiếu
+        - user_stats: bool (optional) - Nếu true, trả về thống kê của user hiện tại
+    
+    Response (user_stats=false - thống kê tổng quát):
+    {
+        "success": true,
+        "statistics": {
+            "total_ballots": 1000,
+            "new": 500,
+            "processing": 100,
+            "done": 400
+        }
+    }
+    
+    Response (user_stats=true - thống kê cá nhân):
+    {
+        "success": true,
+        "statistics": {
+            "total_assigned": 50,
+            "processing": 10,
+            "completed": 40
+        }
+    }
+    """
+    try:
+        user = request.api_user
+        
+        # Lấy parameters
+        poll_id = request.GET.get('poll_id')
+        user_stats = request.GET.get('user_stats', '').lower() == 'true'
+        
+        # Validate poll_id nếu có
+        if poll_id:
+            try:
+                poll_id = int(poll_id)
+            except ValueError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid poll_id',
+                    'message': 'poll_id phải là số nguyên'
+                }, status=400)
+        
+        # Gọi service để lấy thống kê
+        if user_stats:
+            stats = CheckingDistributionService.get_checking_statistics(
+                user=user,
+                poll_id=poll_id
+            )
+        else:
+            stats = CheckingDistributionService.get_checking_statistics(
+                poll_id=poll_id
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'statistics': stats
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+# =====================================================
+# CHECKING WEB VIEWS (for browser interface)
+# =====================================================
+
+@login_required
+def checking_list(request):
+    """
+    Danh sách cuộc bỏ phiếu cho hậu kiểm (Web UI)
+    
+    GET /api/checking/
+    """
+    # Lấy tất cả polls có phiếu bầu
+    polls = Poll.objects.annotate(
+        # Đếm số phiếu đã tải lên (process_status = 'completed')
+        num_uploaded=Count(
+            Case(
+                When(ballot__process_status='completed', then=1),
+                output_field=IntegerField()
+            )
+        ),
+        # Đếm số phiếu đã kiểm (counting_status = 'completed')
+        num_counted=Count(
+            Case(
+                When(ballot__counting_status='completed', then=1),
+                output_field=IntegerField()
+            )
+        ),
+        # Đếm số phiếu chưa hậu kiểm (checking_status = 'NEW' và đã hoàn thành upload + counting)
+        num_pending_check=Count(
+            Case(
+                When(
+                    ballot__checking_status='NEW',
+                    ballot__process_status='completed',
+                    ballot__counting_status='completed',
+                    then=1
+                ),
+                output_field=IntegerField()
+            )
+        ),
+        # Đếm số phiếu đã hậu kiểm (checking_status = 'DONE')
+        num_checked=Count(
+            Case(
+                When(ballot__checking_status='DONE', then=1),
+                output_field=IntegerField()
+            )
+        )
+    ).order_by('-poll_id')
+    
+    # Phân trang
+    paginator = Paginator(polls, 10)  # 10 items per page
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'api/checking.html', {
+        'polls': page_obj
+    })
+
+
+@login_required
+def checking_detail(request, poll_id):
+    """
+    Chi tiết hậu kiểm của một cuộc bỏ phiếu (Web UI)
+    
+    GET /api/checking/<poll_id>/
+    """
+    try:
+        poll = Poll.objects.get(poll_id=poll_id)
+        
+        # Thống kê chi tiết
+        stats = {
+            'total_uploaded': Ballot.objects.filter(poll=poll, process_status='completed').count(),
+            'total_counted': Ballot.objects.filter(poll=poll, counting_status='completed').count(),
+            'pending_check': Ballot.objects.filter(
+                poll=poll,
+                checking_status='NEW',
+                process_status='completed',
+                counting_status='completed'
+            ).count(),
+            'processing': Ballot.objects.filter(poll=poll, checking_status='PROCESSING').count(),
+            'checked': Ballot.objects.filter(poll=poll, checking_status='DONE').count(),
+        }
+        
+        return render(request, 'api/checking_detail.html', {
+            'poll': poll,
+            'stats': stats
+        })
+        
+    except Poll.DoesNotExist:
+        return render(request, 'api/checking_detail.html', {
+            'error': 'Không tìm thấy cuộc bỏ phiếu'
+        })

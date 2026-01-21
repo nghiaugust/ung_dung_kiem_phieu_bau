@@ -126,7 +126,7 @@ def create_ballots_ajax(request, poll_id):
             # Tạo ballot trống
             ballot = Ballot.objects.create(
                 poll=poll,
-                is_checked=False,
+                # is_checked removed - property now (auto False when counting_status != 'completed')
                 is_valid=True
             )
             # Tạo HMAC signature cho ballot

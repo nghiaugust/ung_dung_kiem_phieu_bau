@@ -1,0 +1,63 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% block title %}Chi tiết hậu kiểm - {{ poll.title }}{% endblock %}
+
+{% block content %}
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% else %}
+
+<h2>Chi tiết hậu kiểm: {{ poll.title }}</h2>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Thông tin cuộc bỏ phiếu</h5>
+    <p class="card-text"><strong>Mô tả:</strong> {{ poll.description|default:"Không có mô tả" }}</p>
+    <p class="card-text"><strong>Thời gian:</strong> {{ poll.start_time|date:"d/m/Y H:i" }}</p>
+  </div>
+</div>
+
+<div class="row mb-4">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h5 class="card-title">{{ stats.total_uploaded }}</h5>
+        <p class="card-text">Đã tải lên</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h5 class="card-title">{{ stats.total_counted }}</h5>
+        <p class="card-text">Đã kiểm phiếu</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center bg-warning text-white">
+      <div class="card-body">
+        <h5 class="card-title">{{ stats.pending_check }}</h5>
+        <p class="card-text">Chưa hậu kiểm</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center bg-success text-white">
+      <div class="card-body">
+        <h5 class="card-title">{{ stats.checked }}</h5>
+        <p class="card-text">Đã hậu kiểm</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <strong>Trang này đang được phát triển.</strong> Chi tiết hậu kiểm sẽ được bổ sung sau.
+</div>
+
+<a href="{% url 'api:checking_list' %}" class="btn btn-secondary">← Quay lại danh sách</a>
+
+{% endif %}
+
+{% endblock %}

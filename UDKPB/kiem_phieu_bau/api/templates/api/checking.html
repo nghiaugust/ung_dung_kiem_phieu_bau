@@ -1,0 +1,103 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% block title %}Danh sách hậu kiểm{% endblock %}
+
+{% block content %}
+<h2>Danh sách hậu kiểm</h2>
+
+<table class="table table-bordered table-hover">
+  <thead>
+    <tr>
+      <th class="w-auto">STT</th>
+      <th class="w-auto">Tên cuộc bỏ phiếu</th>
+      <th class="w-auto">Số phiếu đã tải lên</th>
+      <th class="w-auto">Số phiếu đã kiểm</th>
+      <th class="w-auto">Số phiếu chưa hậu kiểm</th>
+      <th class="w-auto">Số phiếu đã hậu kiểm</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for poll in polls %}
+    <tr onclick="window.location.href='{% url 'api:checking_detail' poll.poll_id %}'" style="cursor: pointer;">
+      <td class="w-auto">{{ forloop.counter|add:polls.start_index|add:"-1" }}</td>
+      <td class="w-auto">{{ poll.title }}</td>
+      <td class="w-auto">{{ poll.num_uploaded }}</td>
+      <td class="w-auto">{{ poll.num_counted }}</td>
+      <td class="w-auto">{{ poll.num_pending_check }}</td>
+      <td class="w-auto">{{ poll.num_checked }}</td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="6" class="text-center">Chưa có cuộc bỏ phiếu nào.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Phân trang -->
+{% if polls.has_other_pages %}
+<nav aria-label="Phân trang" class="mt-4">
+  <ul class="pagination justify-content-center">
+    {% if polls.has_previous %}
+    <li class="page-item">
+      <a class="page-link" href="?page=1">&laquo; Đầu</a>
+    </li>
+    <li class="page-item">
+      <a class="page-link" href="?page={{ polls.previous_page_number }}">Trước</a>
+    </li>
+    {% else %}
+    <li class="page-item disabled">
+      <span class="page-link">&laquo; Đầu</span>
+    </li>
+    <li class="page-item disabled">
+      <span class="page-link">Trước</span>
+    </li>
+    {% endif %}
+
+    {% for num in polls.paginator.page_range %}
+      {% if polls.number == num %}
+      <li class="page-item active">
+        <span class="page-link">{{ num }}</span>
+      </li>
+      {% elif num > polls.number|add:'-3' and num < polls.number|add:'3' %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+      </li>
+      {% endif %}
+    {% endfor %}
+
+    {% if polls.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ polls.next_page_number }}">Sau</a>
+    </li>
+    <li class="page-item">
+      <a class="page-link" href="?page={{ polls.paginator.num_pages }}">Cuối &raquo;</a>
+    </li>
+    {% else %}
+    <li class="page-item disabled">
+      <span class="page-link">Sau</span>
+    </li>
+    <li class="page-item disabled">
+      <span class="page-link">Cuối &raquo;</span>
+    </li>
+    {% endif %}
+  </ul>
+</nav>
+
+<div class="text-center text-muted">
+  <small>Trang {{ polls.number }} / {{ polls.paginator.num_pages }} (Tổng {{ polls.paginator.count }} cuộc bỏ phiếu)</small>
+</div>
+{% endif %}
+
+<style>
+  /* Hover effect cho rows */
+  tbody tr:hover {
+    background-color: #f0f8ff !important;
+    transition: background-color 0.2s ease;
+  }
+  
+  tbody tr {
+    transition: background-color 0.2s ease;
+  }
+</style>
+
+{% endblock %}

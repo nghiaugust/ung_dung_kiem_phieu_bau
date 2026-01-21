@@ -644,7 +644,8 @@ def process_counting(request, poll_id):
 	poll.status = 'Đã kiểm phiếu'
 	poll.save()
 	
-	Ballot.objects.filter(poll=poll).update(is_checked=True)
+	# Update counting_status thay vì is_checked (is_checked giờ là property)
+	Ballot.objects.filter(poll=poll).update(counting_status='completed')
 	
 	messages.success(request, f'Đã xử lý thành công {total_processed_ballots} phiếu bầu với {total_processed_cells} ô!')
 	

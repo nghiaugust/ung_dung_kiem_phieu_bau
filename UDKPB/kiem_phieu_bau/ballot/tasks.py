@@ -49,9 +49,7 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
         if not os.path.exists(temp_input_path):
             ballot.process_status = 'failed'
             ballot.process_error = f'File input không tồn tại: {temp_input_path}'
-            # Reset is_checked về False để tránh trạng thái không hợp lệ
-            ballot.is_checked = False
-            ballot.save(update_fields=['process_status', 'process_error', 'is_checked'])
+            ballot.save(update_fields=['process_status', 'process_error'])
             return {
                 'success': False,
                 'error': ballot.process_error
@@ -188,8 +186,7 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
             ballot = Ballot.objects.get(ballot_id=ballot_id)
             ballot.process_status = 'failed'
             ballot.process_error = error_msg
-            ballot.is_checked = False  # Reset is_checked để tránh trạng thái không hợp lệ
-            ballot.save(update_fields=['process_status', 'process_error', 'is_checked'])
+            ballot.save(update_fields=['process_status', 'process_error'])
         except:
             pass
         
@@ -212,8 +209,7 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
             ballot = Ballot.objects.get(ballot_id=ballot_id)
             ballot.process_status = 'failed'
             ballot.process_error = error_msg
-            ballot.is_checked = False  # Reset is_checked để tránh trạng thái không hợp lệ
-            ballot.save(update_fields=['process_status', 'process_error', 'is_checked'])
+            ballot.save(update_fields=['process_status', 'process_error'])
         except:
             pass
         

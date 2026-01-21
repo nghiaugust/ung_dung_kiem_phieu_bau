@@ -30,8 +30,7 @@ class Ballot(models.Model): # phiếu bầu
 
 	timestamp = models.DateTimeField(auto_now_add=True)  # Thời gian tạo phiếu (chỉ set khi tạo, không thay đổi sau đó)
 	
-	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
-	is_post_checked = models.BooleanField(default=False)  # Đã hậu kiểm chưa
+	# REMOVED: is_checked và is_post_checked đã được thay bằng properties (xem cuối class)
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
 	ballot_image = EncryptedImageField(upload_to=ballot_image_upload_path, null=True, blank=True)  # Đường dẫn ảnh được mã hóa
 	# ballot_file_path = models.CharField(max_length=512, null=True)  # Đường dẫn đến file lá phiếu
@@ -73,12 +72,36 @@ class Ballot(models.Model): # phiếu bầu
 	counting_status = models.CharField(max_length=20, choices=COUNTING_STATUS, default='pending')
 	counting_error = models.TextField(null=True, blank=True)  # Lưu lỗi kiểm phiếu nếu có
 	
+	# Trạng thái hậu kiểm
+	CHECKING_STATUS = (
+		('NEW', 'Mới - Chưa ai làm'),
+        ('PROCESSING', 'Đang xử lý - Đang bị khóa bởi User'),
+        ('DONE', 'Hoàn thành'),
+	)
+	checking_status = models.CharField(max_length=20, choices=CHECKING_STATUS, default='NEW')
+	checking_locked_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='checking_locked_ballots')  # Ai đang khóa để hậu kiểm
+	checking_locked_at = models.DateTimeField(null=True, blank=True)  # Thời gian khóa hậu kiểm
+
 	# QR Code HMAC fields
 	qr_hmac = models.CharField(max_length=64, null=True, blank=True)  # HMAC signature (hex string)
 	qr_generated_at = models.DateTimeField(null=True, blank=True)  # Thời gian tạo QR HMAC
 	# Legacy fields (kept for backward compatibility)
 	qr_signature = models.CharField(max_length=1024, null=True, blank=True)  # RSA Signature (DEPRECATED)
 	qr_payload = models.JSONField(null=True, blank=True)  # RSA Payload (DEPRECATED)
+
+	@property
+	def is_checked(self):
+		"""
+		Tự động trả về True nếu quá trình kiểm phiếu (counting) đã hoàn tất
+		"""
+		return self.counting_status == 'completed'
+
+	@property
+	def is_post_checked(self):
+		"""
+		Tự động trả về True nếu quá trình hậu kiểm (checking) đã xong (DONE)
+		"""
+		return self.checking_status == 'DONE'
 
 # Bảng lưu lựa chọn của từng phiếu bầu
 class BallotSelection(models.Model):
