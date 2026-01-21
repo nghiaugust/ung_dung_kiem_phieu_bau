@@ -12,6 +12,9 @@ import matplotlib
 matplotlib.use('Agg')  # QUAN TRỌNG: Sử dụng backend không cần GUI, an toàn cho threading
 import matplotlib.pyplot as plt
 
+# Import GPU utilities
+from .gpu_utils import gpu_filter2d, gpu_canny, gpu_cvt_color, check_gpu_available
+
 
 def tien_xu_ly_anh(gray):
     """
@@ -30,13 +33,13 @@ def tien_xu_ly_anh(gray):
     # 1. Khử nhiễu (COMMENTED - tối ưu tốc độ)
     # denoised = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
     
-    # 2. Làm nét đường kẻ bằng kernel sharpen
+    # 2. Làm nét đường kẻ bằng kernel sharpen (sử dụng GPU nếu có)
     sharpen_kernel = np.array([
         [-1, -1, -1],
         [-1,  9, -1],
         [-1, -1, -1]
     ])
-    sharpened = cv2.filter2D(gray, -1, sharpen_kernel)  # Sử dụng gray trực tiếp
+    sharpened = gpu_filter2d(gray, -1, sharpen_kernel)  # GPU acceleration
     
     # 3. Tăng độ tương phản
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -243,7 +246,7 @@ def phat_hien_duong_ke_edge_projection(duong_dan_anh, hien_thi=True, target_h_li
     """
     # 1. Đọc ảnh
     img = cv2.imread(duong_dan_anh)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = gpu_cvt_color(img, cv2.COLOR_BGR2GRAY)  # GPU acceleration
     height, width = gray.shape
     
     print(f"[INFO] Kích thước ảnh: {width}x{height}")
@@ -472,7 +475,7 @@ def phat_hien_grid_phieu_bau(anh, target_h_lines=11, target_v_lines=4, verbose=F
     try:
         # Chuyển sang grayscale nếu cần
         if len(anh.shape) == 3:
-            gray = cv2.cvtColor(anh, cv2.COLOR_BGR2GRAY)
+            gray = gpu_cvt_color(anh, cv2.COLOR_BGR2GRAY)  # GPU acceleration
         else:
             gray = anh
         
@@ -481,8 +484,8 @@ def phat_hien_grid_phieu_bau(anh, target_h_lines=11, target_v_lines=4, verbose=F
         # Tiền xử lý
         enhanced = tien_xu_ly_anh(gray)
         
-        # Edge Detection
-        edges = cv2.Canny(enhanced, 50, 150, apertureSize=3)
+        # Edge Detection (sử dụng GPU nếu có)
+        edges = gpu_canny(enhanced, 50, 150)
         
         # Projection cho đường NGANG
         h_projection = chieu_edge_theo_truc(edges, truc='y')

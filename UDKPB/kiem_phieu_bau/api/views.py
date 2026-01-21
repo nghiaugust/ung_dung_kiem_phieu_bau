@@ -1299,6 +1299,9 @@ def api_upload_ballots_batch(request, poll_id):
                 else:
                     ballot.metadata = metadata
                 
+                # Set is_uploaded = True (file đã được lưu tạm thời)
+                ballot.is_uploaded = True
+                
                 # Set status = pending và lưu
                 ballot.input_by_id = user.pk
                 ballot.process_status = 'pending'

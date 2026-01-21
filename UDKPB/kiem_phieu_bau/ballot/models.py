@@ -29,6 +29,8 @@ class Ballot(models.Model): # phiếu bầu
 	input_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, related_name='input_ballots')
 
 	timestamp = models.DateTimeField(auto_now_add=True)  # Thời gian tạo phiếu (chỉ set khi tạo, không thay đổi sau đó)
+	
+	is_uploaded = models.BooleanField(default=False)  # Đã tải lên chưa
 	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
 	is_post_checked = models.BooleanField(default=False)  # Đã hậu kiểm chưa
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không

@@ -12,11 +12,15 @@ Yêu cầu:
 import cv2
 import numpy as np
 import os
+import gc
 
 # Import detect_qr_codes từ ballot.doc_qr
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from ballot.doc_qr import detect_qr_codes
+
+# Import GPU utilities
+from .gpu_utils import gpu_resize, gpu_warp_perspective, gpu_cvt_color, check_gpu_available
 
 
 def phat_hien_qr_code(anh_mau, anh_xam=None):
@@ -119,6 +123,10 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	h, w = img.shape[:2]
 	# print(f"[STEP1] Kích thước ảnh đầu vào: {w}x{h}")
 	
+	# In thông tin GPU (nếu có)
+	if check_gpu_available():
+		print(f"[STEP1] Sử dụng GPU acceleration cho xử lý ảnh")
+	
 	# Chia ảnh làm 4 phần (từ tâm)
 	mid_h, mid_w = h // 2, w // 2
 	
@@ -147,7 +155,7 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	for y_start, y_end, x_start, x_end, expected_id, corner_idx, offset_y, offset_x, use_qr in regions:
 		# Cắt vùng
 		region = img[y_start:y_end, x_start:x_end]
-		gray_region = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+		gray_region = gpu_cvt_color(region, cv2.COLOR_BGR2GRAY)
 		
 		if use_qr:
 			# Phát hiện QR Code bằng QReader
@@ -190,9 +198,13 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 			if not qr_found:
 				print(f"[STEP1] Không tìm thấy QR ở độ phân giải gốc, thử upscale 3x...")
 				
-				# Upscale ảnh 3x
-				region_upscaled = cv2.resize(region, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-				gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
+				# Upscale ảnh 3x (sử dụng GPU nếu có)
+				region_upscaled = gpu_resize(region, None, interpolation=cv2.INTER_CUBIC)
+				if region_upscaled.shape[1] != region.shape[1] * 3:
+					new_w = int(region.shape[1] * 3.0)
+					new_h = int(region.shape[0] * 3.0)
+					region_upscaled = gpu_resize(region, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+				gray_region_upscaled = gpu_cvt_color(region_upscaled, cv2.COLOR_BGR2GRAY)
 				scale_factor = 3.0
 				
 				# Thử decode lại với QReader
@@ -232,9 +244,11 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 			if not qr_found:
 				print(f"[STEP1] Không tìm thấy QR sau upscale 3x, thử upscale 5x...")
 				
-				# Upscale ảnh 5x
-				region_upscaled = cv2.resize(region, None, fx=5.0, fy=5.0, interpolation=cv2.INTER_CUBIC)
-				gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
+				# Upscale ảnh 5x (sử dụng GPU nếu có)
+				new_w = int(region.shape[1] * 5.0)
+				new_h = int(region.shape[0] * 5.0)
+				region_upscaled = gpu_resize(region, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+				gray_region_upscaled = gpu_cvt_color(region_upscaled, cv2.COLOR_BGR2GRAY)
 				scale_factor = 5.0
 				
 				# Thử decode lại với QReader
@@ -339,9 +353,9 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	
 	# print(f"[STEP1] Kích thước đầu ra (với padding {padding}px): {chieu_rong_pixel_with_padding} x {chieu_dai_pixel_with_padding} pixels")
 	
-	# Biến đổi perspective
+	# Biến đổi perspective (sử dụng GPU nếu có)
 	M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-	warped = cv2.warpPerspective(img, M, (chieu_rong_pixel_with_padding, chieu_dai_pixel_with_padding))
+	warped = gpu_warp_perspective(img, M, (chieu_rong_pixel_with_padding, chieu_dai_pixel_with_padding))
 	
 	# Lưu ảnh đầu ra
 	success = cv2.imwrite(duong_dan_anh_dau_ra, warped)
