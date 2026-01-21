@@ -259,10 +259,12 @@ class YOLOService:
             # Load model
             self._model = YOLO(model_path)
             
-            # Check GPU
+            # Check và set GPU
             if torch.cuda.is_available():
+                self._model.to('cuda')  # Chuyển model lên GPU
                 print("[YOLO Service] ✅ Sử dụng GPU")
             else:
+                self._model.to('cpu')   # Đảm bảo model ở CPU
                 print("[YOLO Service] ⚠️ Sử dụng CPU")
                 
         except Exception as e:
@@ -449,7 +451,7 @@ class YOLOService:
     
     def detect_batch(self, images: List[tuple]) -> List[Dict]:
         """
-        Detect batch nhiều ảnh
+        Detect batch nhiều ảnh - TẬN DỤNG GPU PARALLEL PROCESSING
         
         Args:
             images: List of (image_data, filename, image_path) tuples
@@ -458,19 +460,131 @@ class YOLOService:
             List of results
         """
         results = []
+        pil_images = []
+        cropped_images = []
+        img_arrays = []
         
-        # YOLO batch processing có thể không hoạt động tốt với model này
-        # Xử lý từng ảnh để đảm bảo kết quả chính xác
-        print(f"[YOLO Service] Processing {len(images)} ")
+        try:
+            print(f"[YOLO Service] 🚀 Batch processing {len(images)} images")
+            
+            # Chuẩn bị batch (crop tất cả ảnh trước)
+            filenames = []
+            image_paths = []
+            
+            for item in images:
+                # Hỗ trợ cả 2 format: (data, name) và (data, name, path)
+                if len(item) == 3:
+                    image_data, filename, image_path = item
+                    image_paths.append(image_path)
+                else:
+                    image_data, filename = item[:2]
+                    image_paths.append(None)
+                
+                try:
+                    # Load và convert ảnh
+                    pil_img = Image.open(io.BytesIO(image_data))
+                    if pil_img.mode != 'RGB':
+                        pil_img = pil_img.convert('RGB')
+                    pil_images.append(pil_img)
+                    
+                    # Crop ảnh
+                    cropped_img = crop_center_horizontal(pil_img)
+                    cropped_images.append(cropped_img)
+                    
+                    # Convert to numpy
+                    img_array = np.array(cropped_img)
+                    img_arrays.append(img_array)
+                    
+                    filenames.append(filename)
+                    
+                except Exception as e:
+                    results.append({
+                        'filename': filename,
+                        'label': 'none',
+                        'detections': [],
+                        'status': 'error',
+                        'error': f"Lỗi đọc ảnh: {str(e)}"
+                    })
+            
+            # BATCH PREDICTION - GPU xử lý SONG SONG tất cả ảnh
+            if img_arrays:
+                batch_results = self._model.predict(
+                    source=img_arrays,
+                    save=False,
+                    verbose=False,
+                    conf=0.25,
+                    iou=0.45,
+                    stream=False  # Đảm bảo trả về list results
+                )
+                
+                # Parse từng result
+                for filename, result, image_path in zip(filenames, batch_results, image_paths):
+                    detections = []
+                    label = "none"
+                    
+                    if result.boxes is not None and len(result.boxes) > 0:
+                        boxes = result.boxes.xyxy.cpu().numpy()
+                        classes = result.boxes.cls.cpu().numpy()
+                        confidences = result.boxes.conf.cpu().numpy()
+                        class_names = result.names
+                        
+                        for box, cls_id, conf in zip(boxes, classes, confidences):
+                            cls_name = class_names[int(cls_id)]
+                            detections.append({
+                                'class': cls_name,
+                                'confidence': float(conf),
+                                'bbox': box.tolist()
+                            })
+                        
+                        # XÓA numpy arrays
+                        del boxes, classes, confidences
+                        
+                        # Xác định label chính
+                        has_x_mark = any(d['class'] == 'x_mark' for d in detections)
+                        has_x_cancelled = any(d['class'] == 'x_cancelled' for d in detections)
+                        
+                        if has_x_mark:
+                            label = "x_mark"
+                        elif has_x_cancelled:
+                            label = "x_cancelled"
+                    
+                    results.append({
+                        'filename': filename,
+                        'label': label,
+                        'detections': detections,
+                        'status': 'success'
+                    })
+                
+                # Cleanup batch results
+                del batch_results
+                
+                print(f"[YOLO Service] ✅ Batch processed {len(results)} images successfully")
+                
+        except Exception as e:
+            # Fallback to individual processing
+            print(f"[YOLO Service] ⚠️ Batch failed, fallback to individual: {e}")
+            results = []
+            for item in images:
+                if len(item) == 3:
+                    image_data, filename, image_path = item
+                    result = self.detect(image_data, filename, image_path)
+                else:
+                    image_data, filename = item
+                    result = self.detect(image_data, filename)
+                results.append(result)
         
-        for item in images:
-            # Hỗ trợ cả 2 format: (data, name) và (data, name, path)
-            if len(item) == 3:
-                image_data, filename, image_path = item
-                result = self.detect(image_data, filename, image_path)
-            else:
-                image_data, filename = item
-                result = self.detect(image_data, filename)
-            results.append(result)
+        finally:
+            # CLEANUP: Giải phóng tất cả images
+            for img in cropped_images:
+                try:
+                    img.close()
+                except:
+                    pass
+            for img in pil_images:
+                try:
+                    img.close()
+                except:
+                    pass
+            del pil_images, cropped_images, img_arrays
         
         return results
