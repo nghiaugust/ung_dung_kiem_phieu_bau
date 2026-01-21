@@ -30,7 +30,6 @@ class Ballot(models.Model): # phiếu bầu
 
 	timestamp = models.DateTimeField(auto_now_add=True)  # Thời gian tạo phiếu (chỉ set khi tạo, không thay đổi sau đó)
 	
-	is_uploaded = models.BooleanField(default=False)  # Đã tải lên chưa
 	is_checked = models.BooleanField(default=False)  # Đã kiểm phiếu chưa
 	is_post_checked = models.BooleanField(default=False)  # Đã hậu kiểm chưa
 	is_valid = models.BooleanField(default=True)  # Hợp lệ không
@@ -55,12 +54,13 @@ class Ballot(models.Model): # phiếu bầu
 	
 	# Trạng thái xử lý asynchronous - UPLOAD PROCESS
 	PROCESSING_STATUS = (
+		('no_upload','chưa tải lên'),
 		('pending', 'Chờ xử lý'),
 		('processing', 'Đang xử lý'),
 		('completed', 'Hoàn thành'),
 		('failed', 'Lỗi'),
 	)
-	process_status = models.CharField(max_length=20, choices=PROCESSING_STATUS, default='pending')
+	process_status = models.CharField(max_length=20, choices=PROCESSING_STATUS, default='no_upload')
 	process_error = models.TextField(null=True, blank=True)  # Lưu lỗi nếu có
 	
 	# Trạng thái kiểm phiếu asynchronous - COUNTING PROCESS (riêng biệt với upload)

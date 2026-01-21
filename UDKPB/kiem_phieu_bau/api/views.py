@@ -22,10 +22,6 @@ from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot
 from ballot.doc_qr import read_qr_code_only
 from security.hmac_utils import verify_ballot_from_qr
-from form.models import BallotDocument
-# Import các module preprocessing mới
-from preprocessing.preprocessing_for_upload_step_1 import lam_phang_anh_phieu_bau
-from preprocessing.preprocessing_for_upload_step_2 import cat_va_luu_cac_o_phieu_bau_wrapper
 
 User = get_user_model()
 from kiem_phieu_bau.rate_limiting_decorator import rate_limit
@@ -1298,9 +1294,6 @@ def api_upload_ballots_batch(request, poll_id):
                     ballot.metadata.update(metadata)
                 else:
                     ballot.metadata = metadata
-                
-                # Set is_uploaded = True (file đã được lưu tạm thời)
-                ballot.is_uploaded = True
                 
                 # Set status = pending và lưu
                 ballot.input_by_id = user.pk

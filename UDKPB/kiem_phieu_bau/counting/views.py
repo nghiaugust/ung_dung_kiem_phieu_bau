@@ -770,7 +770,20 @@ def get_counting_stats(request, poll_id):
 	# Đếm tổng số phiếu
 	total_ballots = Ballot.objects.filter(poll=poll).count()
 	
+	# Lấy số phiếu cần kiểm (nếu không có thì lấy tổng)
+	total_ballots_count = poll.total_ballots_count or total_ballots
+	
+	# Tính chênh lệch (offset)
+	offset = max(0, total_ballots - total_ballots_count)
+	
 	# === LUỒNG UPLOAD ===
+	# Đếm số phiếu chưa tải lên (process_status='no_upload') - offset
+	no_upload_raw = Ballot.objects.filter(
+		poll=poll,
+		process_status='no_upload'
+	).count()
+	upload_no_upload = max(0, no_upload_raw - offset)
+	
 	# Đếm số phiếu chờ upload (process_status='pending')
 	upload_pending = Ballot.objects.filter(
 		poll=poll,
@@ -823,10 +836,12 @@ def get_counting_stats(request, poll_id):
 	
 	return JsonResponse({
 		'total': total_ballots,
-		'total_ballots_count': poll.total_ballots_count or total_ballots,
+		'total_ballots_count': total_ballots_count,
+		'offset': offset,
 		
 		# Upload stats
 		'upload': {
+			'no_upload': upload_no_upload,
 			'pending': upload_pending,
 			'processing': upload_processing,
 			'success': upload_success,

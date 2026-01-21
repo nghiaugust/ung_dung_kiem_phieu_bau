@@ -83,12 +83,12 @@ def cleanup_poll_105():
                 ballot.is_checked = False
                 ballot.is_post_checked = False
                 ballot.input_by = None
-                ballot.process_status = 'pending'
+                ballot.process_status = 'no_upload'
                 ballot.counting_status = 'pending'
                 ballot.save(update_fields=['is_checked', 'is_post_checked', 'input_by', 'process_status', 'counting_status'])
                 updated_ballots += 1
             
-            print(f"   - Đã reset {updated_ballots} ballots (is_checked=False, is_post_checked=False, input_by=null, process_status=pending, counting_status=pending)")
+            print(f"   - Đã reset {updated_ballots} ballots (is_checked=False, is_post_checked=False, input_by=null, process_status=no_upload, counting_status=pending)")
             
             preprocessed_ballots = PreprocessedBallot.objects.filter(ballot__poll_id=poll_id)
             preprocessed_count = preprocessed_ballots.count()
