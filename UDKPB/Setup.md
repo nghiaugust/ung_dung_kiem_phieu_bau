@@ -112,3 +112,6 @@ python manage.py shell -c "from account.models import Account; Account.objects.c
 
 
 pip install qrcode[pil]
+
+# nếu lỗi QReader thì tải
+https://www.microsoft.com/en-us/download/details.aspx?id=40784
