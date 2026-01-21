@@ -1,3 +1,6 @@
+# Tải redis
+https://github.com/tporadowski/redis/releases
+
 # Terminal celery
 cd UDKPB/kiem_phieu_bau
 
