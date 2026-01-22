@@ -6,7 +6,7 @@ from datetime import timedelta
 from ballot.models import Ballot
 
 
-def cleanup_checking_stuck_tasks(timeout_minutes=5):
+def cleanup_checking_stuck_tasks(timeout_minutes=5, poll_id=None):
     """
     Thu hồi các phiếu hậu kiểm mà User giữ quá lâu (treo máy, tắt trình duyệt, quên không nộp).
     
@@ -14,6 +14,7 @@ def cleanup_checking_stuck_tasks(timeout_minutes=5):
     
     Args:
         timeout_minutes: int - Thời gian timeout tính bằng phút (default: 5 phút)
+        poll_id: int (optional) - ID của poll để filter (nếu None thì xử lý tất cả)
         
     Returns:
         dict: Thông tin về số lượng phiếu đã thu hồi
@@ -27,6 +28,10 @@ def cleanup_checking_stuck_tasks(timeout_minutes=5):
         checking_status='PROCESSING',
         checking_locked_at__lt=timeout_threshold
     )
+    
+    # Filter theo poll_id nếu được chỉ định
+    if poll_id:
+        stuck_tasks = stuck_tasks.filter(poll_id=poll_id)
     
     count = stuck_tasks.count()
     
@@ -53,63 +58,3 @@ def cleanup_checking_stuck_tasks(timeout_minutes=5):
             'recovered': 0,
             'message': message
         }
-
-def force_release_checking_by_ballot_id(ballot_id):
-    """
-    Buộc mở khóa một phiếu hậu kiểm cụ thể (Admin intervention)
-    
-    Args:
-        ballot_id: int - ID phiếu bầu cần mở khóa
-        
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    try:
-        ballot = Ballot.objects.get(
-            ballot_id=ballot_id,
-            checking_status='PROCESSING'
-        )
-        
-        ballot.checking_status = 'NEW'
-        ballot.checking_locked_by = None
-        ballot.checking_locked_at = None
-        ballot.save()
-        
-        return True, f"Đã mở khóa phiếu {ballot_id} thành công"
-        
-    except Ballot.DoesNotExist:
-        return False, f"Không tìm thấy phiếu {ballot_id} đang ở trạng thái PROCESSING"
-    except Exception as e:
-        return False, f"Lỗi: {str(e)}"
-
-
-def force_release_checking_by_user(user):
-    """
-    Buộc mở khóa tất cả phiếu hậu kiểm của một user (Admin intervention)
-    
-    Args:
-        user: Account object - User cần mở khóa phiếu
-        
-    Returns:
-        tuple: (success: bool, count: int, message: str)
-    """
-    try:
-        ballots = Ballot.objects.filter(
-            checking_locked_by=user,
-            checking_status='PROCESSING'
-        )
-        
-        count = ballots.count()
-        
-        if count > 0:
-            ballots.update(
-                checking_status='NEW',
-                checking_locked_by=None,
-                checking_locked_at=None
-            )
-            return True, count, f"Đã mở khóa {count} phiếu của user {user.username}"
-        else:
-            return True, 0, f"User {user.username} không có phiếu nào đang giữ"
-            
-    except Exception as e:
-        return False, 0, f"Lỗi: {str(e)}"

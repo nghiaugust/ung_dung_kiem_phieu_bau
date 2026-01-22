@@ -89,7 +89,7 @@ def danh_sach_cuoc_bo_phieu(request):
 		num_ballots=Count('ballot', distinct=True),
 		num_voters=Count('voters', distinct=True),
 		num_members=Count('members', distinct=True)
-	).order_by('-start_time')
+	).order_by('-poll_id')
 	
 	# Phân trang: 10 cuộc bỏ phiếu mỗi trang
 	paginator = Paginator(polls_queryset, 10)
@@ -112,8 +112,8 @@ def poll_detail(request, poll_id):
 	candidates = Candidate.objects.filter(poll=poll)
 	ballots = Ballot.objects.filter(poll=poll)
 	total_ballots = ballots.count()
-	checked_ballots = ballots.filter(is_checked=True).count()
-	unchecked_ballots = ballots.filter(is_checked=False).count()
+	checked_ballots = ballots.filter(counting_status='completed').count()
+	unchecked_ballots = ballots.exclude(counting_status='completed').count()
 	valid_ballots = ballots.filter(is_valid=True).count()
 	invalid_ballots = ballots.filter(is_valid=False).count()
 	# Lấy username người tạo nếu có
@@ -585,7 +585,7 @@ def thong_ke_detail(request, poll_id):
 	candidate_stats = Candidate.objects.filter(poll=poll).annotate(
 		count=Count('ballotselection')
 	).values('name', 'count').order_by('-count', 'name')
-	valid_checked_ballots = Ballot.objects.filter(poll=poll, is_valid=True, is_checked=True).count()
+	valid_checked_ballots = Ballot.objects.filter(poll=poll, is_valid=True, counting_status='completed').count()
 	return render(request, 'poll/thong_ke/detail.html', {
 		'poll': poll,
 		'candidate_stats': candidate_stats,

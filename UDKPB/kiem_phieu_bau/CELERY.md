@@ -1,6 +1,13 @@
 # Tải redis
 https://github.com/tporadowski/redis/releases
 
+# 2 terminal dành cho lập lịch kiểm tra hậu kiểm 
+cd UDKPB/kiem_phieu_bau
+# 1
+celery -A kiem_phieu_bau worker -Q default --pool=gevent --concurrency=1 --hostname=default_worker@%h -l info
+# 2
+celery -A kiem_phieu_bau beat -l info
+
 # Terminal celery
 cd UDKPB/kiem_phieu_bau
 # Áp dụng cho CPU

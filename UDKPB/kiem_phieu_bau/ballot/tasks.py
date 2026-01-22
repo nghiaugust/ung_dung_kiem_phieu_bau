@@ -240,3 +240,42 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
                 print(f"[TASK] Đã xóa temp output: {temp_output_path}")
             except Exception as e:
                 print(f"[TASK WARNING] Không thể xóa temp output: {e}")
+
+
+# ============================================
+# CELERY PERIODIC TASK - Tự động cleanup hậu kiểm
+# ============================================
+
+@shared_task(name='auto_cleanup_checking_timeout')
+def auto_cleanup_checking_timeout():
+    """
+    Celery periodic task tự động thu hồi phiếu hậu kiểm bị timeout
+    Chỉ chạy khi Poll có is_checking_started = True
+    
+    Chạy mỗi 3 phút (cấu hình trong celery.py beat_schedule)
+    """
+    from poll.models import Poll
+    from api.checking_timeout import cleanup_checking_stuck_tasks
+    
+    # Tìm tất cả Poll đang bật tính năng hậu kiểm tự động
+    active_polls = Poll.objects.filter(is_checking_started=True)
+    
+    total_recovered = 0
+    for poll in active_polls:
+        print(f"[AUTO CLEANUP] Checking poll_id={poll.poll_id}: {poll.title}")
+        
+        # Gọi cleanup_checking_stuck_tasks cho poll này
+        result = cleanup_checking_stuck_tasks(timeout_minutes=5, poll_id=poll.poll_id)
+        
+        if result.get('success'):
+            recovered = result.get('recovered', 0)
+            total_recovered += recovered
+            if recovered > 0:
+                print(f"[AUTO CLEANUP] Poll {poll.poll_id}: Thu hồi được {recovered} phiếu")
+    
+    print(f"[AUTO CLEANUP] Hoàn thành - Tổng thu hồi: {total_recovered} phiếu")
+    return {
+        'success': True,
+        'total_recovered': total_recovered,
+        'active_polls': active_polls.count()
+    }

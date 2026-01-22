@@ -4,6 +4,7 @@ phiếu{% endblock %} {% block content %}
 <table class="table table-bordered table-hover" class="ajax-form">
   <thead>
     <tr>
+      <th class="w-auto">STT</th>
       <th class="w-auto">Tên</th>
       <th class="w-auto">Ngày</th>
       <th class="w-auto">Số ứng viên</th>
@@ -11,12 +12,12 @@ phiếu{% endblock %} {% block content %}
       <th class="w-auto">Số cử tri</th>
       <th class="w-auto">Số thành viên</th>
       <th class="w-auto">Trạng thái</th>
-      <th class="w-auto"></th>
     </tr>
   </thead>
   <tbody>
     {% for poll in polls %}
-    <tr>
+    <tr onclick="window.location.href='{% url 'poll:poll_detail' poll.poll_id %}'" style="cursor: pointer;">
+      <td class="w-auto">{{ forloop.counter|add:polls.start_index|add:"-1" }}</td>
       <td class="w-auto">{{ poll.title }}</td>
       <td class="w-auto">{{ poll.start_time|date:'d/m/Y H:i' }}</td>
       <td class="w-auto">{{ poll.num_candidates }}</td>
@@ -32,19 +33,6 @@ phiếu{% endblock %} {% block content %}
         {% elif poll.status == 'locked' %}Đã khoá 
         {% elif poll.status == 'cancelled' %}Đã huỷ 
         {% else %}{{ poll.status }}{% endif %}
-      </td>
-      <td>
-        <a
-          href="{% url 'poll:poll_detail' poll.poll_id %}"
-          class="btn btn-sm btn-info"
-          >Chi tiết</a
-        >
-        <a
-          href="{% url 'poll:delete_poll' poll.poll_id %}"
-          class="btn btn-sm btn-danger ms-1"
-          onclick="return confirm('Bạn có chắc muốn xoá cuộc bỏ phiếu này?');"
-          >Xoá</a
-        >
       </td>
     </tr>
     {% empty %}
@@ -109,5 +97,17 @@ phiếu{% endblock %} {% block content %}
   <small>Trang {{ polls.number }} / {{ polls.paginator.num_pages }} (Tổng {{ polls.paginator.count }} cuộc bỏ phiếu)</small>
 </div>
 {% endif %}
+
+<style>
+  /* Hover effect cho rows */
+  tbody tr:hover {
+    background-color: #f0f8ff !important;
+    transition: background-color 0.2s ease;
+  }
+  
+  tbody tr {
+    transition: background-color 0.2s ease;
+  }
+</style>
 
 {% endblock %}

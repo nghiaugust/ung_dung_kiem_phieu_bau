@@ -61,6 +61,18 @@ def trocr_recognize(request):
         print(f"[TrOCR Service] Processing {len(images)}")
         results = trocr_service.recognize_batch(images)
         
+        # QUAN TRỌNG: Sort lại results theo index từ filename (format: 0000_1_2.jpg)
+        def get_index_from_filename(result):
+            try:
+                filename = result.get('filename', '')
+                if '_' in filename:
+                    return int(filename.split('_')[0])
+                return 9999
+            except:
+                return 9999
+        
+        results = sorted(results, key=get_index_from_filename)
+        
         # CLEANUP: Xóa images data sau khi xử lý xong
         del images
         gc.collect()
@@ -146,6 +158,20 @@ def yolo_detect(request):
         
         # Process batch
         results = yolo_service.detect_batch(images)
+        
+        # QUAN TRỌNG: Sort lại results theo index từ filename (format: 0000_1_2.jpg)
+        # Để đảm bảo thứ tự trả về giống với thứ tự gửi đi
+        def get_index_from_filename(result):
+            try:
+                filename = result.get('filename', '')
+                # Parse index từ prefix (VD: "0000_1_2.jpg" -> 0)
+                if '_' in filename:
+                    return int(filename.split('_')[0])
+                return 9999  # Fallback nếu không parse được
+            except:
+                return 9999
+        
+        results = sorted(results, key=get_index_from_filename)
         
         # CLEANUP: Xóa images data sau khi xử lý xong
         del images

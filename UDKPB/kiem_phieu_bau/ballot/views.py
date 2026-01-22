@@ -283,7 +283,7 @@ def hau_kiem_ballot(request, ballot_id):
 		return redirect('permission_denied')
 	
 	# Lấy tất cả phiếu bầu của poll này đã kiểm phiếu (đã sắp xếp theo ID)
-	all_ballots = Ballot.objects.filter(poll=poll, is_checked=True).order_by('ballot_id')
+	all_ballots = Ballot.objects.filter(poll=poll, counting_status='completed').order_by('ballot_id')
 	total_ballots = all_ballots.count()
 	
 	# Nếu không có phiếu nào đã kiểm, redirect về trang thống kê
@@ -453,7 +453,7 @@ def save_hau_kiem(request, ballot_id):
 			ballot.save(update_fields=['checking_status'])
 		
 		# Tìm phiếu tiếp theo để redirect
-		all_ballots = Ballot.objects.filter(poll=poll, is_checked=True).order_by('ballot_id')
+		all_ballots = Ballot.objects.filter(poll=poll, counting_status='completed').order_by('ballot_id')
 		ballot_ids = list(all_ballots.values_list('ballot_id', flat=True))
 		
 		next_url = None

@@ -93,6 +93,7 @@ class CheckingDistributionService:
         
         Kiểm tra kỹ xem phiếu có còn của User không 
         (đề phòng trường hợp đã bị Timeout thu hồi hoặc admin can thiệp).
+        Kiểm tra timeout 5 phút - nếu quá thời gian thì không cho nộp.
         
         Args:
             user: Account object - người dùng nộp kết quả
@@ -107,6 +108,8 @@ class CheckingDistributionService:
         Returns:
             tuple: (is_success: bool, message: str)
         """
+        CHECKING_TIMEOUT_MINUTES = 5
+        
         try:
             with transaction.atomic():
                 # Tìm và khóa dòng dữ liệu để update
@@ -115,6 +118,27 @@ class CheckingDistributionService:
                     checking_locked_by=user,        # BẮT BUỘC: Phải đúng là user này
                     checking_status='PROCESSING'    # BẮT BUỘC: Phải đang ở trạng thái làm việc
                 )
+                
+                # Kiểm tra timeout 5 phút
+                if ballot.checking_locked_at:
+                    now = timezone.now()
+                    time_elapsed = now - ballot.checking_locked_at
+                    timeout_seconds = CHECKING_TIMEOUT_MINUTES * 60
+                    
+                    if time_elapsed.total_seconds() > timeout_seconds:
+                        # Quá thời gian - Kiểm tra kỹ xem phiếu có đúng đang do user này lock không
+                        # (Tránh trường hợp cronjob đã thu hồi và người khác đã lock lại)
+                        if ballot.checking_locked_by == user:
+                            # Chắc chắn đúng user này đang lock -> Mở khóa
+                            ballot.checking_status = 'NEW'
+                            ballot.checking_locked_by = None
+                            ballot.checking_locked_at = None
+                            ballot.save()
+                            
+                            return False, f"Đã hết thời gian hậu kiểm ({CHECKING_TIMEOUT_MINUTES} phút). Phiếu không được kiểm."
+                        else:
+                            # Phiếu không còn thuộc user này (đã bị thu hồi và người khác lock)
+                            return False, "Phiếu này đã hết hạn hoặc không còn thuộc về bạn."
                 
                 # Update kết quả hậu kiểm (is_post_checked tự động = True khi checking_status='DONE')
                 ballot.is_valid = result_data.get('is_valid', ballot.is_valid)
@@ -180,7 +204,7 @@ class CheckingDistributionService:
         Returns:
             dict: Thống kê hậu kiểm
         """
-        query = Ballot.objects.filter(is_checked=True)  # Chỉ đếm phiếu đã kiểm counting
+        query = Ballot.objects.filter(counting_status='completed')  # Chỉ đếm phiếu đã kiểm counting
         
         if poll_id:
             query = query.filter(poll_id=poll_id)

@@ -7,56 +7,627 @@
 <div class="alert alert-danger">{{ error }}</div>
 {% else %}
 
-<h2>Chi tiết hậu kiểm: {{ poll.title }}</h2>
+<!-- Layout 2 cột -->
+<div class="row">
+  <!-- Thông tin thống kê - 1/4 width -->
+  <div class="col-md-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-1"><i class="fas fa-chart-bar"></i> {{ poll.title }}</h5>
+        <small>Thống kê hậu kiểm</small>
+      </div>
+      <div class="card-body">
 
-<div class="card mb-4">
-  <div class="card-body">
-    <h5 class="card-title">Thông tin cuộc bỏ phiếu</h5>
-    <p class="card-text"><strong>Mô tả:</strong> {{ poll.description|default:"Không có mô tả" }}</p>
-    <p class="card-text"><strong>Thời gian:</strong> {{ poll.start_time|date:"d/m/Y H:i" }}</p>
+        <!-- Thống kê tổng quát -->
+        <div class="mb-4">
+          <h6 class="text-muted border-bottom pb-2 mb-2">Tổng quan</h6>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Tổng số phiếu:</small>
+            <strong id="total-ballots" class="text-primary">-</strong>
+          </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Chưa hậu kiểm:</small>
+            <strong id="total-new" class="text-warning">-</strong>
+          </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Đang xử lý:</small>
+            <strong id="total-processing" class="text-info">-</strong>
+          </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Đã hoàn thành:</small>
+            <strong id="total-done" class="text-success">-</strong>
+          </div>
+        </div>
+
+        <!-- Thống kê cá nhân -->
+        <div>
+          <h6 class="text-muted border-bottom pb-2 mb-2">Của bạn</h6>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Được giao:</small>
+            <strong id="user-assigned" class="text-primary">-</strong>
+          </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Đang xử lý:</small>
+            <strong id="user-processing" class="text-info">-</strong>
+          </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Đã hoàn thành:</small>
+            <strong id="user-completed" class="text-success">-</strong>
+          </div>
+        </div>
+        
+        <div class="mt-3 text-center">
+          <a href="{% url 'api:checking_list' %}" class="btn btn-secondary btn-sm">
+            <i class="fas fa-arrow-left"></i> Quay lại
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hiển thị ảnh ballot - 3/4 width -->
+  <div class="col-md-9">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+        <div>
+          <h5 class="mb-0 text-dark"><i class="fas fa-images"></i> Chi tiết phiếu bầu</h5>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <div id="countdown-timer" class="badge bg-info fs-6" style="display: none;">
+            <i class="fas fa-clock"></i> <span id="time-remaining">--:--</span>
+          </div>
+          <div id="timeout-warning" class="badge bg-danger fs-6" style="display: none;">
+            <i class="fas fa-exclamation-triangle"></i> Đã hết thời gian
+          </div>
+          <div class="badge bg-light text-dark fs-6" id="ballot-counter">
+            <span id="current-ballot-index">0</span> / <span id="total-ballot-count">0</span>
+          </div>
+          <button class="btn btn-success btn-sm" id="approve-btn" onclick="approveBallot()" style="display: none;">
+            <i class="bi bi-check-circle"></i> Duyệt
+          </button>
+          <button class="btn btn-warning btn-sm" id="save-approve-btn" onclick="saveAndApprove()" style="display: none;">
+            <i class="bi bi-save"></i> Lưu & Duyệt
+          </button>
+        </div>
+      </div>
+      <div class="card-body" id="ballot-content">
+        <div class="alert alert-info text-center" id="loading-message">
+          <i class="fas fa-spinner fa-spin"></i> Đang tải phiếu bầu...
+        </div>
+        <div id="no-ballot-message" class="alert alert-warning text-center" style="display: none;">
+          <i class="fas fa-info-circle"></i> Không còn phiếu nào để hậu kiểm
+        </div>
+        
+        <!-- Ballot display area -->
+        <div id="ballot-display-area" style="display: none;">
+          <div class="ballot-viewport" style="max-height: 70vh; overflow: auto; border: 1px solid #ddd; border-radius: 4px; background: #f8f9fa;">
+            <div class="ballot-image-wrapper" style="position: relative; display: inline-block;">
+              <img id="ballot-image" src="" alt="Phiếu bầu" style="width: 100%; max-width: 600px;" onload="positionButtons()"/>
+              
+              <!-- Buttons overlay -->
+              <div id="buttons-overlay" style="position: absolute; top: 0; left: 100%; margin-left: 10px; width: 120px;">
+                <!-- Vote buttons will be dynamically added here -->
+              </div>
+              
+              <!-- Confidence info overlay -->
+              <div id="confidence-overlay" style="position: absolute; top: 0; left: 100%; margin-left: 145px; width: 200px;">
+                <!-- Confidence info will be dynamically added here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="row mb-4">
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <h5 class="card-title">{{ stats.total_uploaded }}</h5>
-        <p class="card-text">Đã tải lên</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <h5 class="card-title">{{ stats.total_counted }}</h5>
-        <p class="card-text">Đã kiểm phiếu</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center bg-warning text-white">
-      <div class="card-body">
-        <h5 class="card-title">{{ stats.pending_check }}</h5>
-        <p class="card-text">Chưa hậu kiểm</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center bg-success text-white">
-      <div class="card-body">
-        <h5 class="card-title">{{ stats.checked }}</h5>
-        <p class="card-text">Đã hậu kiểm</p>
-      </div>
-    </div>
-  </div>
-</div>
+<script>
+const pollId = {{ poll.poll_id }};
+let currentBallot = null;
+let voteStates = {};
+let hasChanges = false;
+let countdownInterval = null;
+const CHECKING_TIMEOUT_MINUTES = 5;
 
-<div class="alert alert-info">
-  <strong>Trang này đang được phát triển.</strong> Chi tiết hậu kiểm sẽ được bổ sung sau.
-</div>
+// Lấy token
+function getAuthToken() {
+  let token = localStorage.getItem('access_token');
+  if (!token) {
+    const name = 'access_token=';
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const ca = decodedCookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+      let c = ca[i].trim();
+      if (c.indexOf(name) == 0) {
+        token = c.substring(name.length, c.length);
+        break;
+      }
+    }
+  }
+  return token;
+}
 
-<a href="{% url 'api:checking_list' %}" class="btn btn-secondary">← Quay lại danh sách</a>
+// Load thống kê
+async function loadTotalStatistics() {
+  try {
+    const token = getAuthToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    const response = await fetch(`/api/checking/statistics-web/?poll_id=${pollId}&user_stats=false`, {
+      headers: headers,
+      credentials: 'same-origin'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.statistics) {
+        document.getElementById('total-ballots').textContent = data.statistics.total_ballots || 0;
+        document.getElementById('total-new').textContent = data.statistics.new || 0;
+        document.getElementById('total-processing').textContent = data.statistics.processing || 0;
+        document.getElementById('total-done').textContent = data.statistics.done || 0;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading total statistics:', error);
+  }
+}
+
+async function loadUserStatistics() {
+  try {
+    const token = getAuthToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    const response = await fetch(`/api/checking/statistics-web/?poll_id=${pollId}&user_stats=true`, {
+      headers: headers,
+      credentials: 'same-origin'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.statistics) {
+        document.getElementById('user-assigned').textContent = data.statistics.total_assigned || 0;
+        document.getElementById('user-processing').textContent = data.statistics.processing || 0;
+        document.getElementById('user-completed').textContent = data.statistics.completed || 0;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading user statistics:', error);
+  }
+}
+
+// Load ballot để hậu kiểm
+async function loadBallot() {
+  try {
+    const token = getAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    const response = await fetch(`/api/checking/get-tasks-web/?poll_id=${pollId}&batch_size=1`, {
+      headers: headers,
+      credentials: 'same-origin'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.ballots && data.ballots.length > 0) {
+        currentBallot = data.ballots[0];
+        displayBallot(currentBallot);
+        
+        // Update counter
+        const userProcessing = parseInt(document.getElementById('user-processing').textContent) || 0;
+        document.getElementById('current-ballot-index').textContent = '1';
+        document.getElementById('total-ballot-count').textContent = userProcessing;
+      } else {
+        showNoBallotMessage();
+      }
+    } else {
+      showNoBallotMessage();
+    }
+  } catch (error) {
+    console.error('Error loading ballot:', error);
+    showNoBallotMessage();
+  }
+}
+
+function showNoBallotMessage() {
+  document.getElementById('loading-message').style.display = 'none';
+  document.getElementById('no-ballot-message').style.display = 'block';
+  document.getElementById('ballot-display-area').style.display = 'none';
+  document.getElementById('approve-btn').style.display = 'none';
+  document.getElementById('save-approve-btn').style.display = 'none';
+  document.getElementById('countdown-timer').style.display = 'none';
+  document.getElementById('timeout-warning').style.display = 'none';
+  
+  // Clear countdown interval
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+  }
+}
+
+function displayBallot(ballot) {
+  document.getElementById('loading-message').style.display = 'none';
+  document.getElementById('no-ballot-message').style.display = 'none';
+  document.getElementById('ballot-display-area').style.display = 'block';
+  document.getElementById('approve-btn').style.display = 'inline-block';
+  
+  // Set image
+  const imgUrl = ballot.detection_image_url || ballot.ballot_image_url;
+  document.getElementById('ballot-image').src = imgUrl;
+  
+  // Initialize vote states
+  voteStates = {};
+  ballot.candidates.forEach(candidate => {
+    voteStates[candidate.candidate_id] = {
+      original: candidate.voted,
+      current: candidate.voted
+    };
+  });
+  
+  hasChanges = false;
+  checkForChanges();
+  
+  // Start countdown timer
+  startCountdown(ballot.checking_locked_at);
+}
+
+function startCountdown(lockedAt) {
+  // Clear existing interval
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+  }
+  
+  if (!lockedAt) {
+    document.getElementById('countdown-timer').style.display = 'none';
+    document.getElementById('timeout-warning').style.display = 'none';
+    return;
+  }
+  
+  const lockedTime = new Date(lockedAt);
+  const timeoutTime = new Date(lockedTime.getTime() + CHECKING_TIMEOUT_MINUTES * 60 * 1000);
+  
+  function updateCountdown() {
+    const now = new Date();
+    const timeLeft = timeoutTime - now;
+    
+    if (timeLeft <= 0) {
+      // Hết thời gian
+      document.getElementById('countdown-timer').style.display = 'none';
+      document.getElementById('timeout-warning').style.display = 'inline-block';
+      clearInterval(countdownInterval);
+      return;
+    }
+    
+    // Tính phút và giây
+    const minutes = Math.floor(timeLeft / 60000);
+    const seconds = Math.floor((timeLeft % 60000) / 1000);
+    
+    // Hiển thị
+    document.getElementById('time-remaining').textContent = 
+      `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    document.getElementById('countdown-timer').style.display = 'inline-block';
+    document.getElementById('timeout-warning').style.display = 'none';
+  }
+  
+  // Update ngay lập tức
+  updateCountdown();
+  
+  // Update mỗi giây
+  countdownInterval = setInterval(updateCountdown, 1000);
+}
+
+function positionButtons() {
+  if (!currentBallot || !currentBallot.horizontal_lines) return;
+  
+  const img = document.getElementById('ballot-image');
+  const overlay = document.getElementById('buttons-overlay');
+  const confidenceOverlay = document.getElementById('confidence-overlay');
+  overlay.innerHTML = '';
+  confidenceOverlay.innerHTML = '';
+  
+  const imgHeight = img.offsetHeight;
+  const imgNaturalHeight = img.naturalHeight;
+  const scale = imgHeight / imgNaturalHeight;
+  
+  const horizontalLines = currentBallot.horizontal_lines;
+  const candidates = currentBallot.candidates;
+  
+  let firstButtonY = null;
+  
+  candidates.forEach((candidate, index) => {
+    if (index + 2 >= horizontalLines.length) return;
+    
+    const lineTop = horizontalLines[index + 1];
+    const lineBottom = horizontalLines[index + 2];
+    const yTop = lineTop.y * scale;
+    const yBottom = lineBottom.y * scale;
+    const yCenter = (yTop + yBottom) / 2;
+    
+    if (firstButtonY === null) {
+      firstButtonY = yTop;
+    }
+    
+    // Button
+    const buttonRow = document.createElement('div');
+    buttonRow.className = 'vote-button-row';
+    buttonRow.style.top = `${yCenter - 20}px`;
+    
+    const btn = document.createElement('button');
+    btn.className = `vote-btn ${candidate.voted ? 'voted' : 'not-voted'}`;
+    btn.setAttribute('data-candidate-id', candidate.candidate_id);
+    btn.onclick = () => toggleVote(candidate.candidate_id);
+    btn.innerHTML = `<span class="btn-text">${candidate.voted ? 'Đồng ý' : 'Không đồng ý'}</span>`;
+    
+    buttonRow.appendChild(btn);
+    overlay.appendChild(buttonRow);
+    
+    // Confidence info
+    const confidenceInfo = getConfidenceInfo(index + 1);
+    if (confidenceInfo) {
+      const confidenceRow = document.createElement('div');
+      confidenceRow.className = 'confidence-info-row';
+      confidenceRow.style.top = `${yCenter - 10}px`;
+      confidenceRow.innerHTML = `<span class="confidence-text">${confidenceInfo}</span>`;
+      confidenceOverlay.appendChild(confidenceRow);
+    }
+  });
+  
+  // Scroll to show the voting area (skip header)
+  if (firstButtonY !== null) {
+    const viewport = document.querySelector('.ballot-viewport');
+    if (viewport) {
+      // Scroll to show area starting from ~50px before first button
+      const scrollTarget = Math.max(0, firstButtonY - 50);
+      viewport.scrollTop = scrollTarget;
+    }
+  }
+}
+
+function getConfidenceInfo(rowIndex) {
+  if (!currentBallot || !currentBallot.result_model) return null;
+  
+  const cells = currentBallot.result_model.cells || {};
+  const rowCells = {};
+  
+  // Collect all cells for this row
+  for (let key in cells) {
+    const [row, col] = key.split('_').map(Number);
+    if (row === rowIndex) {
+      rowCells[key] = cells[key];
+    }
+  }
+  
+  if (Object.keys(rowCells).length === 0) return null;
+  
+  // Build confidence text
+  const parts = [];
+  for (let key in rowCells) {
+    const cell = rowCells[key];
+    if (cell.result && cell.result.label) {
+      const label = cell.result.label;
+      const confidence = Math.round((cell.confidence || 0) * 100);
+      parts.push(`${label}:${confidence}%`);
+    }
+  }
+  
+  return parts.length > 0 ? parts.join(' | ') : null;
+}
+
+function toggleVote(candidateId) {
+  if (!voteStates[candidateId]) return;
+  
+  const currentVoted = voteStates[candidateId].current;
+  const newVoted = !currentVoted;
+  voteStates[candidateId].current = newVoted;
+  
+  const btn = document.querySelector(`.vote-btn[data-candidate-id="${candidateId}"]`);
+  const btnText = btn.querySelector('.btn-text');
+  
+  if (newVoted) {
+    btn.classList.remove('not-voted');
+    btn.classList.add('voted');
+    btnText.textContent = 'Đồng ý';
+  } else {
+    btn.classList.remove('voted');
+    btn.classList.add('not-voted');
+    btnText.textContent = 'Không đồng ý';
+  }
+  
+  checkForChanges();
+}
+
+function checkForChanges() {
+  hasChanges = false;
+  for (let candidateId in voteStates) {
+    if (voteStates[candidateId].original !== voteStates[candidateId].current) {
+      hasChanges = true;
+      break;
+    }
+  }
+  
+  const approveBtn = document.getElementById('approve-btn');
+  const saveApproveBtn = document.getElementById('save-approve-btn');
+  
+  if (hasChanges) {
+    approveBtn.style.display = 'none';
+    saveApproveBtn.style.display = 'inline-block';
+  } else {
+    approveBtn.style.display = 'inline-block';
+    saveApproveBtn.style.display = 'none';
+  }
+}
+
+async function saveAndApprove() {
+  await submitBallot();
+}
+
+async function approveBallot() {
+  await submitBallot();
+}
+
+async function submitBallot() {
+  if (!currentBallot) return;
+  
+  const votes = [];
+  for (let candidateId in voteStates) {
+    votes.push({
+      candidate_id: parseInt(candidateId),
+      voted: voteStates[candidateId].current
+    });
+  }
+  
+  try {
+    const token = getAuthToken();
+    const headers = { 
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    const response = await fetch('/api/checking/submit-web/', {
+      method: 'POST',
+      headers: headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        ballot_id: currentBallot.ballot_id,
+        votes: votes,
+        is_valid: true
+      })
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      showAlert('Đã duyệt phiếu thành công!', 'success');
+      
+      // Reset và load ballot mới
+      currentBallot = null;
+      hasChanges = false;
+      
+      // Reload statistics
+      await loadUserStatistics();
+      await loadTotalStatistics();
+      
+      // Load ballot mới
+      setTimeout(() => {
+        loadBallot();
+      }, 500);
+    } else {
+      // Hiển thị thông báo lỗi từ backend
+      const errorMessage = data.message || data.error || 'Có lỗi xảy ra khi nộp kết quả';
+      showAlert(errorMessage, 'danger');
+      
+      // Nếu là lỗi timeout, reload lại trang sau 2 giây
+      if (errorMessage.includes('hết thời gian') || errorMessage.includes('timeout')) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    }
+  } catch (error) {
+    console.error('Error submitting ballot:', error);
+    showAlert('Có lỗi xảy ra khi lưu!', 'danger');
+  }
+}
+
+function showAlert(message, type) {
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+  alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.body.appendChild(alertDiv);
+  
+  setTimeout(() => {
+    alertDiv.remove();
+  }, 3000);
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+  loadTotalStatistics();
+  loadUserStatistics();
+  loadBallot();
+});
+
+window.addEventListener('resize', positionButtons);
+</script>
+
+<style>
+.stats-item {
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.stats-item:last-child {
+  border-bottom: none;
+}
+.stats-item strong {
+  font-size: 1.2em;
+}
+.card.h-100 {
+  min-height: 500px;
+}
+
+.vote-button-row {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.confidence-info-row {
+  position: absolute;
+  display: flex;
+  align-items: center;
+}
+
+.confidence-text {
+  font-size: 0.75rem;
+  color: #555;
+  background: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.vote-btn {
+  padding: 8px 12px;
+  border: 2px solid;
+  border-radius: 5px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.vote-btn.voted {
+  background-color: #28a745;
+  border-color: #28a745;
+  color: white;
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.4);
+}
+
+.vote-btn.not-voted {
+  background-color: #dc3545;
+  border-color: #dc3545;
+  color: white;
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.4);
+}
+
+.vote-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.gap-3 {
+  gap: 1rem !important;
+}
+</style>
 
 {% endif %}
 

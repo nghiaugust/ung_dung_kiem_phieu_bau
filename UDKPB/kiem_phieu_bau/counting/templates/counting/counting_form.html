@@ -57,6 +57,16 @@
     </button>
     {% endif %}
     
+    <!-- Nút Kiểm tra hậu kiểm -->
+    <button
+      type="button"
+      id="toggle-checking-cleanup-btn"
+      class="btn btn-lg {% if poll.is_checking_started %}btn-success{% else %}btn-info{% endif %} me-2"
+      title="Bật/tắt tự động thu hồi phiếu hậu kiểm bị treo (chạy mỗi 3 phút ở backend)"
+    >
+      <i class="bi bi-clock-history"></i> <span id="cleanup-status-text">{% if poll.is_checking_started %}Đang kiểm tra hậu kiểm{% else %}Bật kiểm tra hậu kiểm{% endif %}</span>
+    </button>
+    
     <a
       href="{% url 'counting_results' poll.poll_id %}"
       class="btn btn-lg btn-secondary"
@@ -332,6 +342,67 @@
   const loadingOverlay = document.getElementById("loading-overlay");
   const loadingText = document.getElementById("loading-text");
   const countingForm = document.getElementById("counting-form");
+
+  // ============================================
+  // XỬ LÝ KIỂM TRA HẬU KIỂM TỰ ĐỘNG
+  // ============================================
+  const toggleCleanupBtn = document.getElementById("toggle-checking-cleanup-btn");
+  const cleanupStatusText = document.getElementById("cleanup-status-text");
+  const pollId = {{ poll.poll_id }};
+  let isCleanupActive = {{ poll.is_checking_started|lower }};
+  
+  function updateCleanupButtonUI() {
+    if (isCleanupActive) {
+      toggleCleanupBtn.classList.remove('btn-info');
+      toggleCleanupBtn.classList.add('btn-success');
+      cleanupStatusText.textContent = 'Đang kiểm tra hậu kiểm';
+    } else {
+      toggleCleanupBtn.classList.remove('btn-success');
+      toggleCleanupBtn.classList.add('btn-info');
+      cleanupStatusText.textContent = 'Bật kiểm tra hậu kiểm';
+    }
+  }
+  
+  function toggleCleanupAPI() {
+    console.log('[Cleanup] Đang toggle cờ is_checking_started...');
+    fetch('/api/checking/toggle-cleanup/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        poll_id: pollId
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        console.log('[Cleanup]', data.message);
+        isCleanupActive = data.is_active;
+        updateCleanupButtonUI();
+        showAlert(data.message, 'success');
+      } else {
+        console.error('[Cleanup] Error:', data.message);
+        showAlert('Lỗi: ' + data.message, 'danger');
+      }
+    })
+    .catch(error => {
+      console.error('[Cleanup] Network error:', error);
+      showAlert('Lỗi kết nối đến server', 'danger');
+    });
+  }
+  
+  // Khởi tạo UI
+  updateCleanupButtonUI();
+  
+  // Xử lý click nút
+  if (toggleCleanupBtn) {
+    toggleCleanupBtn.addEventListener('click', function() {
+      toggleCleanupAPI();
+    });
+  }
 
   // XỬ LÝ NÚT TIỀN XỬ LÝ
   if (tienXuLyButton) {

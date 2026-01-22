@@ -3,6 +3,7 @@ API URLs cho Mobile App
 """
 from django.urls import path
 from . import views
+from .views_cleanup import api_cleanup_checking_timeout, api_toggle_checking_cleanup
 
 app_name = 'api'
 
@@ -56,6 +57,13 @@ urlpatterns = [
     path('checking/submit/', views.api_submit_checking_result, name='submit_checking_result'),
     path('checking/release/', views.api_release_checking_lock, name='release_checking_lock'),
     path('checking/statistics/', views.api_checking_statistics, name='checking_statistics'),
+    path('checking/cleanup-timeout/', api_cleanup_checking_timeout, name='cleanup_checking_timeout'),
+    path('checking/toggle-cleanup/', api_toggle_checking_cleanup, name='toggle_checking_cleanup'),
+    
+    # Checking (Hậu kiểm) - Web-friendly API endpoints (support session auth)
+    path('checking/get-tasks-web/', views.api_get_checking_tasks_web, name='get_checking_tasks_web'),
+    path('checking/submit-web/', views.api_submit_checking_result_web, name='submit_checking_result_web'),
+    path('checking/statistics-web/', views.api_checking_statistics_web, name='checking_statistics_web'),
     
     # Checking (Hậu kiểm) - Web views
     path('checking/', views.checking_list, name='checking_list'),

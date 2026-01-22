@@ -34,7 +34,7 @@ def cleanup_poll_105():
     5. Xóa tất cả ai_model_result
     """
     
-    poll_id = 105
+    poll_id = 103
     
     print(f"Bắt đầu cleanup dữ liệu cho Poll {poll_id}")
     

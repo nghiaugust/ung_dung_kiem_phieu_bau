@@ -35,8 +35,11 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
     trocr_batch = {'image_paths': [], 'cell_mapping': {}}
     yolo_batch = {'image_paths': [], 'cell_mapping': {}}
     
+    # QUAN TRỌNG: Sort cells theo thứ tự (row, col) để đảm bảo thứ tự ổn định
+    sorted_cells = sorted(all_cell_models.items(), key=lambda x: tuple(map(int, x[0].split('_'))))
+    
     # Gom ảnh theo model
-    for cell_key, model_name in all_cell_models.items():
+    for cell_key, model_name in sorted_cells:
         # Parse cell_key: "row_col"
         row, col = map(int, cell_key.split('_'))
         
@@ -145,11 +148,14 @@ def send_batch_request(api_url, image_paths, extra_data=None, timeout=300):
     file_handles = []
     try:
         files = []
-        for path in image_paths:
-            filename = os.path.basename(path)
+        for idx, path in enumerate(image_paths):
+            # QUAN TRỌNG: Thêm index vào filename để đảm bảo có thể map lại đúng thứ tự
+            # Format: {idx:04d}_{original_filename}
+            original_filename = os.path.basename(path)
+            indexed_filename = f"{idx:04d}_{original_filename}"
             fh = open(path, 'rb')
             file_handles.append(fh)
-            files.append(('images', (filename, fh, 'image/jpeg')))
+            files.append(('images', (indexed_filename, fh, 'image/jpeg')))
         
         # Gửi request
         response = requests.post(api_url, files=files, data=extra_data, timeout=timeout)
@@ -578,11 +584,10 @@ def counting_queue(self, ballot_id):
                 'error': error_msg
             }
         
-        # Cập nhật trạng thái ballot: counting_status = completed, is_checked = True
+        # Cập nhật trạng thái ballot: counting_status = completed (is_checked tự động = True qua property)
         ballot.counting_status = 'completed'
         ballot.counting_error = None
-        ballot.is_checked = True
-        ballot.save(update_fields=['counting_status', 'counting_error', 'is_checked'])
+        ballot.save(update_fields=['counting_status', 'counting_error'])
         
         print(f"[COUNTING QUEUE SUCCESS] Hoàn thành kiểm phiếu ballot {ballot_id}")
         
