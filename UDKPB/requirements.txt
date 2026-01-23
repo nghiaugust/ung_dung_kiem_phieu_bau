@@ -55,11 +55,22 @@ daphne==3.0.2
 asgiref==3.8.1
 eventlet==0.33.3
 
-# Task Queue
+# Task Queue (Celery + Redis)
 celery==5.3.4
+amqp==5.3.1
+billiard==4.2.4
+kombu==5.6.2
+vine==5.1.0
 redis==5.0.1
 gevent==23.9.1
+greenlet==3.3.0
 flower==2.0.1
+
+# Click dependencies (for Celery)
+click==8.2.1
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.3.0
 
 # Security & Authentication
 cryptography==43.0.3
@@ -71,12 +82,22 @@ python-dotenv==1.1.1
 requests==2.32.3
 coloredlogs==15.0.1
 tqdm==4.67.0
-click==8.2.1
 humanize==4.15.0
 filelock==3.16.1
 
 # Monitoring & Logging
 prometheus_client==0.23.1
+
+# AI-specific Dependencies
+torchaudio==2.9.0
+ultralytics-thop==2.0.15
+opencv-python-headless==4.10.0.84
+huggingface-hub==0.34.3
+imutils==0.5.4
+img2pdf==0.5.1
+timm==1.0.22
+einops==0.2.0
+PyYAML==6.0.2
 
 # Other Dependencies
 WhiteNoise==6.9.0
