@@ -142,3 +142,7 @@ UDKPB/database.txt
 UDKPB/tải model trocr.txt
 UDKPB/ai_core/model_trocr/
 UDKPB/ai_core/model_yolo_x/
+
+UDKPB/kiem_phieu_bau/preprocessing/tien_xu_ly_truc_tiep.py
+UDKPB/kiem_phieu_bau/preprocessing/image_input/
+UDKPB/kiem_phieu_bau/preprocessing/image_output/
