@@ -9,7 +9,8 @@ LABEL description="UDKPB - Celery Worker for AI Image Processing"
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120
 
 # Set working directory
 WORKDIR /app
@@ -25,10 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
+    libzbar0 \
     # PDF processing
     poppler-utils \
+    # OCR runtime
+    tesseract-ocr \
     # Git for downloading models
     git \
     wget \
@@ -37,41 +41,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY UDKPB/requirements.txt /app/requirements.txt
-COPY UDKPB/kiem_phieu_bau/celery_requirements.txt /app/celery_requirements.txt
-COPY UDKPB/ai_core/ai_server/ai_requirements.txt /app/ai_requirements.txt
+# Copy Docker-specific requirements
+COPY docker/requirements.celery.docker.txt /tmp/requirements.celery.docker.txt
+COPY docker/requirements.web.docker.txt /tmp/requirements.web.docker.txt
 
 # Install all Python dependencies (including AI libraries)
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install -r celery_requirements.txt && \
-    pip install -r ai_requirements.txt
+    pip install -r /tmp/requirements.celery.docker.txt
 
 # Copy project files
 COPY UDKPB/kiem_phieu_bau /app/kiem_phieu_bau
-COPY UDKPB/ai_core/processors /app/ai_core/processors
-COPY UDKPB/ai_core/model_trocr /app/ai_core/model_trocr
-COPY UDKPB/ai_core/model_yolo_x /app/ai_core/model_yolo_x
+COPY UDKPB/ai_core /app/ai_core
 
 # Create necessary directories
 WORKDIR /app/kiem_phieu_bau
 RUN mkdir -p media logs
 
-# Create non-root user
-RUN useradd -m -u 1000 celeryuser && \
-    chown -R celeryuser:celeryuser /app
-
-USER celeryuser
-
 # Expose ports (not really needed for Celery, but for monitoring)
 EXPOSE 5555
 
 # Default command for Celery worker with gevent pool
-CMD ["celery", "-A", "kiem_phieu_bau", "worker", \
-     "--pool=gevent", \
-     "--concurrency=10", \
-     "--loglevel=info", \
-     "--max-tasks-per-child=20", \
-     "--time-limit=1800", \
-     "--soft-time-limit=1500"]
+CMD ["celery", "-A", "kiem_phieu_bau", "worker", "--pool=gevent", "--concurrency=10", "--loglevel=info", "--max-tasks-per-child=20", "--time-limit=1800", "--soft-time-limit=1500"]

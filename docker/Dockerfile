@@ -9,7 +9,8 @@ LABEL description="UDKPB - Ứng Dụng Kiểm Phiếu Bầu - Django Web Applic
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=120
 
 # Set working directory
 WORKDIR /app
@@ -23,6 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Image processing libraries
     libgl1 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    libzbar0 \
     # PDF processing
     poppler-utils \
     # Network utilities for health checks
@@ -32,14 +38,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements files
-COPY UDKPB/requirements.txt /app/requirements.txt
-COPY UDKPB/kiem_phieu_bau/celery_requirements.txt /app/celery_requirements.txt
+# Copy Docker-specific requirements
+COPY docker/requirements.web.docker.txt /tmp/requirements.web.docker.txt
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install -r celery_requirements.txt
+    pip install -r /tmp/requirements.web.docker.txt
 
 # Copy project files
 COPY UDKPB/kiem_phieu_bau /app/kiem_phieu_bau
@@ -53,19 +57,9 @@ RUN mkdir -p /app/kiem_phieu_bau/media \
 # Set working directory to Django project
 WORKDIR /app/kiem_phieu_bau
 
-# Collect static files (will be overridden by entrypoint, but good for cache)
-RUN python manage.py collectstatic --noinput || true
-
 # Copy entrypoint script
 COPY docker/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
-
-# Switch to non-root user
-USER appuser
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 8000

@@ -2,6 +2,13 @@
 
 Hướng dẫn triển khai ứng dụng Kiểm Phiếu Bầu với Docker (Production Ready).
 
+## Cập nhật quan trọng cho Linux Docker
+
+- Web image dùng danh sách thư viện riêng tại `docker/requirements.web.docker.txt`.
+- Celery image dùng danh sách thư viện riêng tại `docker/requirements.celery.docker.txt`.
+- Build context đã được tối ưu bằng file `.dockerignore` ở thư mục gốc dự án để tránh kéo môi trường Windows vào Docker build.
+- Tạo sẵn `docker/.env.docker` để `docker compose` có thể chạy ngay.
+
 ## 📋 Yêu Cầu Hệ Thống
 
 - Docker Engine 20.10+

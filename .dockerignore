@@ -1,0 +1,38 @@
+# VCS and IDE
+.git/
+.vscode/
+.idea/
+
+# Python cache and local envs
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+venv/
+.venv/
+env/
+ENV/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Runtime/generated data
+UDKPB/kiem_phieu_bau/media/
+UDKPB/kiem_phieu_bau/staticfiles/
+UDKPB/kiem_phieu_bau/logs/
+UDKPB/kiem_phieu_bau/image_output/
+
+# Local DB files
+**/*.sqlite3
+**/*.db
+
+# Optional large model assets (mounted via volume at runtime)
+UDKPB/ai_core/model_trocr/
+UDKPB/ai_core/model_viet_name_ocr/
+UDKPB/ai_core/model_yolo_x/
+
+# Temporary files
+**/*.log
+**/*.tmp
+**/*.bak
+**/*.backup
