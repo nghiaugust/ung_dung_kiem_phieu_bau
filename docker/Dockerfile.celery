@@ -1,6 +1,8 @@
 # Dockerfile cho Celery Worker (AI Processing)
 FROM python:3.12.6-slim
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 # Metadata
 LABEL maintainer="domanhnghiaforwork@gmail.com"
 LABEL description="UDKPB - Celery Worker for AI Image Processing"
@@ -10,7 +12,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_DEFAULT_TIMEOUT=120
+    PIP_DEFAULT_TIMEOUT=180 \
+    PIP_RETRIES=15 \
+    PIP_INDEX_URL=${PIP_INDEX_URL}
 
 # Set working directory
 WORKDIR /app
@@ -46,8 +50,9 @@ COPY docker/requirements.celery.docker.txt /tmp/requirements.celery.docker.txt
 COPY docker/requirements.web.docker.txt /tmp/requirements.web.docker.txt
 
 # Install all Python dependencies (including AI libraries)
-RUN pip install --upgrade pip && \
-    pip install -r /tmp/requirements.celery.docker.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --retries 15 --timeout 180 --no-build-isolation py-ubjson==0.16.1 && \
+    pip install --retries 15 --timeout 180 --prefer-binary -r /tmp/requirements.celery.docker.txt
 
 # Copy project files
 COPY UDKPB/kiem_phieu_bau /app/kiem_phieu_bau

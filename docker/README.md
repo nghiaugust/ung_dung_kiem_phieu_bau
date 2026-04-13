@@ -46,6 +46,9 @@ NGINX_HTTPS_PORT=443
 
 FLOWER_USER=admin
 FLOWER_PASSWORD=admin
+
+# Tuy chon: mirror PyPI neu mang bi chan/chap chon
+PIP_INDEX_URL=https://pypi.org/simple
 ```
 
 ## 4. Chay Docker (PROD compose)
@@ -107,5 +110,39 @@ Sau do chay lai:
 ```bash
 docker compose -f docker/docker-compose.yml down
 docker compose -f docker/docker-compose.yml up -d --build
+```
+
+## 10. Neu bi loi DNS khi pip install trong Docker build
+
+Neu log co dang:
+
+- Temporary failure in name resolution
+- Could not reach files.pythonhosted.org / pypi.org
+
+Thi day la loi mang/DNS cua moi truong Docker tren may do, khong phai loi code app.
+
+Cach xu ly uu tien:
+
+1. Dat mirror pip trong `docker/.env.docker` (hoac file `.env` ma ban dung voi compose):
+
+```env
+PIP_INDEX_URL=https://pypi.org/simple
+```
+
+Neu don vi co mirror noi bo, thay bang URL mirror noi bo.
+
+2. Neu van loi, cau hinh DNS trong Docker Desktop (Settings -> Docker Engine), them DNS on dinh vi du:
+
+```json
+{
+	"dns": ["8.8.8.8", "1.1.1.1"]
+}
+```
+
+3. Build lai:
+
+```bash
+docker compose -f docker/docker-compose.yml build --no-cache celery-worker
+docker compose -f docker/docker-compose.yml up -d
 ```
 

@@ -31,6 +31,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: udkpb_web_dev
     restart: unless-stopped
     environment:
@@ -63,6 +65,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: udkpb_celery_dev
     restart: unless-stopped
     environment:
