@@ -17,7 +17,12 @@ import gc
 # Import detect_qr_codes từ ballot.doc_qr
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from ballot.doc_qr import detect_qr_codes
+from ballot.doc_qr import (
+	SHARED_ARUCO_ID,
+	classify_shared_markers_from_corners,
+	detect_qr_codes,
+	detect_shared_aruco_marker_corners,
+)
 
 # Import GPU utilities
 from .gpu_utils import gpu_resize, gpu_warp_perspective, gpu_cvt_color, check_gpu_available
@@ -79,9 +84,9 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	Làm phẳng ảnh phiếu bầu dựa trên ArUco markers (yêu cầu đủ 4 markers)
 	
 	Quy trình:
-	1. Chia ảnh thành 4 vùng (4 góc)
-	2. Tìm QR code ở góc trên trái (ID 0) - lấy góc bottom-right
-	3. Tìm ArUco markers ở 3 góc còn lại (ID 1, 2, 3)
+	1. Chia ảnh và tìm QR code ở góc trên trái (ID 0) - lấy góc bottom-right
+	2. Detect toàn ảnh các ArUco marker dùng chung ID 17
+	3. Phân loại 3 marker thành top-right/bottom-right/bottom-left dựa vào vị trí tương đối với QR
 	4. Áp dụng perspective transform để làm phẳng
 	
 	Args:
@@ -101,9 +106,8 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 		
 	Note:
 		- ID 0: QR Code (Top-Left) - Lấy góc bottom-right
-		- Marker 1: ArUco Top-Right - Lấy góc bottom-left
-		- Marker 2: ArUco Bottom-Right - Lấy góc top-left
-		- Marker 3: ArUco Bottom-Left - Lấy góc top-right
+		- 3 marker ArUco còn lại dùng chung ID 17
+		- Vị trí Top-Right/Bottom-Right/Bottom-Left được phân loại theo vị trí tương đối với QR
 		- Khoảng cách tính từ GÓC (không phải tâm)
 		- DPI 300: 1 cm = 118.11 pixels
 	"""
@@ -130,197 +134,101 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	# Chia ảnh làm 4 phần (từ tâm)
 	mid_h, mid_w = h // 2, w // 2
 	
-	# Tạo detector cho ArUco markers
-	aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-	parameters = cv2.aruco.DetectorParameters()
-	detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
-	
 	# Dictionary lưu góc markers theo id
 	marker_corners = {}
 	
 	# Biến lưu data QR code
 	qr_data_phat_hien = None
 	
-	# Định nghĩa 4 vùng quét và marker dự kiến
-	# (y_start, y_end, x_start, x_end, expected_marker_id, corner_index, offset_y, offset_x, use_qr)
-	regions = [
-		(0, mid_h, 0, mid_w, 0, 2, 0, 0, True),              # Top-Left quadrant -> QR Code, góc bottom-right
-		(0, mid_h, mid_w, w, 1, 3, 0, mid_w, False),         # Top-Right quadrant -> Marker 1, góc bottom-left
-		(mid_h, h, mid_w, w, 2, 0, mid_h, mid_w, False),     # Bottom-Right quadrant -> Marker 2, góc top-left
-		(mid_h, h, 0, mid_w, 3, 1, mid_h, 0, False)          # Bottom-Left quadrant -> Marker 3, góc top-right
-	]
-	
-	# print(f"[STEP1] Bắt đầu quét 4 vùng (QR + 3 markers)...")
-	
-	for y_start, y_end, x_start, x_end, expected_id, corner_idx, offset_y, offset_x, use_qr in regions:
-		# Cắt vùng
-		region = img[y_start:y_end, x_start:x_end]
-		gray_region = gpu_cvt_color(region, cv2.COLOR_BGR2GRAY)
-		
-		if use_qr:
-			# Phát hiện QR Code bằng QReader
-			qr_data, qr_corners = phat_hien_qr_code(region, gray_region)
-			
-			# Tìm QR code đầu tiên
-			qr_found = False
-			scale_factor = 1.0  # Hệ số scale (1.0 = không scale)
-			
-			if qr_data and qr_corners is not None:
-				# Tinh chỉnh sub-pixel cho góc QR
-				criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-				corners_refined = cv2.cornerSubPix(
-					gray_region,
-					qr_corners.reshape(-1, 1, 2),
-					winSize=(5, 5),
-					zeroZone=(-1, -1),
-					criteria=criteria
-				)
-				qr_corners = corners_refined.reshape(4, 2)
-				
-				# Lấy góc bottom-right của QR
-				# OpenCV trả về góc theo thứ tự: TL, TR, BR, BL
-				# Tìm góc có tổng (x + y) lớn nhất = bottom-right
-				corner_sums = qr_corners[:, 0] + qr_corners[:, 1]
-				br_idx = np.argmax(corner_sums)
-				corner_point = qr_corners[br_idx]
-				
-				# Quy đổi tọa độ về ảnh gốc
-				corner_point_global = corner_point + np.array([offset_x, offset_y])
-				
-				marker_corners[expected_id] = corner_point_global
-				qr_data_phat_hien = qr_data  # Lưu data QR
-				
-				print(f"[STEP1] Tìm thấy QR Code (ID 0) tại góc bottom-right: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
-				# print(f"[STEP1] QR Data: {qr_data}")
-				qr_found = True
-			
-			# Nếu không tìm thấy, thử upscale 3x
-			if not qr_found:
-				print(f"[STEP1] Không tìm thấy QR ở độ phân giải gốc, thử upscale 3x...")
-				
-				# Upscale ảnh 3x (sử dụng GPU nếu có)
-				region_upscaled = gpu_resize(region, None, interpolation=cv2.INTER_CUBIC)
-				if region_upscaled.shape[1] != region.shape[1] * 3:
-					new_w = int(region.shape[1] * 3.0)
-					new_h = int(region.shape[0] * 3.0)
-					region_upscaled = gpu_resize(region, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-				gray_region_upscaled = gpu_cvt_color(region_upscaled, cv2.COLOR_BGR2GRAY)
-				scale_factor = 3.0
-				
-				# Thử decode lại với QReader
-				qr_data, qr_corners = phat_hien_qr_code(region_upscaled, gray_region_upscaled)
-				
-				if qr_data and qr_corners is not None:
-					# Tinh chỉnh sub-pixel
-					criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-					corners_refined = cv2.cornerSubPix(
-						gray_region_upscaled,
-						qr_corners.reshape(-1, 1, 2),
-						winSize=(5, 5),
-						zeroZone=(-1, -1),
-						criteria=criteria
-					)
-					qr_corners = corners_refined.reshape(4, 2)
-					
-					# Chuyển tọa độ về ảnh gốc (chia cho scale_factor)
-					qr_corners = qr_corners / scale_factor
-					
-					# Lấy góc bottom-right
-					corner_sums = qr_corners[:, 0] + qr_corners[:, 1]
-					br_idx = np.argmax(corner_sums)
-					corner_point = qr_corners[br_idx]
-					
-					# Quy đổi tọa độ về ảnh gốc
-					corner_point_global = corner_point + np.array([offset_x, offset_y])
-					
-					marker_corners[expected_id] = corner_point_global
-					qr_data_phat_hien = qr_data  # Lưu data QR
-					
-					print(f"[STEP1] Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
-					# print(f"[STEP1] QR Data: {qr_data}")
-					qr_found = True
-			
-			# Nếu vẫn không tìm thấy, thử upscale 5x
-			if not qr_found:
-				print(f"[STEP1] Không tìm thấy QR sau upscale 3x, thử upscale 5x...")
-				
-				# Upscale ảnh 5x (sử dụng GPU nếu có)
-				new_w = int(region.shape[1] * 5.0)
-				new_h = int(region.shape[0] * 5.0)
-				region_upscaled = gpu_resize(region, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-				gray_region_upscaled = gpu_cvt_color(region_upscaled, cv2.COLOR_BGR2GRAY)
-				scale_factor = 5.0
-				
-				# Thử decode lại với QReader
-				qr_data, qr_corners = phat_hien_qr_code(region_upscaled, gray_region_upscaled)
-				
-				if qr_data and qr_corners is not None:
-					# Tinh chỉnh sub-pixel
-					criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-					corners_refined = cv2.cornerSubPix(
-						gray_region_upscaled,
-						qr_corners.reshape(-1, 1, 2),
-						winSize=(5, 5),
-						zeroZone=(-1, -1),
-						criteria=criteria
-					)
-					qr_corners = corners_refined.reshape(4, 2)
-					
-					# Chuyển tọa độ về ảnh gốc (chia cho scale_factor)
-					qr_corners = qr_corners / scale_factor
-					
-					# Lấy góc bottom-right
-					corner_sums = qr_corners[:, 0] + qr_corners[:, 1]
-					br_idx = np.argmax(corner_sums)
-					corner_point = qr_corners[br_idx]
-					
-					# Quy đổi tọa độ về ảnh gốc
-					corner_point_global = corner_point + np.array([offset_x, offset_y])
-					
-					marker_corners[expected_id] = corner_point_global
-					qr_data_phat_hien = qr_data  # Lưu data QR
-					
-					print(f"[STEP1] Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
-					# print(f"[STEP1] QR Data: {qr_data}")
-					qr_found = True
-			
-			if not qr_found:
-				print(f"[STEP1 WARNING] Không tìm thấy QR Code trong vùng Top-Left (đã thử upscale 3x và 5x)")
-		else:
-			# Phát hiện ArUco markers (1, 2, 3)
-			corners, ids, _ = detector.detectMarkers(gray_region)
-			
-			if ids is not None:
-				for corner, marker_id in zip(corners, ids.flatten()):
-					if marker_id == expected_id:
-						# Lấy 4 góc của marker (theo thứ tự: TL, TR, BR, BL)
-						marker_corners_local = corner[0].copy()
-						
-						# Tinh chỉnh sub-pixel cho tất cả 4 góc của marker
-						criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-						
-						corners_refined = cv2.cornerSubPix(
-							gray_region,
-							marker_corners_local.reshape(-1, 1, 2),
-							winSize=(5, 5),
-							zeroZone=(-1, -1),
-							criteria=criteria
-						)
-						
-						marker_corners_local = corners_refined.reshape(4, 2)
-						
-						# Chọn góc phù hợp:
-						# - Marker 1 (TR): lấy góc bottom-left (index 3)
-						# - Marker 2 (BR): lấy góc top-left (index 0)
-						# - Marker 3 (BL): lấy góc top-right (index 1)
-						corner_point = marker_corners_local[corner_idx]
-						
-						# Quy đổi tọa độ về ảnh gốc
-						corner_point_global = corner_point + np.array([offset_x, offset_y])
-						
-						marker_corners[marker_id] = corner_point_global
-						# print(f"[STEP1] Tìm thấy marker {marker_id} tại góc {corner_idx}: ({corner_point_global[0]:.3f}, {corner_point_global[1]:.3f})")
-						break
+	print(f"[STEP1] Bắt đầu quét QR (Top-Left) + 3 ArUco dùng chung ID {SHARED_ARUCO_ID}...")
+
+	# 1) Quét QR ở góc trên trái
+	region = img[0:mid_h, 0:mid_w]
+	gray_region = gpu_cvt_color(region, cv2.COLOR_BGR2GRAY)
+	qr_data, qr_corners = phat_hien_qr_code(region, gray_region)
+
+	qr_found = False
+	if qr_data and qr_corners is not None:
+		criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+		corners_refined = cv2.cornerSubPix(
+			gray_region,
+			qr_corners.reshape(-1, 1, 2),
+			winSize=(5, 5),
+			zeroZone=(-1, -1),
+			criteria=criteria
+		)
+		qr_corners = corners_refined.reshape(4, 2)
+		br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+		marker_corners[0] = qr_corners[br_idx]
+		qr_data_phat_hien = qr_data
+		qr_found = True
+		print(f"[STEP1] Tìm thấy QR Code (ID 0) tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+
+	if not qr_found:
+		print(f"[STEP1] Không tìm thấy QR ở độ phân giải gốc, thử upscale 3x...")
+		new_w = int(region.shape[1] * 3.0)
+		new_h = int(region.shape[0] * 3.0)
+		region_upscaled = gpu_resize(region, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+		gray_region_upscaled = gpu_cvt_color(region_upscaled, cv2.COLOR_BGR2GRAY)
+		qr_data, qr_corners = phat_hien_qr_code(region_upscaled, gray_region_upscaled)
+
+		if qr_data and qr_corners is not None:
+			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+			corners_refined = cv2.cornerSubPix(
+				gray_region_upscaled,
+				qr_corners.reshape(-1, 1, 2),
+				winSize=(5, 5),
+				zeroZone=(-1, -1),
+				criteria=criteria
+			)
+			qr_corners = corners_refined.reshape(4, 2) / 3.0
+			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+			marker_corners[0] = qr_corners[br_idx]
+			qr_data_phat_hien = qr_data
+			qr_found = True
+			print(f"[STEP1] Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+
+	if not qr_found:
+		print(f"[STEP1] Không tìm thấy QR sau upscale 3x, thử upscale 5x...")
+		new_w = int(region.shape[1] * 5.0)
+		new_h = int(region.shape[0] * 5.0)
+		region_upscaled = gpu_resize(region, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+		gray_region_upscaled = gpu_cvt_color(region_upscaled, cv2.COLOR_BGR2GRAY)
+		qr_data, qr_corners = phat_hien_qr_code(region_upscaled, gray_region_upscaled)
+
+		if qr_data and qr_corners is not None:
+			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+			corners_refined = cv2.cornerSubPix(
+				gray_region_upscaled,
+				qr_corners.reshape(-1, 1, 2),
+				winSize=(5, 5),
+				zeroZone=(-1, -1),
+				criteria=criteria
+			)
+			qr_corners = corners_refined.reshape(4, 2) / 5.0
+			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+			marker_corners[0] = qr_corners[br_idx]
+			qr_data_phat_hien = qr_data
+			qr_found = True
+			print(f"[STEP1] Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+
+	if not qr_found:
+		print(f"[STEP1 WARNING] Không tìm thấy QR Code trong vùng Top-Left (đã thử upscale 3x và 5x)")
+
+	# 2) Quét toàn ảnh để lấy 3 marker ArUco cùng ID 17
+	shared_markers_corners = detect_shared_aruco_marker_corners(
+		img,
+		shared_id=SHARED_ARUCO_ID,
+		refine_subpixel=True,
+	)
+
+	if 0 in marker_corners and len(shared_markers_corners) >= 3:
+		phan_loai = classify_shared_markers_from_corners(shared_markers_corners, marker_corners[0])
+		if phan_loai:
+			marker_corners[1] = phan_loai[1]
+			marker_corners[2] = phan_loai[2]
+			marker_corners[3] = phan_loai[3]
+			print(f"[STEP1] Đã phân loại 3 marker ID {SHARED_ARUCO_ID} theo vị trí tương đối với QR")
 	
 	# Kiểm tra đủ 4 điểm (1 QR + 3 markers)
 	if len(marker_corners) < 4:
@@ -328,7 +236,7 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 		missing_ids = [i for i in range(4) if i not in marker_corners]
 		raise ValueError(f"Cần đủ 4 điểm tham chiếu! Tìm thấy {len(marker_corners)}: {found_ids}. Thiếu: {missing_ids}")
 	
-	print(f"[STEP1] Tìm thấy đủ 4 điểm tham chiếu (QR + 3 markers): {sorted(marker_corners.keys())}")
+	print(f"[STEP1] Tìm thấy đủ 4 điểm tham chiếu (QR + 3 marker ID {SHARED_ARUCO_ID}): {sorted(marker_corners.keys())}")
 	
 	# Tạo source points (góc markers trên ảnh gốc)
 	src_pts = np.array([

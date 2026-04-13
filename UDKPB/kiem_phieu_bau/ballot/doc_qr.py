@@ -15,6 +15,182 @@ except Exception as e:
     print(f"⚠️ Không thể tải QReader: {e}")
     GLOBAL_QREADER = None
 
+SHARED_ARUCO_ID = 17
+
+
+def build_marker_box_from_corners(corners, marker_id=None):
+    """Tạo bounding box + tâm từ 4 góc marker."""
+    corners = np.array(corners, dtype=np.float32)
+    min_x = int(np.min(corners[:, 0]))
+    max_x = int(np.max(corners[:, 0]))
+    min_y = int(np.min(corners[:, 1]))
+    max_y = int(np.max(corners[:, 1]))
+
+    return {
+        'left': min_x,
+        'right': max_x,
+        'top': min_y,
+        'bottom': max_y,
+        'center_x': (min_x + max_x) / 2.0,
+        'center_y': (min_y + max_y) / 2.0,
+        'id': marker_id,
+        'corners': corners.tolist(),
+    }
+
+
+def detect_aruco_marker_boxes(image, refine_subpixel=False):
+    """Detect tất cả ArUco markers và trả về danh sách bounding boxes (không mất marker trùng ID)."""
+    gray = image
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    aruco_params = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
+    corners, ids, _ = detector.detectMarkers(gray)
+
+    boxes = []
+    if ids is None:
+        return boxes
+
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+    for corner, marker_id in zip(corners, ids.flatten()):
+        marker_corners = corner[0].copy()
+        if refine_subpixel:
+            refined = cv2.cornerSubPix(
+                gray,
+                marker_corners.reshape(-1, 1, 2),
+                winSize=(5, 5),
+                zeroZone=(-1, -1),
+                criteria=criteria
+            )
+            marker_corners = refined.reshape(4, 2)
+
+        boxes.append(build_marker_box_from_corners(marker_corners, marker_id=int(marker_id)))
+
+    return boxes
+
+
+def detect_shared_aruco_marker_corners(image, shared_id=SHARED_ARUCO_ID, refine_subpixel=True):
+    """Detect các ArUco marker có cùng ID và trả về list corners shape (4, 2)."""
+    gray = image
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    aruco_params = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
+    corners, ids, _ = detector.detectMarkers(gray)
+
+    shared_markers = []
+    if ids is None:
+        return shared_markers
+
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+    for corner, marker_id in zip(corners, ids.flatten()):
+        if int(marker_id) != int(shared_id):
+            continue
+
+        marker_corners = corner[0].copy()
+        if refine_subpixel:
+            refined = cv2.cornerSubPix(
+                gray,
+                marker_corners.reshape(-1, 1, 2),
+                winSize=(5, 5),
+                zeroZone=(-1, -1),
+                criteria=criteria
+            )
+            marker_corners = refined.reshape(4, 2)
+
+        shared_markers.append(marker_corners)
+
+    return shared_markers
+
+
+def classify_shared_markers_from_corners(shared_markers_corners, qr_point):
+    """Phân loại 3 marker dùng chung ID thành top-right/bottom-right/bottom-left từ corners."""
+    if len(shared_markers_corners) < 3:
+        return None
+
+    qr_x, qr_y = float(qr_point[0]), float(qr_point[1])
+    marker_meta = []
+    for corners in shared_markers_corners:
+        marker_meta.append({
+            'corners': corners,
+            'center_x': float(np.mean(corners[:, 0])),
+            'center_y': float(np.mean(corners[:, 1]))
+        })
+
+    right_side = [m for m in marker_meta if m['center_x'] > qr_x]
+    if len(right_side) >= 2:
+        right_sorted = sorted(right_side, key=lambda m: m['center_y'])
+        top_right_marker = right_sorted[0]
+        bottom_right_marker = right_sorted[-1]
+    else:
+        y_sorted = sorted(marker_meta, key=lambda m: m['center_y'])
+        top_right_marker = y_sorted[0]
+        remaining = [m for m in marker_meta if m is not top_right_marker]
+        if len(remaining) < 2:
+            return None
+        bottom_right_marker = max(remaining, key=lambda m: (m['center_x'], m['center_y']))
+
+    remaining = [m for m in marker_meta if m is not top_right_marker and m is not bottom_right_marker]
+    if not remaining:
+        return None
+
+    below_qr = [m for m in remaining if m['center_y'] > qr_y]
+    if below_qr:
+        bottom_left_marker = min(below_qr, key=lambda m: m['center_x'])
+    else:
+        bottom_left_marker = min(remaining, key=lambda m: m['center_x'])
+
+    return {
+        1: top_right_marker['corners'][3],
+        2: bottom_right_marker['corners'][0],
+        3: bottom_left_marker['corners'][1],
+    }
+
+
+def classify_shared_aruco_markers(marker_boxes, top_left_box):
+    """Phân loại 3 marker dùng chung ID thành TR/BR/BL dựa vào QR (top-left)."""
+    if len(marker_boxes) < 3 or top_left_box is None:
+        return None, None, None
+
+    qr_center_x = top_left_box['center_x']
+    qr_center_y = top_left_box['center_y']
+    indexed_boxes = list(enumerate(marker_boxes))
+
+    right_side = [(idx, box) for idx, box in indexed_boxes if box['center_x'] > qr_center_x]
+
+    if len(right_side) >= 2:
+        right_side_sorted = sorted(right_side, key=lambda item: item[1]['center_y'])
+        tr_idx, top_right = right_side_sorted[0]
+        br_idx, bottom_right = right_side_sorted[-1]
+    else:
+        by_top = sorted(indexed_boxes, key=lambda item: item[1]['center_y'])
+        tr_idx, top_right = by_top[0]
+        remaining = [(idx, box) for idx, box in indexed_boxes if idx != tr_idx]
+        if len(remaining) < 2:
+            return None, None, None
+        br_idx, bottom_right = max(remaining, key=lambda item: (item[1]['center_x'], item[1]['center_y']))
+
+    used = {tr_idx, br_idx}
+    below_left_candidates = [
+        (idx, box)
+        for idx, box in indexed_boxes
+        if idx not in used and box['center_y'] > qr_center_y
+    ]
+
+    if below_left_candidates:
+        _, bottom_left = min(below_left_candidates, key=lambda item: item[1]['center_x'])
+    else:
+        remaining = [(idx, box) for idx, box in indexed_boxes if idx not in used]
+        if not remaining:
+            return None, None, None
+        _, bottom_left = min(remaining, key=lambda item: item[1]['center_x'])
+
+    return top_right, bottom_right, bottom_left
+
 def detect_aruco_markers(image):
     """
     Detect ArUco markers trong ảnh
@@ -35,8 +211,11 @@ def detect_aruco_markers(image):
     
     markers_info = {}
     
+    occurrence_count = {}
+
     if ids is not None:
         for i, marker_id in enumerate(ids.flatten()):
+            marker_id = int(marker_id)
             corner = corners[i][0]
             # Tính tọa độ trung tâm
             center_x = int(np.mean(corner[:, 0]))
@@ -46,8 +225,13 @@ def detect_aruco_markers(image):
             width = int(np.linalg.norm(corner[1] - corner[0]))
             height = int(np.linalg.norm(corner[2] - corner[1]))
             
-            markers_info[int(marker_id)] = {
-                'id': int(marker_id),
+            # Giữ đủ marker khi có nhiều marker trùng cùng 1 ID (ví dụ: 3 marker đều ID 17)
+            count = occurrence_count.get(marker_id, 0)
+            occurrence_count[marker_id] = count + 1
+            key = marker_id if count == 0 else marker_id * 100 + count
+
+            markers_info[key] = {
+                'id': marker_id,
                 'center': (center_x, center_y),
                 'corners': corner.tolist(),
                 'size': (width, height)

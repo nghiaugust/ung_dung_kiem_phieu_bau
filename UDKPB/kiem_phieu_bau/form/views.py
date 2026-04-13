@@ -17,7 +17,12 @@ import qrcode
 import time
 import random
 from pdf2image import convert_from_path
-from ballot.doc_qr import detect_aruco_markers, detect_qr_codes
+from ballot.doc_qr import (
+    SHARED_ARUCO_ID,
+    classify_shared_aruco_markers,
+    detect_aruco_marker_boxes,
+    detect_qr_codes,
+)
 from .models import BallotDocument
 from poll.models import Poll, Candidate
 from ballot.models import Ballot
@@ -158,14 +163,15 @@ def editor_view(request, poll_id=None):
             pass
     return render(request, 'form/editor.html', context)
 
-def _generate_aruco_marker(marker_id, size_px=200, qr_data=None):
+def _generate_aruco_marker(marker_id, size_px=200, qr_data=None, aruco_id=SHARED_ARUCO_ID):
     """
     Tạo ArUco marker hoặc QR code (cho marker 0)
     
     Args:
-        marker_id (int): ID của marker (0-3 cho 4 góc)
+        marker_id (int): Vị trí logic của marker (0-3 cho 4 góc)
         size_px (int): Kích thước marker tính bằng pixel
         qr_data (str): Dữ liệu để tạo QR code (cho marker 0)
+        aruco_id (int): ID ArUco thực tế dùng cho 3 marker còn lại
         
     Returns:
         str: Đường dẫn đến file ảnh marker tạm thời
@@ -194,15 +200,16 @@ def _generate_aruco_marker(marker_id, size_px=200, qr_data=None):
         cv2.imwrite(temp_path, qr_resized)
         return temp_path
     else:
-        # Các marker khác (1, 2, 3): ArUco thuần
+        # Các marker khác (1, 2, 3): ArUco thuần (dùng chung 1 ID)
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-        marker_img = cv2.aruco.generateImageMarker(aruco_dict, marker_id, size_px)
+        marker_img = cv2.aruco.generateImageMarker(aruco_dict, aruco_id, size_px)
         
         # Tạo tên file unique
         unique_id = f"{int(time.time() * 1000000)}_{random.randint(1000, 9999)}"
-        temp_path = os.path.join(tempfile.gettempdir(), f"temp_aruco_{marker_id}_{unique_id}.png")
+        temp_path = os.path.join(tempfile.gettempdir(), f"temp_aruco_{aruco_id}_{marker_id}_{unique_id}.png")
         cv2.imwrite(temp_path, marker_img)
         return temp_path
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -548,7 +555,7 @@ def generate_latex_multi_page(margins, font_family, font_size, header_rows, titl
                 # QR code cho marker 0 với qr_data cụ thể
                 marker_path = _generate_aruco_marker(marker_id, size_px=200, qr_data=qr_data)
             else:
-                # ArUco markers cho các góc khác
+                # 3 marker ArUco dùng chung ID 17
                 marker_path = _generate_aruco_marker(marker_id, size_px=200)
             marker_paths.append(marker_path)
         
@@ -561,7 +568,7 @@ def generate_latex_multi_page(margins, font_family, font_size, header_rows, titl
             \includegraphics[width=1.8cm,height=1.8cm]{''' + marker_paths[0].replace('\\', '/') + r'''}%
         }%
     }%
-    % Top-right corner (ArUco 1) - sát góc nội dung
+    % Top-right corner (ArUco shared ID 17) - sát góc nội dung
     \AtPageLowerLeft{%
         \put(\LenToUnit{\paperwidth-''' + str(margin_right) + r'''cm},\LenToUnit{\paperheight-''' + str(margin_top) + r'''cm}){%
             \includegraphics[width=1.0cm,height=1.0cm]{''' + marker_paths[1].replace('\\', '/') + r'''}%
@@ -616,10 +623,8 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
     Tính khoảng cách thực tế giữa các markers từ PDF (tính từ 2 biên gần nhất)
     
     Cấu hình markers:
-    - Marker 0 hoặc QR (top-left): QR code
-    - Marker 1 (top-right): ArUco
-    - Marker 2 (bottom-right): ArUco
-    - Marker 3 (bottom-left): ArUco
+    - Top-left: QR code
+    - Top-right, Bottom-right, Bottom-left: 3 ArUco cùng ID 17
     
     Args:
         pdf_path (str): Đường dẫn đến file PDF
@@ -646,11 +651,8 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
         image = np.array(images[0])
         # Convert RGB sang BGR (OpenCV format)
         image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        # Convert sang grayscale cho ArUco detection
-        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-        
-        # Detect ArUco markers
-        aruco_markers = detect_aruco_markers(gray)
+        # Detect ArUco markers (giữ đủ marker trùng ID)
+        marker_boxes = detect_aruco_marker_boxes(image_bgr, refine_subpixel=False)
         
         # Detect QR codes
         qr_codes = detect_qr_codes(image_bgr)
@@ -660,7 +662,9 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
         pixels_per_cm = dpi / 2.54
         
         # Xác định vị trí các markers
-        markers_info = {}
+        markers_info = {
+            'aruco_markers': []
+        }
         
         # QR code (thường ở top-left, marker_id=0)
         if qr_codes:
@@ -671,32 +675,16 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
                 'right': rect['left'] + rect['width'],
                 'top': rect['top'],
                 'bottom': rect['top'] + rect['height'],
+                'center_x': rect['left'] + rect['width'] / 2.0,
+                'center_y': rect['top'] + rect['height'] / 2.0,
                 'type': 'qr'
             }
         
-        # ArUco markers
-        for marker_id, marker_data in aruco_markers.items():
-            corners = np.array(marker_data['corners'])
-            # Tính bounding box
-            min_x = int(np.min(corners[:, 0]))
-            max_x = int(np.max(corners[:, 0]))
-            min_y = int(np.min(corners[:, 1]))
-            max_y = int(np.max(corners[:, 1]))
-            
-            markers_info[f'aruco_{marker_id}'] = {
-                'left': min_x,
-                'right': max_x,
-                'top': min_y,
-                'bottom': max_y,
-                'type': 'aruco',
-                'id': marker_id
-            }
-        
+        for box in marker_boxes:
+            box['type'] = 'aruco'
+            markers_info['aruco_markers'].append(box)
 
-        # Marker 0 hoặc QR: top-left
-        # Marker 1: top-right
-        # Marker 2: bottom-right
-        # Marker 3: bottom-left
+        # Top-left: ưu tiên QR, fallback ArUco 0 để tương thích cũ
         top_left = None
         top_right = None
         bottom_left = None
@@ -707,18 +695,25 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
         # QR code là top-left
         if 'qr' in markers_info:
             top_left = markers_info['qr']
-        elif 'aruco_0' in markers_info:
-            top_left = markers_info['aruco_0']
-        
-        # ArUco markers theo ID
-        if 'aruco_1' in markers_info:
-            top_right = markers_info['aruco_1']
-        
-        if 'aruco_2' in markers_info:
-            bottom_right = markers_info['aruco_2']
-        
-        if 'aruco_3' in markers_info:
-            bottom_left = markers_info['aruco_3']
+        else:
+            legacy_top_left = [box for box in marker_boxes if box['id'] == 0]
+            if legacy_top_left:
+                top_left = legacy_top_left[0]
+
+        # Tương thích ngược: nếu PDF cũ có marker ID 1/2/3 thì dùng luôn
+        legacy_top_right = [box for box in marker_boxes if box['id'] == 1]
+        legacy_bottom_right = [box for box in marker_boxes if box['id'] == 2]
+        legacy_bottom_left = [box for box in marker_boxes if box['id'] == 3]
+
+        if legacy_top_right and legacy_bottom_right and legacy_bottom_left:
+            top_right = legacy_top_right[0]
+            bottom_right = legacy_bottom_right[0]
+            bottom_left = legacy_bottom_left[0]
+        else:
+            # Luồng mới: 3 marker cùng ID 17, phân loại theo vị trí tương đối với QR
+            shared_markers = [box for box in marker_boxes if box['id'] == SHARED_ARUCO_ID]
+            if top_left and len(shared_markers) >= 3:
+                top_right, bottom_right, bottom_left = classify_shared_aruco_markers(shared_markers, top_left)
         
         # Kiểm tra đủ markers
         missing_markers = []
@@ -769,7 +764,7 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
                 'bottom_left': bottom_left,
                 'bottom_right': bottom_right
             },
-            'note': 'Khoảng cách đo từ 2 biên gần nhất của các markers'
+            'note': 'Khoảng cách đo từ 2 biên gần nhất của các markers (hỗ trợ marker chung ID 17 và định dạng cũ)'
         }
     
     except Exception as e:
@@ -782,14 +777,14 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
 def generate_latex(margins, font_family, font_size, header_rows, title_rows, body_rows, footer_rows):
     """Generate LaTeX content from ballot form data"""
     
-    # Generate markers (QR code for marker 0, ArUco for markers 1-3)
+    # Generate markers (QR cho góc trái trên, 3 ArUco còn lại dùng chung ID 17)
     marker_paths = []
     for marker_id in range(4):
         if marker_id == 0:
             # QR code cho marker 0
             marker_path = _generate_aruco_marker(marker_id, size_px=200, qr_data="qrmaucuadomanhnghia")
         else:
-            # ArUco markers cho các góc khác
+            # 3 marker ArUco dùng chung ID 17
             marker_path = _generate_aruco_marker(marker_id, size_px=200)
         marker_paths.append(marker_path)
     
@@ -849,7 +844,7 @@ def generate_latex(margins, font_family, font_size, header_rows, title_rows, bod
             \includegraphics[width=1.8cm,height=1.8cm]{''' + marker_paths[0].replace('\\', '/') + r'''}%
         }%
     }%
-    % Top-right corner (ArUco 1) - sát góc nội dung
+    % Top-right corner (ArUco shared ID 17) - sát góc nội dung
     \AtPageLowerLeft{%
         \put(\LenToUnit{\paperwidth-''' + str(margin_right) + r'''cm},\LenToUnit{\paperheight-''' + str(margin_top) + r'''cm}){%
             \includegraphics[width=1.0cm,height=1.0cm]{''' + marker_paths[1].replace('\\', '/') + r'''}%
