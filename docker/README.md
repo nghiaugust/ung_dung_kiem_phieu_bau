@@ -1,411 +1,111 @@
-# UDKPB - Docker Production Deployment
+# UDKPB Docker Quick Start (sau khi git clone)
 
-Hướng dẫn triển khai ứng dụng Kiểm Phiếu Bầu với Docker (Production Ready).
+Tai lieu nay chi tap trung vao tung buoc de chay duoc Docker nhanh nhat.
 
-## Cập nhật quan trọng cho Linux Docker
+## 1. Dieu kien can
 
-- Web image dùng danh sách thư viện riêng tại `docker/requirements.web.docker.txt`.
-- Celery image dùng danh sách thư viện riêng tại `docker/requirements.celery.docker.txt`.
-- Build context đã được tối ưu bằng file `.dockerignore` ở thư mục gốc dự án để tránh kéo môi trường Windows vào Docker build.
-- Tạo sẵn `docker/.env.docker` để `docker compose` có thể chạy ngay.
+- Da cai Docker Desktop
+- Docker Compose da san sang (`docker compose version` chay duoc)
 
-## 📋 Yêu Cầu Hệ Thống
-
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- RAM: ≥ 8GB (khuyến nghị 16GB cho AI processing)
-- Disk: ≥ 50GB (cho database, media, models)
-- CPU: ≥ 4 cores
-
-## 🏗️ Kiến Trúc Hệ Thống
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Nginx (Port 80/443)                │
-│              (Reverse Proxy + Static Files)             │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-         ┌─────────────┴─────────────┬────────────────────┐
-         ▼                           ▼                    ▼
-┌─────────────────┐        ┌──────────────────┐   ┌─────────────┐
-│   Django Web    │        │  Celery Worker 1 │   │   Flower    │
-│   (Gunicorn)    │        │  (AI Processing) │   │ (Monitoring)│
-│   Port 8000     │        └──────────────────┘   │  Port 5555  │
-└────────┬────────┘                 │              └─────────────┘
-         │                          │
-         │        ┌─────────────────┴───────────────┐
-         │        │      Celery Worker 2 (Scale)    │
-         │        │      (AI Processing)            │
-         │        └─────────────────────────────────┘
-         │                          │
-         └──────────────┬───────────┴─────────┬─────────────┐
-                        ▼                     ▼             ▼
-                ┌──────────────┐      ┌──────────┐   ┌───────────┐
-                │    MySQL     │      │  Redis   │   │  Volumes  │
-                │   Port 3306  │      │ Port 6379│   │  (Media)  │
-                └──────────────┘      └──────────┘   └───────────┘
-```
-
-## 🚀 Hướng Dẫn Triển Khai
-
-### Bước 1: Chuẩn Bị Environment Variables
+## 2. Clone code va vao thu muc du an
 
 ```bash
-cd docker/
-cp .env.docker .env.docker.local
+git clone <repo-url>
+cd ung_dung_kiem_phieu_bau
 ```
 
-Sửa file `.env.docker.local`:
-```bash
-# Thay đổi SECRET_KEY
-SECRET_KEY=$(python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
+## 3. Tao file moi truong Docker (neu chua co)
 
-# Thay đổi passwords
-DB_PASSWORD=your-strong-password
-DB_ROOT_PASSWORD=your-root-password
+Neu trong repo chua co file `docker/.env.docker`, tao file nay voi noi dung toi thieu:
 
-# Thay đổi domain
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
-CSRF_TRUSTED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+```env
+DEBUG=False
+SECRET_KEY=replace-this-secret-key
+ALLOWED_HOSTS=localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://localhost,http://127.0.0.1
+
+DB_ENGINE=django.db.backends.mysql
+DB_NAME=udkpb
+DB_USER=udkpb_user
+DB_PASSWORD=udkpb_password
+DB_HOST=mysql
+DB_PORT=3306
+DB_ROOT_PASSWORD=rootpassword
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/1
+
+WEB_PORT=8000
+DB_PORT_HOST=3308
+REDIS_PORT_HOST=6381
+FLOWER_PORT=5555
+NGINX_HTTP_PORT=80
+NGINX_HTTPS_PORT=443
+
+FLOWER_USER=admin
+FLOWER_PASSWORD=admin
 ```
 
-### Bước 2: Build Docker Images
+## 4. Chay Docker (PROD compose)
 
-```bash
-# Build tất cả services
-docker-compose build
-
-# Hoặc build từng service riêng
-docker-compose build web
-docker-compose build celery-worker
-```
-
-### Bước 3: Khởi Động Hệ Thống
-
-**Cấu hình cơ bản (Web + Celery + DB + Redis + Nginx):**
-```bash
-docker-compose up -d
-```
-
-**Với monitoring (thêm Flower):**
-```bash
-docker-compose --profile monitoring up -d
-```
-
-**Với scheduler (thêm Celery Beat):**
-```bash
-docker-compose --profile beat up -d
-```
-
-**Scale thêm Celery worker:**
-```bash
-docker-compose --profile scale up -d
-```
-
-**Full production (tất cả services):**
-```bash
-docker-compose --profile monitoring --profile beat --profile scale up -d
-```
-
-### Bước 4: Kiểm Tra Hệ Thống
+Chay tu thu muc goc du an (`ung_dung_kiem_phieu_bau`):
 
 ```bash
-# Xem logs tất cả services
-docker-compose logs -f
-
-# Xem logs từng service
-docker-compose logs -f web
-docker-compose logs -f celery-worker
-docker-compose logs -f mysql
-
-# Kiểm tra trạng thái services
-docker-compose ps
-
-# Kiểm tra health check
-docker-compose ps | grep healthy
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
-### Bước 5: Truy Cập Ứng Dụng
-
-- **Web Application**: http://localhost hoặc http://yourdomain.com
-- **Admin Panel**: http://localhost/admin
-  - Username: `admin`
-  - Password: `admin123` (đổi ngay sau lần đầu đăng nhập!)
-- **Flower Monitoring**: http://localhost:5555 (nếu bật profile monitoring)
-  - Username: `admin`
-  - Password: `admin123`
-
-## 🔧 Quản Lý & Vận Hành
-
-### Migrations
+## 5. Kiem tra container
 
 ```bash
-# Chạy migrations
-docker-compose exec web python manage.py migrate
-
-# Tạo migrations mới
-docker-compose exec web python manage.py makemigrations
+docker compose -f docker/docker-compose.yml ps
 ```
 
-### Tạo Superuser
+Neu can xem log:
 
 ```bash
-docker-compose exec web python manage.py createsuperuser
+docker compose -f docker/docker-compose.yml logs -f web
+docker compose -f docker/docker-compose.yml logs -f celery-worker
 ```
 
-### Collect Static Files
+## 6. Truy cap web
+
+- Trang web: `http://localhost`
+- Admin: `http://localhost/admin/login/`
+- Truy cap truc tiep Django: `http://localhost:8000`
+
+## 7. Dung he thong
 
 ```bash
-docker-compose exec web python manage.py collectstatic --noinput
+docker compose -f docker/docker-compose.yml down
 ```
 
-### Backup Database
+## 8. Tuy chon: Chay DEV compose
 
 ```bash
-# Backup
-docker-compose exec mysql mysqldump -u root -p${DB_ROOT_PASSWORD} udkpb > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Restore
-docker-compose exec -T mysql mysql -u root -p${DB_ROOT_PASSWORD} udkpb < backup_20260112_143000.sql
+docker compose -f docker/docker-compose.dev.yml up -d --build
+docker compose -f docker/docker-compose.dev.yml ps
+docker compose -f docker/docker-compose.dev.yml down
 ```
 
-### Restart Services
+Mac dinh DEV map port:
+
+- MySQL: `3307`
+- Redis: `6380`
+- Web: `8001`
+
+## 9. Loi thuong gap
+
+Neu gap loi bind port (vi du 3306/6379 da bi app khac chiem), doi host port trong `docker/.env.docker`:
+
+- `DB_PORT_HOST=3308` (hoac so khac)
+- `REDIS_PORT_HOST=6381` (hoac so khac)
+
+Sau do chay lai:
 
 ```bash
-# Restart tất cả
-docker-compose restart
-
-# Restart từng service
-docker-compose restart web
-docker-compose restart celery-worker
-docker-compose restart nginx
+docker compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
-### Stop & Remove
-
-```bash
-# Stop services
-docker-compose stop
-
-# Stop và remove containers
-docker-compose down
-
-# Remove containers + volumes (CẢNH BÁO: Xóa data)
-docker-compose down -v
-```
-
-### Xem Logs Real-time
-
-```bash
-# Tất cả services
-docker-compose logs -f
-
-# Chỉ web
-docker-compose logs -f web
-
-# Chỉ celery worker
-docker-compose logs -f celery-worker
-
-# 100 dòng cuối
-docker-compose logs --tail=100 web
-```
-
-### Scale Celery Workers
-
-```bash
-# Scale lên 3 workers
-docker-compose up -d --scale celery-worker=3
-
-# Hoặc dùng worker-2 với profile
-docker-compose --profile scale up -d
-```
-
-## 🔐 Bảo Mật Production
-
-### 1. SSL/TLS Certificate (HTTPS)
-
-```bash
-# Sử dụng Let's Encrypt
-sudo apt-get install certbot
-sudo certbot certonly --standalone -d yourdomain.com
-
-# Copy certificates
-sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem docker/ssl/cert.pem
-sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem docker/ssl/key.pem
-
-# Uncomment SSL config trong nginx-site.conf
-```
-
-### 2. Đổi Passwords Mặc Định
-
-```bash
-# Django admin password
-docker-compose exec web python manage.py changepassword admin
-
-# MySQL root password
-docker-compose exec mysql mysql -u root -p
-> ALTER USER 'root'@'%' IDENTIFIED BY 'new_strong_password';
-
-# Flower password (trong .env.docker)
-FLOWER_PASSWORD=your-new-password
-```
-
-### 3. Firewall Rules
-
-```bash
-# Chỉ mở port 80, 443
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-
-# Không mở port 3306, 6379, 8000 ra ngoài
-```
-
-## 📊 Monitoring
-
-### Flower (Celery Tasks)
-- URL: http://localhost:5555
-- Xem real-time tasks, workers, queues
-- Monitor memory, CPU usage
-
-### Docker Stats
-
-```bash
-# Real-time resource usage
-docker stats
-
-# Specific container
-docker stats udkpb_celery_worker
-```
-
-### Logs Analysis
-
-```bash
-# Tìm errors
-docker-compose logs web | grep ERROR
-
-# Tìm slow queries
-docker-compose logs web | grep "Slow query"
-```
-
-## 🐛 Troubleshooting
-
-### 1. Container không start
-
-```bash
-# Xem logs
-docker-compose logs web
-
-# Xem chi tiết
-docker-compose ps
-docker inspect udkpb_web
-```
-
-### 2. Database connection error
-
-```bash
-# Kiểm tra MySQL
-docker-compose exec mysql mysql -u root -p -e "SHOW DATABASES;"
-
-# Kiểm tra network
-docker-compose exec web ping mysql
-```
-
-### 3. Celery worker không nhận tasks
-
-```bash
-# Kiểm tra Redis
-docker-compose exec redis redis-cli ping
-
-# Kiểm tra Celery
-docker-compose exec celery-worker celery -A kiem_phieu_bau inspect ping
-```
-
-### 4. Static files không load
-
-```bash
-# Collect lại static
-docker-compose exec web python manage.py collectstatic --noinput
-
-# Restart nginx
-docker-compose restart nginx
-```
-
-### 5. Permission errors
-
-```bash
-# Fix permissions
-docker-compose exec web chown -R appuser:appuser /app/kiem_phieu_bau/media
-docker-compose exec web chmod -R 755 /app/kiem_phieu_bau/media
-```
-
-## 🔄 Update & Deploy
-
-```bash
-# 1. Pull code mới
-git pull origin main
-
-# 2. Rebuild images
-docker-compose build
-
-# 3. Stop old containers
-docker-compose down
-
-# 4. Start new containers
-docker-compose up -d
-
-# 5. Run migrations
-docker-compose exec web python manage.py migrate
-
-# 6. Collect static
-docker-compose exec web python manage.py collectstatic --noinput
-```
-
-## 📈 Performance Tuning
-
-### Tăng số Celery Workers
-
-```bash
-# Trong docker-compose.yml, sửa concurrency
-command: >
-  celery -A kiem_phieu_bau worker
-  --pool=gevent
-  --concurrency=20  # Tăng từ 10 lên 20
-```
-
-### Tăng Gunicorn Workers
-
-```bash
-# Trong Dockerfile hoặc docker-compose.yml
-command: ["gunicorn", ..., "--workers", "8"]  # Tăng từ 4 lên 8
-```
-
-### Redis Memory Limit
-
-```bash
-# Trong docker-compose.yml
-command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru
-```
-
-## 📝 Notes
-
-- **Volumes**: Data được lưu trong Docker volumes, không bị mất khi restart
-- **Networks**: Tất cả services trong cùng network `udkpb_network`
-- **Health Checks**: Tự động restart nếu service unhealthy
-- **Auto Restart**: `restart: unless-stopped` cho tất cả services
-- **Logs**: Xem logs để debug, không dùng DEBUG=True trên production
-
-## 🆘 Support
-
-- Email: domanhnghiaforwork@gmail.com
-- Documentation: ../README.md
-- Issues: GitHub Issues
-
----
-
-**Lưu ý Quan Trọng**:
-1. Đổi tất cả passwords mặc định
-2. Dùng HTTPS (SSL/TLS) cho production
-3. Backup database thường xuyên
-4. Monitor resource usage (CPU, RAM, Disk)
-5. Giới hạn upload file size nếu cần
