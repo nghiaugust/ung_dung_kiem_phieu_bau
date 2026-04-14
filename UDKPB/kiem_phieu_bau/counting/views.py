@@ -17,6 +17,11 @@ from typing import List, Dict, Tuple
 import json
 
 
+AI_TROCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/trocr/recognize/"
+AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
+AI_HEALTH_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/health/"
+
+
 @require_http_methods(["POST"])
 def save_configuration(request, poll_id):
 	"""
@@ -210,7 +215,7 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	api_url = "http://localhost:8080/api/trocr/recognize/"
+	api_url = AI_TROCR_API_URL
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -224,7 +229,7 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 		
 		# Giảm timeout xuống 300s (5 phút) - tránh worker bị block quá lâu
 		# Nếu AI server xử lý chậm hơn 5 phút thì có vấn đề nghiêm trọng cần xử lý
-		response = requests.post(api_url, files=files, timeout=300)
+		response = requests.post(api_url, files=files, timeout=settings.AI_SERVER_REQUEST_TIMEOUT)
 		response.raise_for_status()
 		result = response.json()
 		
@@ -258,7 +263,7 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		Dict chứa kết quả từ API
 	"""
 	import json
-	api_url = "http://localhost:8080/api/yolo/detect/"
+	api_url = AI_YOLO_API_URL
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -279,7 +284,7 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		}
 		
 		# Giảm timeout xuống 300s (5 phút) - tránh worker bị block quá lâu
-		response = requests.post(api_url, files=files, data=data, timeout=300)
+		response = requests.post(api_url, files=files, data=data, timeout=settings.AI_SERVER_REQUEST_TIMEOUT)
 		response.raise_for_status()
 		result = response.json()
 		
@@ -334,7 +339,7 @@ def counting_form_view(request, poll_id):
 	trocr_status = False
 	yolo_status = False
 	try:
-		health_response = requests.get('http://localhost:8080/api/health/', timeout=0.5)
+		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
 		if health_response.status_code == 200:
 			health_data = health_response.json()
 			trocr_status = health_data.get('services', {}).get('trocr', False)

@@ -35,6 +35,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzbar0 \
     # PDF processing
     poppler-utils \
+    # LaTeX toolchain for ballot form generation
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-pictures \
+    texlive-lang-other \
     # Network utilities for health checks
     netcat-openbsd \
     curl \

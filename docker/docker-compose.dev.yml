@@ -48,6 +48,7 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8080}
       ALLOWED_HOSTS: "*"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
@@ -59,6 +60,30 @@ services:
       - mysql
       - redis
     command: python manage.py runserver 0.0.0.0:8000
+
+  # AI Server
+  ai-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    container_name: udkpb_ai_server_dev
+    restart: unless-stopped
+    volumes:
+      - ../UDKPB/ai_core:/app/ai_core
+      - media_dev_files:/app/kiem_phieu_bau/media
+    ports:
+      - "${DEV_AI_PORT:-8080}:8080"
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://localhost:8080/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    command: python /app/ai_core/ai_server/run_waitress_ai.py
 
   # Celery Worker
   celery-worker:
@@ -81,6 +106,7 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8080}
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - ../UDKPB/ai_core:/app/ai_core
@@ -88,6 +114,7 @@ services:
     depends_on:
       - mysql
       - redis
+      - ai-server
     command: celery -A kiem_phieu_bau worker --pool=solo -l info
 
 volumes:
