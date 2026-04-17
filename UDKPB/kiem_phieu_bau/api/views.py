@@ -1224,11 +1224,16 @@ def api_upload_ballots_batch(request, poll_id):
                     continue
                 
                 # Đọc QR code nhanh từ file gốc để lấy ballot_id
-                # Lưu file tạm để đọc QR
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_input:
+                # Lưu file tạm vào MEDIA_ROOT dùng chung giữa web và celery-worker.
+                # Không dùng /tmp vì đó là filesystem riêng của từng container.
+                shared_temp_dir = os.path.join(settings.MEDIA_ROOT, 'tmp_uploads')
+                os.makedirs(shared_temp_dir, exist_ok=True)
+                temp_filename = f"upload_{uuid.uuid4().hex}.{file_ext}"
+                temp_file_path = os.path.join(shared_temp_dir, temp_filename)
+
+                with open(temp_file_path, 'wb') as temp_input:
                     for chunk in uploaded_file.chunks():
                         temp_input.write(chunk)
-                    temp_file_path = temp_input.name
                 
                 # Đọc QR code từ file gốc (không cần làm phẳng)
                 qr_ballot_id = None

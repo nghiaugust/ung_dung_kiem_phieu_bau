@@ -108,6 +108,8 @@ services:
       retries: 10
       start_period: 120s
     command: python /app/ai_core/ai_server/run_waitress_ai.py
+    profiles:
+      - ai  # Chỉ chạy khi cần AI: docker compose --profile ai up -d
 
   # ================================
   # Celery Worker (AI Processing)
@@ -134,8 +136,6 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      ai-server:
         condition: service_healthy
     command: >
       celery -A kiem_phieu_bau worker
@@ -172,8 +172,6 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      ai-server:
         condition: service_healthy
     command: >
       celery -A kiem_phieu_bau worker

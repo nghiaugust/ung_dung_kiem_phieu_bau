@@ -732,6 +732,11 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
                 'error': f'Thiếu markers: {", ".join(missing_markers)}',
                 'markers_info': markers_info
             }
+
+        # Chuẩn hóa lại thứ tự marker đáy theo trục X để tránh swap BR/BL
+        # (có thể xảy ra khi 3 marker dùng chung ID 17 và kết quả detect không ổn định)
+        if bottom_left['center_x'] > bottom_right['center_x']:
+            bottom_left, bottom_right = bottom_right, bottom_left
         
         # Tính khoảng cách ngang (từ biên phải của marker trái đến biên trái của marker phải)
         # Lấy trung bình của khoảng cách trên và dưới
@@ -746,6 +751,23 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
         vertical_right_px = bottom_right['top'] - top_right['bottom']
         vertical_px = (vertical_left_px + vertical_right_px) / 2
         vertical_cm = vertical_px / pixels_per_cm
+
+        # Khoảng cách marker phải dương; nếu âm hoặc bằng 0 thì marker đã bị phân loại sai
+        if horizontal_top_px <= 0 or horizontal_bottom_px <= 0 or vertical_left_px <= 0 or vertical_right_px <= 0:
+            return {
+                'success': False,
+                'error': (
+                    'Khoảng cách marker không hợp lệ '
+                    f'(H_top={horizontal_top_px:.2f}, H_bottom={horizontal_bottom_px:.2f}, '
+                    f'V_left={vertical_left_px:.2f}, V_right={vertical_right_px:.2f})'
+                ),
+                'markers_found': {
+                    'top_left': top_left,
+                    'top_right': top_right,
+                    'bottom_left': bottom_left,
+                    'bottom_right': bottom_right
+                }
+            }
         
         return {
             'success': True,

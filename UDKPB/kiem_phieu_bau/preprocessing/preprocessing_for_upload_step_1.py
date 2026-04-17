@@ -19,7 +19,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from ballot.doc_qr import (
 	SHARED_ARUCO_ID,
-	classify_shared_markers_from_corners,
 	detect_qr_codes,
 	detect_shared_aruco_marker_corners,
 )
@@ -79,6 +78,104 @@ def phat_hien_qr_code(anh_mau, anh_xam=None):
 	return None, None
 
 
+def _chon_goc_gan_tam_nhat(marker_corners, tam_phieu):
+	"""Chọn corner của marker gần tâm phiếu nhất (góc phía trong)."""
+	corners = np.asarray(marker_corners, dtype=np.float32)
+	tam = np.asarray(tam_phieu, dtype=np.float32)
+	distances = np.linalg.norm(corners - tam, axis=1)
+	return corners[int(np.argmin(distances))]
+
+
+def _phan_loai_3_marker_theo_vi_tri(shared_markers_corners, qr_ref_point):
+	"""
+	Phân loại 3 marker dùng chung ID thành top-right/bottom-right/bottom-left.
+	Ưu tiên marker lớn để giảm nhiễu detect sai.
+	"""
+	if len(shared_markers_corners) < 3:
+		return None
+
+	qr_x, qr_y = float(qr_ref_point[0]), float(qr_ref_point[1])
+	marker_meta_all = []
+	for corners in shared_markers_corners:
+		arr = np.asarray(corners, dtype=np.float32)
+		marker_meta_all.append({
+			'corners': arr,
+			'center_x': float(np.mean(arr[:, 0])),
+			'center_y': float(np.mean(arr[:, 1])),
+			'area': abs(float(cv2.contourArea(arr)))
+		})
+
+	max_area = max(m['area'] for m in marker_meta_all)
+	area_threshold = max_area * 0.35
+	marker_meta = [m for m in marker_meta_all if m['area'] >= area_threshold]
+
+	# Nếu lọc theo diện tích vẫn thiếu marker thì lấy 3 marker lớn nhất.
+	if len(marker_meta) < 3:
+		marker_meta = sorted(marker_meta_all, key=lambda m: m['area'], reverse=True)[:3]
+
+	right_side = [m for m in marker_meta if m['center_x'] > qr_x]
+	if len(right_side) >= 2:
+		top_right = min(right_side, key=lambda m: m['center_y'])
+		remaining_for_br = [m for m in marker_meta if m is not top_right]
+		bottom_right = max(remaining_for_br, key=lambda m: (m['center_x'], m['center_y']))
+	else:
+		# Fallback khi detect thiếu marker ở bên phải: chọn theo score hình học.
+		top_right = max(marker_meta, key=lambda m: (m['center_x'] - 0.6 * abs(m['center_y'] - qr_y)))
+		remaining_for_br = [m for m in marker_meta if m is not top_right]
+		if len(remaining_for_br) < 2:
+			return None
+		bottom_right = max(remaining_for_br, key=lambda m: (m['center_x'] + m['center_y']))
+
+	remaining = [m for m in marker_meta if m is not top_right and m is not bottom_right]
+	if not remaining:
+		return None
+
+	below_qr = [m for m in remaining if m['center_y'] > qr_y]
+	if below_qr:
+		bottom_left = min(below_qr, key=lambda m: m['center_x'])
+	else:
+		bottom_left = max(remaining, key=lambda m: m['center_y'])
+
+	return {
+		'top_right': top_right,
+		'bottom_right': bottom_right,
+		'bottom_left': bottom_left,
+	}
+
+
+def _validate_src_points(src_pts, image_shape):
+	"""Kiểm tra 4 điểm phối cảnh để tránh warp sai gây ảnh đen/bóp méo."""
+	pts = np.asarray(src_pts, dtype=np.float32)
+	if pts.shape != (4, 2):
+		return False, 'src_pts phải có shape (4,2)'
+
+	if not np.isfinite(pts).all():
+		return False, 'src_pts chứa giá trị không hợp lệ (NaN/Inf)'
+
+	h, w = image_shape[:2]
+	img_area = float(w * h)
+	quad_area = abs(float(cv2.contourArea(pts)))
+	if quad_area < img_area * 0.01:
+		return False, f'diện tích tứ giác quá nhỏ ({quad_area:.1f}px)'
+
+	bbox_w = float(np.max(pts[:, 0]) - np.min(pts[:, 0]))
+	bbox_h = float(np.max(pts[:, 1]) - np.min(pts[:, 1]))
+	if bbox_w < w * 0.15 or bbox_h < h * 0.15:
+		return False, f'bbox điểm tham chiếu quá nhỏ ({bbox_w:.1f}x{bbox_h:.1f})'
+
+	if not cv2.isContourConvex(pts.astype(np.float32).reshape(-1, 1, 2)):
+		return False, '4 điểm không tạo thành tứ giác lồi'
+
+	edge_lengths = [
+		float(np.linalg.norm(pts[i] - pts[(i + 1) % 4]))
+		for i in range(4)
+	]
+	if min(edge_lengths) < 20.0:
+		return False, f'cạnh quá ngắn ({min(edge_lengths):.1f}px)'
+
+	return True, None
+
+
 def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, chieu_doc_cm, dpi=300):
 	"""
 	Làm phẳng ảnh phiếu bầu dựa trên ArUco markers (yêu cầu đủ 4 markers)
@@ -136,6 +233,8 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	
 	# Dictionary lưu góc markers theo id
 	marker_corners = {}
+	qr_corners_full = None
+	qr_ref_point = None
 	
 	# Biến lưu data QR code
 	qr_data_phat_hien = None
@@ -157,7 +256,9 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 			zeroZone=(-1, -1),
 			criteria=criteria
 		)
-		qr_corners = corners_refined.reshape(4, 2)
+		qr_corners = corners_refined.reshape(4, 2).astype(np.float32)
+		qr_corners_full = qr_corners
+		qr_ref_point = np.mean(qr_corners_full, axis=0)
 		br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
 		marker_corners[0] = qr_corners[br_idx]
 		qr_data_phat_hien = qr_data
@@ -181,7 +282,9 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 				zeroZone=(-1, -1),
 				criteria=criteria
 			)
-			qr_corners = corners_refined.reshape(4, 2) / 3.0
+			qr_corners = (corners_refined.reshape(4, 2) / 3.0).astype(np.float32)
+			qr_corners_full = qr_corners
+			qr_ref_point = np.mean(qr_corners_full, axis=0)
 			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
 			marker_corners[0] = qr_corners[br_idx]
 			qr_data_phat_hien = qr_data
@@ -205,7 +308,9 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 				zeroZone=(-1, -1),
 				criteria=criteria
 			)
-			qr_corners = corners_refined.reshape(4, 2) / 5.0
+			qr_corners = (corners_refined.reshape(4, 2) / 5.0).astype(np.float32)
+			qr_corners_full = qr_corners
+			qr_ref_point = np.mean(qr_corners_full, axis=0)
 			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
 			marker_corners[0] = qr_corners[br_idx]
 			qr_data_phat_hien = qr_data
@@ -222,13 +327,24 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 		refine_subpixel=True,
 	)
 
-	if 0 in marker_corners and len(shared_markers_corners) >= 3:
-		phan_loai = classify_shared_markers_from_corners(shared_markers_corners, marker_corners[0])
+	if qr_ref_point is not None and len(shared_markers_corners) >= 3:
+		phan_loai = _phan_loai_3_marker_theo_vi_tri(shared_markers_corners, qr_ref_point)
 		if phan_loai:
-			marker_corners[1] = phan_loai[1]
-			marker_corners[2] = phan_loai[2]
-			marker_corners[3] = phan_loai[3]
-			print(f"[STEP1] Đã phân loại 3 marker ID {SHARED_ARUCO_ID} theo vị trí tương đối với QR")
+			marker_centers = np.array([
+				qr_ref_point,
+				[phan_loai['top_right']['center_x'], phan_loai['top_right']['center_y']],
+				[phan_loai['bottom_right']['center_x'], phan_loai['bottom_right']['center_y']],
+				[phan_loai['bottom_left']['center_x'], phan_loai['bottom_left']['center_y']],
+			], dtype=np.float32)
+			tam_phieu = np.mean(marker_centers, axis=0)
+
+			if qr_corners_full is not None:
+				marker_corners[0] = _chon_goc_gan_tam_nhat(qr_corners_full, tam_phieu)
+			marker_corners[1] = _chon_goc_gan_tam_nhat(phan_loai['top_right']['corners'], tam_phieu)
+			marker_corners[2] = _chon_goc_gan_tam_nhat(phan_loai['bottom_right']['corners'], tam_phieu)
+			marker_corners[3] = _chon_goc_gan_tam_nhat(phan_loai['bottom_left']['corners'], tam_phieu)
+
+			print(f"[STEP1] Đã phân loại marker và chọn góc phía trong theo tâm phiếu")
 	
 	# Kiểm tra đủ 4 điểm (1 QR + 3 markers)
 	if len(marker_corners) < 4:
@@ -245,6 +361,13 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 		marker_corners[2],  # Bottom-Right
 		marker_corners[3]   # Bottom-Left
 	], dtype="float32")
+
+	is_valid_src, src_error = _validate_src_points(src_pts, img.shape)
+	if not is_valid_src:
+		raise ValueError(
+			f"Điểm tham chiếu perspective không hợp lệ: {src_error}. "
+			f"src_pts={src_pts.tolist()}"
+		)
 	
 	# Thêm padding cả 4 phía để không cắt vào nội dung
 	padding = 50

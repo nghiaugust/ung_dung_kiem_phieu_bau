@@ -2,8 +2,11 @@
 
 ## DEV
 
-Chay:
+Chay mac dinh (khong AI server):
 docker compose -f docker/docker-compose.dev.yml up -d --build
+
+Chay kem AI server:
+docker compose -f docker/docker-compose.dev.yml --profile ai up -d --build
 
 Chi chay AI server (DEV):
 docker compose -f docker/docker-compose.dev.yml up -d --build ai-server
@@ -13,8 +16,11 @@ docker compose -f docker/docker-compose.dev.yml down
 
 ## PROD
 
-Chay:
+Chay mac dinh (khong AI server):
 docker compose -f docker/docker-compose.yml up -d --build
+
+Chay kem AI server:
+docker compose -f docker/docker-compose.yml --profile ai up -d --build
 
 Chi chay AI server (PROD):
 docker compose -f docker/docker-compose.yml up -d --build ai-server

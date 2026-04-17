@@ -79,7 +79,7 @@ def gpu_resize(img, dsize, interpolation=cv2.INTER_CUBIC):
     return cv2.resize(img, dsize, interpolation=interpolation)
 
 
-def gpu_warp_perspective(img, M, dsize):
+def gpu_warp_perspective(img, M, dsize, border_mode=cv2.BORDER_CONSTANT, border_value=(255, 255, 255)):
     """
     Warp perspective sử dụng GPU nếu có, fallback CPU nếu không
     
@@ -87,6 +87,8 @@ def gpu_warp_perspective(img, M, dsize):
         img: numpy array - Ảnh đầu vào
         M: numpy array - Ma trận perspective transform (3x3)
         dsize: tuple (width, height) - Kích thước đầu ra
+        border_mode: OpenCV border mode
+        border_value: Màu viền cho vùng ngoài ảnh gốc
         
     Returns:
         numpy array: Ảnh đã warp
@@ -98,7 +100,13 @@ def gpu_warp_perspective(img, M, dsize):
             gpu_img.upload(img)
             
             # Warp perspective trên GPU
-            gpu_warped = cv2.cuda.warpPerspective(gpu_img, M, dsize)
+            gpu_warped = cv2.cuda.warpPerspective(
+                gpu_img,
+                M,
+                dsize,
+                borderMode=border_mode,
+                borderValue=border_value,
+            )
             
             # Download về CPU
             result = gpu_warped.download()
@@ -111,7 +119,13 @@ def gpu_warp_perspective(img, M, dsize):
             print(f"[GPU WARNING] WarpPerspective failed, fallback to CPU: {e}")
     
     # CPU fallback
-    return cv2.warpPerspective(img, M, dsize)
+    return cv2.warpPerspective(
+        img,
+        M,
+        dsize,
+        borderMode=border_mode,
+        borderValue=border_value,
+    )
 
 
 def gpu_cvt_color(img, code):

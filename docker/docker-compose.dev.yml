@@ -84,6 +84,8 @@ services:
       retries: 10
       start_period: 120s
     command: python /app/ai_core/ai_server/run_waitress_ai.py
+    profiles:
+      - ai  # Chỉ chạy khi cần AI: docker compose -f docker/docker-compose.dev.yml --profile ai up -d
 
   # Celery Worker
   celery-worker:
@@ -114,7 +116,6 @@ services:
     depends_on:
       - mysql
       - redis
-      - ai-server
     command: celery -A kiem_phieu_bau worker --pool=solo -l info
 
 volumes:
