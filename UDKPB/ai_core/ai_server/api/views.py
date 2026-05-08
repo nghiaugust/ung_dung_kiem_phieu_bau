@@ -193,12 +193,12 @@ def yolo_detect(request):
         }, status=500)
 
 
-@require_http_methods(["GET"])
+@require_http_methods(["GET", "HEAD"])
 def health_check(request):
     """
     Health check endpoint
     
-    GET /api/health/
+    GET/HEAD /api/health/
     """
     return JsonResponse({
         'status': 'healthy',

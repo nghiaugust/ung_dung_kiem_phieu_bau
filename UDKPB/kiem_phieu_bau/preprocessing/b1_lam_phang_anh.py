@@ -12,7 +12,6 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from ballot.doc_qr import (
     SHARED_ARUCO_ID,
-    classify_shared_markers_from_corners,
     detect_qr_codes,
     detect_shared_aruco_marker_corners,
 )
@@ -102,7 +101,9 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
             zeroZone=(-1, -1),
             criteria=criteria
         )
-        qr_corners = corners_refined.reshape(4, 2)
+        qr_corners = corners_refined.reshape(4, 2).astype(np.float32)
+        qr_corners_full = qr_corners
+        qr_ref_point = np.mean(qr_corners_full, axis=0)
         br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
         marker_corners[0] = qr_corners[br_idx]
         detected_qr_data = qr_data
@@ -125,7 +126,9 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
                 zeroZone=(-1, -1),
                 criteria=criteria
             )
-            qr_corners = corners_refined.reshape(4, 2) / 3.0
+            qr_corners = (corners_refined.reshape(4, 2) / 3.0).astype(np.float32)
+            qr_corners_full = qr_corners
+            qr_ref_point = np.mean(qr_corners_full, axis=0)
             br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
             marker_corners[0] = qr_corners[br_idx]
             detected_qr_data = qr_data
@@ -148,7 +151,9 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
                 zeroZone=(-1, -1),
                 criteria=criteria
             )
-            qr_corners = corners_refined.reshape(4, 2) / 5.0
+            qr_corners = (corners_refined.reshape(4, 2) / 5.0).astype(np.float32)
+            qr_corners_full = qr_corners
+            qr_ref_point = np.mean(qr_corners_full, axis=0)
             br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
             marker_corners[0] = qr_corners[br_idx]
             detected_qr_data = qr_data
@@ -167,8 +172,8 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
         refine_subpixel=True,
     )
 
-    if 0 in marker_corners and len(shared_markers_corners) >= 3:
-        phan_loai = classify_shared_markers_from_corners(shared_markers_corners, marker_corners[0])
+    if qr_ref_point is not None and len(shared_markers_corners) >= 3:
+        phan_loai = _phan_loai_3_marker_theo_vi_tri(shared_markers_corners, qr_ref_point)
         if phan_loai:
             marker_corners[1] = phan_loai[1]
             marker_corners[2] = phan_loai[2]

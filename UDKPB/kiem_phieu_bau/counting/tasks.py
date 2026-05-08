@@ -18,6 +18,10 @@ from counting.models import AIModelResult
 from counting import config_model
 
 
+AI_TROCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/trocr/recognize/"
+AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
+
+
 def prepare_batch_requests(ballot, ai_result, all_cell_models):
     """
     Chuẩn bị và gom các ảnh theo model thành batch để gửi request
@@ -478,9 +482,9 @@ def counting_queue(self, ballot_id):
             if trocr_batch['image_paths']:
                 print(f"[COUNTING QUEUE] Gửi TrOCR batch với {len(trocr_batch['image_paths'])} ảnh")
                 trocr_response = send_batch_request(
-                    api_url="http://localhost:8080/api/trocr/recognize/",
+                    api_url=AI_TROCR_API_URL,
                     image_paths=trocr_batch['image_paths'],
-                    timeout=300
+                    timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
                 
                 # Kiểm tra response
@@ -499,10 +503,10 @@ def counting_queue(self, ballot_id):
                     image_paths_map[filename] = path
                 
                 yolo_response = send_batch_request(
-                    api_url="http://localhost:8080/api/yolo/detect/",
+                    api_url=AI_YOLO_API_URL,
                     image_paths=yolo_batch['image_paths'],
                     extra_data={'image_paths': json.dumps(image_paths_map)},
-                    timeout=300
+                    timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
                 
                 # Kiểm tra response

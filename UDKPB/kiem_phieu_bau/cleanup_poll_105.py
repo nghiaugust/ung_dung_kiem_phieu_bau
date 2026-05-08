@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 """
-Script để xóa dữ liệu cho poll 105:
-- Xóa tất cả ballot_image của các ballot thuộc poll 105
+Script để xóa dữ liệu cho một poll:
+- Mặc định tự chọn poll hiện tại (poll có dữ liệu mới nhất)
+- Có thể chỉ định poll bằng --poll-id
+- Xóa tất cả ballot_image của các ballot thuộc poll
 - Reset counting_status = pending, checking_status = NEW, input_by = null, process_status = no_upload
-- Xóa tất cả ballot_cell liên quan đến poll 105
-- Xóa tất cả preprocessed_ballot liên quan đến poll 105
-- Xóa tất cả ai_model_result liên quan đến poll 105
+- Xóa tất cả ballot_cell liên quan đến poll
+- Xóa tất cả preprocessed_ballot liên quan đến poll
+- Xóa tất cả ai_model_result liên quan đến poll
 """
 
 import os
 import sys
+import argparse
 import django
 from django.conf import settings
 
@@ -21,26 +24,54 @@ django.setup()
 from ballot.models import Ballot, BallotSelection
 from preprocessing.models import PreprocessedBallot, BallotCell
 from counting.models import AIModelResult
+from poll.models import Poll
 from django.db import transaction
 
 
-def cleanup_poll_105():
+def get_current_poll_id():
+    """Lấy poll hiện tại dựa trên dữ liệu ballot gần nhất trong hệ thống."""
+    latest_with_image = (
+        Ballot.objects
+        .filter(poll_id__isnull=False)
+        .exclude(ballot_image__isnull=True)
+        .exclude(ballot_image='')
+        .order_by('-timestamp')
+        .first()
+    )
+    if latest_with_image:
+        return latest_with_image.poll_id
+
+    latest_with_ballot = (
+        Ballot.objects
+        .filter(poll_id__isnull=False)
+        .order_by('-timestamp')
+        .first()
+    )
+    if latest_with_ballot:
+        return latest_with_ballot.poll_id
+
+    latest_poll = Poll.objects.order_by('-poll_id').first()
+    if latest_poll:
+        return latest_poll.poll_id
+
+    return None
+
+
+def cleanup_poll(poll_id):
     """
-    Xóa tất cả dữ liệu liên quan đến poll 105:
+    Xóa tất cả dữ liệu liên quan đến một poll:
     1. Xóa ballot_image của tất cả ballots
     2. Reset counting_status = pending, checking_status = NEW, input_by = null, process_status = no_upload
     3. Xóa tất cả ballot_cell
     4. Xóa tất cả preprocessed_ballot
     5. Xóa tất cả ai_model_result
     """
-    
-    poll_id = 103
-    
+
     print(f"Bắt đầu cleanup dữ liệu cho Poll {poll_id}")
     
     try:
         with transaction.atomic():
-            # Lấy tất cả ballot của poll 105
+            # Lấy tất cả ballot của poll được chọn
             ballots = Ballot.objects.filter(poll_id=poll_id)
             total_ballots = ballots.count()
             
@@ -196,9 +227,9 @@ def cleanup_poll_105():
         raise
 
 
-def confirm_action():
+def confirm_action(poll_id):
     """Xác nhận trước khi thực hiện"""
-    print("⚠️  CẢNH BÁO: Script này sẽ xóa VĨNH VIỄN dữ liệu sau cho Poll 105:")
+    print(f"⚠️  CẢNH BÁO: Script này sẽ xóa VĨNH VIỄN dữ liệu sau cho Poll {poll_id}:")
     print("   - Tất cả ballot_image (file ảnh gốc)")
     print("   - Reset counting_status=pending, checking_status=NEW, input_by=null, process_status=no_upload")
     print("   - Tất cả ballot_cell (ô đã cắt)")
@@ -217,10 +248,20 @@ def confirm_action():
 
 
 if __name__ == "__main__":
-    print("🧹 Cleanup Script for Poll 105")
+    parser = argparse.ArgumentParser(description="Cleanup dữ liệu cho một poll")
+    parser.add_argument("--poll-id", type=int, default=None, help="Poll ID cần cleanup. Nếu bỏ trống sẽ tự lấy poll hiện tại")
+    args = parser.parse_args()
+
+    poll_id = args.poll_id if args.poll_id is not None else get_current_poll_id()
+
+    if poll_id is None:
+        print("❌ Không tìm thấy poll hiện tại để cleanup (database chưa có dữ liệu poll/ballot).")
+        sys.exit(1)
+
+    print(f"🧹 Cleanup Script for Poll {poll_id}")
     print("=" * 50)
-    
-    if confirm_action():
-        cleanup_poll_105()
+
+    if confirm_action(poll_id):
+        cleanup_poll(poll_id)
     else:
         sys.exit(0)

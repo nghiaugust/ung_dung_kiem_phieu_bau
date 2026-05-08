@@ -19,7 +19,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from ballot.doc_qr import (
 	SHARED_ARUCO_ID,
-	classify_shared_markers_from_corners,
 	detect_qr_codes,
 	detect_shared_aruco_marker_corners,
 )

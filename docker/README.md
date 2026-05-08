@@ -36,8 +36,10 @@ REDIS_HOST=redis
 REDIS_PORT=6379
 CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/1
+AI_SERVER_BASE_URL=http://ai-server:8082
 
 WEB_PORT=8000
+AI_PORT_HOST=8082
 DB_PORT_HOST=3308
 REDIS_PORT_HOST=6381
 FLOWER_PORT=5555
@@ -70,6 +72,13 @@ Neu can xem log:
 ```bash
 docker compose -f docker/docker-compose.yml logs -f web
 docker compose -f docker/docker-compose.yml logs -f celery-worker
+docker compose -f docker/docker-compose.yml logs -f ai-server
+```
+
+Neu chi muon khoi dong rieng AI server:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build ai-server
 ```
 
 ## 6. Truy cap web
@@ -97,6 +106,7 @@ Mac dinh DEV map port:
 - MySQL: `3307`
 - Redis: `6380`
 - Web: `8001`
+- AI Server: `8080`
 
 ## 9. Loi thuong gap
 
@@ -145,4 +155,25 @@ Neu don vi co mirror noi bo, thay bang URL mirror noi bo.
 docker compose -f docker/docker-compose.yml build --no-cache celery-worker
 docker compose -f docker/docker-compose.yml up -d
 ```
+
+## 11. Neu bi loi trung port 8080 khi chay ai-server
+
+Neu gap loi dang:
+
+- ports are not available ... bind ... 0.0.0.0:8080
+
+Thi doi host port cho AI server:
+
+```powershell
+$env:AI_PORT_HOST='8082'
+docker compose -f docker/docker-compose.yml up -d --build ai-server
+```
+
+Hoac dat co dinh trong `docker/.env.docker`:
+
+```env
+AI_PORT_HOST=8082
+```
+
+Khi do mobile app goi AI qua `http://<LAN_IP>:8082`.
 

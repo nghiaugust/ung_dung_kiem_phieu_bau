@@ -58,6 +58,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      AI_SERVER_BASE_URL: ${AI_SERVER_BASE_URL:-http://ai-server:8080}
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - media_files:/app/kiem_phieu_bau/media
@@ -80,6 +82,36 @@ services:
       start_period: 40s
 
   # ================================
+  # AI Server (TrOCR + YOLO API)
+  # ================================
+  ai-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    container_name: udkpb_ai_server
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - ../UDKPB/ai_core:/app/ai_core
+      - media_files:/app/kiem_phieu_bau/media
+    ports:
+      - "${AI_PORT_HOST:-8082}:8080"
+    networks:
+      - udkpb_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://localhost:8080/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    command: python /app/ai_core/ai_server/run_waitress_ai.py
+    profiles:
+      - ai  # Chỉ chạy khi cần AI: docker compose --profile ai up -d
+
+  # ================================
   # Celery Worker (AI Processing)
   # ================================
   celery-worker:
@@ -92,6 +124,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      AI_SERVER_BASE_URL: ${AI_SERVER_BASE_URL:-http://ai-server:8080}
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - media_files:/app/kiem_phieu_bau/media
@@ -126,6 +160,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      AI_SERVER_BASE_URL: ${AI_SERVER_BASE_URL:-http://ai-server:8080}
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - media_files:/app/kiem_phieu_bau/media
