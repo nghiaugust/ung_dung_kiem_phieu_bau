@@ -311,6 +311,48 @@ def create_ballot_selections(ballot, poll, ai_result, config_number):
     return len(selections_to_create)
 
 
+def _has_x_mark(result_data):
+    if isinstance(result_data, dict):
+        label = result_data.get('label', '')
+    else:
+        label = str(result_data) if result_data is not None else ''
+    return 'x_mark' in str(label).lower()
+
+
+def evaluate_ballot_validity(ai_result):
+    """
+    Kiểm tra hợp lệ dựa trên 2 ô đồng ý/không đồng ý mỗi dòng.
+    Hợp lệ khi mỗi dòng có đúng 1 dấu X.
+    """
+    cell_models = ai_result.get_all_cell_models()
+    cell_results = ai_result.get_all_cell_results()
+
+    rows = {}
+    for cell_key, model_name in cell_models.items():
+        if model_name != 'yolo':
+            continue
+        try:
+            row, col = map(int, cell_key.split('_'))
+        except ValueError:
+            continue
+        if row not in rows:
+            rows[row] = {}
+        rows[row][col] = cell_results.get(cell_key, {}).get('result')
+
+    if not rows:
+        return True
+
+    for col_results in rows.values():
+        mark_count = 0
+        for result in col_results.values():
+            if _has_x_mark(result):
+                mark_count += 1
+        if mark_count == 0 or mark_count > 1:
+            return False
+
+    return True
+
+
 @shared_task(bind=True, max_retries=3, name='counting_queue')
 def counting_queue(self, ballot_id):
     """
@@ -517,6 +559,11 @@ def counting_queue(self, ballot_id):
             trocr_response, 
             yolo_response
         )
+
+        # BƯỚC 3.1: Kiểm tra hợp lệ của phiếu dựa trên kết quả YOLO
+        is_valid_by_marks = evaluate_ballot_validity(ai_result)
+        ballot.is_valid = is_valid_by_marks
+        ballot.save(update_fields=['is_valid'])
         
         # Cập nhật trạng thái thành công
         processing_time = time.time() - start_time

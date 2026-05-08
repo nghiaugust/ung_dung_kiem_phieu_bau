@@ -46,6 +46,19 @@
     cursor: not-allowed;
   }
 
+  .validity-btn {
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    min-width: 160px;
+  }
+
+  .validity-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   .main-content {
     position: relative;
     display: flex;
@@ -221,6 +234,15 @@
       <div class="ballot-counter">
         <span id="current-index">{{ current_index }}</span> / {{ total_ballots }}
       </div>
+
+      <button
+        class="btn validity-btn {% if current_ballot.is_valid %}btn-success{% else %}btn-danger{% endif %}"
+        id="validity-btn"
+        onclick="toggleValidity()"
+      >
+        <i class="bi {% if current_ballot.is_valid %}bi-shield-check{% else %}bi-shield-x{% endif %}"></i>
+        <span class="validity-text">{% if current_ballot.is_valid %}Hợp lệ{% else %}Không hợp lệ{% endif %}</span>
+      </button>
       
       <button
         class="btn btn-success approve-btn"
@@ -315,6 +337,7 @@
   
   let hasChanges = false;
   let voteStates = {};
+  let ballotValidity = {{ current_ballot.is_valid|yesno:"true,false" }};
 
   // Khởi tạo trạng thái ban đầu
   ballotResults.forEach((result, index) => {
@@ -425,6 +448,62 @@
       approveBtn.style.display = 'block';
       saveAndApproveBtn.style.display = 'none';
     }
+  }
+
+  function updateValidityButton() {
+    const btn = document.getElementById('validity-btn');
+    if (!btn) return;
+
+    const icon = btn.querySelector('i');
+    const text = btn.querySelector('.validity-text');
+
+    if (ballotValidity) {
+      btn.classList.remove('btn-danger');
+      btn.classList.add('btn-success');
+      if (icon) icon.className = 'bi bi-shield-check';
+      if (text) text.textContent = 'Hợp lệ';
+    } else {
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-danger');
+      if (icon) icon.className = 'bi bi-shield-x';
+      if (text) text.textContent = 'Không hợp lệ';
+    }
+  }
+
+  function toggleValidity() {
+    const btn = document.getElementById('validity-btn');
+    if (!btn) return;
+
+    btn.disabled = true;
+
+    fetch(`/ballot/hau-kiem/${ballotId}/toggle-valid/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: JSON.stringify({ is_valid: !ballotValidity })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        ballotValidity = data.is_valid;
+        updateValidityButton();
+        showAlert(
+          ballotValidity ? 'Đã đánh dấu phiếu hợp lệ.' : 'Đã đánh dấu phiếu không hợp lệ.',
+          'success'
+        );
+      } else {
+        showAlert('Có lỗi xảy ra: ' + (data.message || 'Không cập nhật được trạng thái'), 'danger');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      showAlert('Có lỗi xảy ra khi cập nhật trạng thái!', 'danger');
+    })
+    .finally(() => {
+      btn.disabled = false;
+    });
   }
   
   function saveAndApprove() {

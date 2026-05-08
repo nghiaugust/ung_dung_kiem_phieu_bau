@@ -2425,10 +2425,16 @@ def api_statistics(request):
     
     statistics_data = []
     for poll in polls:
-        # Annotate số lượt chọn cho từng ứng viên thuộc poll này
-        from django.db.models import Count
+        # Annotate số lượt chọn cho từng ứng viên thuộc poll này (chỉ tính phiếu hợp lệ)
+        from django.db.models import Count, Q
         candidates = Candidate.objects.filter(poll=poll).annotate(
-            num_selected=Count('ballotselection')
+            num_selected=Count(
+                'ballotselection',
+                filter=Q(
+                    ballotselection__ballot__is_valid=True,
+                    ballotselection__ballot__counting_status='completed'
+                )
+            )
         )
         
         # Tìm ứng viên được chọn nhiều nhất
@@ -2510,10 +2516,16 @@ def api_statistics_detail(request, poll_id):
                 'message': 'Bạn không có quyền xem thống kê của cuộc bỏ phiếu này'
             }, status=403)
         
-        # Lấy danh sách ứng cử viên và số lượt được chọn
-        from django.db.models import Count
+        # Lấy danh sách ứng cử viên và số lượt được chọn (chỉ tính phiếu hợp lệ)
+        from django.db.models import Count, Q
         candidate_stats = Candidate.objects.filter(poll=poll).annotate(
-            count=Count('ballotselection')
+            count=Count(
+                'ballotselection',
+                filter=Q(
+                    ballotselection__ballot__is_valid=True,
+                    ballotselection__ballot__counting_status='completed'
+                )
+            )
         ).values('name', 'count').order_by('-count', 'name')
         
         # Đếm số phiếu hợp lệ đã kiểm

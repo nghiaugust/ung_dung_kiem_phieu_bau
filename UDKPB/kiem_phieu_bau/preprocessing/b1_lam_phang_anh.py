@@ -69,6 +69,151 @@ def detect_qr_code(image, gray_image=None):
     return None, None
 
 
+def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_label):
+    """
+    Thử làm phẳng trên 1 hướng ảnh cụ thể.
+    Trả về (warped, qr_data) nếu thành công, ngược lại (None, None).
+    """
+    h, w = img.shape[:2]
+
+    # Chia ảnh làm 4 phần (từ tâm)
+    mid_h, mid_w = h // 2, w // 2
+
+    # Dictionary lưu góc markers theo id
+    marker_corners = {}
+
+    # Biến lưu data QR code
+    detected_qr_data = None
+
+    print(f"[INFO] ({rotation_label}) Bắt đầu quét QR (Top-Left) + 3 ArUco dùng chung ID {SHARED_ARUCO_ID}...")
+
+    # 1) Quét QR ở góc trên trái
+    region = img[0:mid_h, 0:mid_w]
+    gray_region = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+    qr_data, qr_corners = detect_qr_code(region, gray_region)
+
+    qr_found = False
+    if qr_data and qr_corners is not None:
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        corners_refined = cv2.cornerSubPix(
+            gray_region,
+            qr_corners.reshape(-1, 1, 2),
+            winSize=(5, 5),
+            zeroZone=(-1, -1),
+            criteria=criteria
+        )
+        qr_corners = corners_refined.reshape(4, 2)
+        br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+        marker_corners[0] = qr_corners[br_idx]
+        detected_qr_data = qr_data
+        qr_found = True
+        print(f"[INFO] ({rotation_label}) Tìm thấy QR Code (ID 0) tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+        print(f"[INFO] ({rotation_label}) QR Data: {qr_data}")
+
+    if not qr_found:
+        print(f"[INFO] ({rotation_label}) Không tìm thấy QR ở độ phân giải gốc, thử upscale 3x...")
+        region_upscaled = cv2.resize(region, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
+        qr_data, qr_corners = detect_qr_code(region_upscaled, gray_region_upscaled)
+
+        if qr_data and qr_corners is not None:
+            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+            corners_refined = cv2.cornerSubPix(
+                gray_region_upscaled,
+                qr_corners.reshape(-1, 1, 2),
+                winSize=(5, 5),
+                zeroZone=(-1, -1),
+                criteria=criteria
+            )
+            qr_corners = corners_refined.reshape(4, 2) / 3.0
+            br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+            marker_corners[0] = qr_corners[br_idx]
+            detected_qr_data = qr_data
+            qr_found = True
+            print(f"[INFO] ({rotation_label}) Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+            print(f"[INFO] ({rotation_label}) QR Data: {qr_data}")
+
+    if not qr_found:
+        print(f"[INFO] ({rotation_label}) Không tìm thấy QR sau upscale 3x, thử upscale 5x...")
+        region_upscaled = cv2.resize(region, None, fx=5.0, fy=5.0, interpolation=cv2.INTER_CUBIC)
+        gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
+        qr_data, qr_corners = detect_qr_code(region_upscaled, gray_region_upscaled)
+
+        if qr_data and qr_corners is not None:
+            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+            corners_refined = cv2.cornerSubPix(
+                gray_region_upscaled,
+                qr_corners.reshape(-1, 1, 2),
+                winSize=(5, 5),
+                zeroZone=(-1, -1),
+                criteria=criteria
+            )
+            qr_corners = corners_refined.reshape(4, 2) / 5.0
+            br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+            marker_corners[0] = qr_corners[br_idx]
+            detected_qr_data = qr_data
+            qr_found = True
+            print(f"[INFO] ({rotation_label}) Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+            print(f"[INFO] ({rotation_label}) QR Data: {qr_data}")
+
+    if not qr_found:
+        print(f"[WARNING] ({rotation_label}) Không tìm thấy QR Code trong vùng Top-Left (đã thử upscale 3x và 5x)")
+        return None, None
+
+    # 2) Quét toàn ảnh để lấy 3 marker ArUco cùng ID 17
+    shared_markers_corners = detect_shared_aruco_marker_corners(
+        img,
+        shared_id=SHARED_ARUCO_ID,
+        refine_subpixel=True,
+    )
+
+    if 0 in marker_corners and len(shared_markers_corners) >= 3:
+        phan_loai = classify_shared_markers_from_corners(shared_markers_corners, marker_corners[0])
+        if phan_loai:
+            marker_corners[1] = phan_loai[1]
+            marker_corners[2] = phan_loai[2]
+            marker_corners[3] = phan_loai[3]
+            print(f"[INFO] ({rotation_label}) Đã phân loại 3 marker ID {SHARED_ARUCO_ID} theo vị trí tương đối với QR")
+
+    # Kiểm tra đủ 4 điểm (1 QR + 3 markers)
+    if len(marker_corners) < 4:
+        found_ids = sorted(marker_corners.keys())
+        missing_ids = [i for i in range(4) if i not in marker_corners]
+        print(f"[WARNING] ({rotation_label}) Thiếu điểm tham chiếu: tìm thấy {found_ids}, thiếu {missing_ids}")
+        return None, None
+
+    print(f"[INFO] ({rotation_label}) Tìm thấy đủ 4 điểm tham chiếu (QR + 3 marker ID {SHARED_ARUCO_ID}): {sorted(marker_corners.keys())}")
+
+    # Tạo source points (góc markers trên ảnh gốc)
+    src_pts = np.array([
+        marker_corners[0],  # Top-Left
+        marker_corners[1],  # Top-Right
+        marker_corners[2],  # Bottom-Right
+        marker_corners[3]   # Bottom-Left
+    ], dtype="float32")
+
+    # Thêm padding cả 4 phía để không cắt vào nội dung
+    padding = 50
+    chieu_rong_pixel_with_padding = chieu_rong_pixel + 2 * padding
+    chieu_dai_pixel_with_padding = chieu_dai_pixel + 2 * padding
+
+    # Tạo destination points
+    dst_pts = np.array([
+        [padding, padding],                                          # Top-Left
+        [chieu_rong_pixel + padding - 1, padding],                   # Top-Right
+        [chieu_rong_pixel + padding - 1, chieu_dai_pixel + padding - 1], # Bottom-Right
+        [padding, chieu_dai_pixel + padding - 1]                     # Bottom-Left
+    ], dtype="float32")
+
+    print(f"[INFO] ({rotation_label}) Kích thước đầu ra (với padding 20px): {chieu_rong_pixel_with_padding} x {chieu_dai_pixel_with_padding} pixels")
+
+    # Biến đổi perspective
+    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    warped = cv2.warpPerspective(img, M, (chieu_rong_pixel_with_padding, chieu_dai_pixel_with_padding))
+
+    return warped, detected_qr_data
+
+
 def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, chieu_doc_cm, dpi=300):
     """
     Làm phẳng ảnh phiếu bầu dựa trên ArUco markers (yêu cầu đủ 4 markers)
@@ -107,149 +252,52 @@ def lam_phang_anh(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_ngang_cm, c
     img = cv2.imread(duong_dan_anh_dau_vao)
     if img is None:
         raise ValueError(f"Không thể đọc ảnh từ: {duong_dan_anh_dau_vao}")
-    
-    h, w = img.shape[:2]
-    
-    # Chia ảnh làm 4 phần (từ tâm)
-    mid_h, mid_w = h // 2, w // 2
-    
-    # Dictionary lưu góc markers theo id
-    marker_corners = {}
-    
-    # Biến lưu data QR code
+
+    rotation_candidates = [
+        ("0", None),
+        ("90", cv2.ROTATE_90_CLOCKWISE),
+        ("180", cv2.ROTATE_180),
+        ("270", cv2.ROTATE_90_COUNTERCLOCKWISE),
+    ]
+
+    warped = None
     detected_qr_data = None
-    
-    print(f"[INFO] Bắt đầu quét QR (Top-Left) + 3 ArUco dùng chung ID {SHARED_ARUCO_ID}...")
+    used_rotation = None
 
-    # 1) Quét QR ở góc trên trái
-    region = img[0:mid_h, 0:mid_w]
-    gray_region = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
-    qr_data, qr_corners = detect_qr_code(region, gray_region)
+    for rotation_label, rotation_code in rotation_candidates:
+        if rotation_code is None:
+            img_try = img
+        else:
+            print(f"[INFO] Thử xoay ảnh {rotation_label} deg để đưa QR về góc trên trái...")
+            img_try = cv2.rotate(img, rotation_code)
 
-    qr_found = False
-    if qr_data and qr_corners is not None:
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-        corners_refined = cv2.cornerSubPix(
-            gray_region,
-            qr_corners.reshape(-1, 1, 2),
-            winSize=(5, 5),
-            zeroZone=(-1, -1),
-            criteria=criteria
+        warped, detected_qr_data = _try_flatten_with_image(
+            img_try,
+            chieu_rong_pixel,
+            chieu_dai_pixel,
+            rotation_label
         )
-        qr_corners = corners_refined.reshape(4, 2)
-        br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
-        marker_corners[0] = qr_corners[br_idx]
-        detected_qr_data = qr_data
-        qr_found = True
-        print(f"[INFO] Tìm thấy QR Code (ID 0) tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
-        print(f"[INFO] QR Data: {qr_data}")
 
-    if not qr_found:
-        print(f"[INFO] Không tìm thấy QR ở độ phân giải gốc, thử upscale 3x...")
-        region_upscaled = cv2.resize(region, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-        gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
-        qr_data, qr_corners = detect_qr_code(region_upscaled, gray_region_upscaled)
+        if rotation_code is not None:
+            del img_try
 
-        if qr_data and qr_corners is not None:
-            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-            corners_refined = cv2.cornerSubPix(
-                gray_region_upscaled,
-                qr_corners.reshape(-1, 1, 2),
-                winSize=(5, 5),
-                zeroZone=(-1, -1),
-                criteria=criteria
-            )
-            qr_corners = corners_refined.reshape(4, 2) / 3.0
-            br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
-            marker_corners[0] = qr_corners[br_idx]
-            detected_qr_data = qr_data
-            qr_found = True
-            print(f"[INFO] Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
-            print(f"[INFO] QR Data: {qr_data}")
+        if warped is not None:
+            used_rotation = rotation_label
+            break
 
-    if not qr_found:
-        print(f"[INFO] Không tìm thấy QR sau upscale 3x, thử upscale 5x...")
-        region_upscaled = cv2.resize(region, None, fx=5.0, fy=5.0, interpolation=cv2.INTER_CUBIC)
-        gray_region_upscaled = cv2.cvtColor(region_upscaled, cv2.COLOR_BGR2GRAY)
-        qr_data, qr_corners = detect_qr_code(region_upscaled, gray_region_upscaled)
+    if warped is None:
+        raise ValueError("Không tìm thấy đủ 4 điểm tham chiếu ở bất kỳ hướng xoay nào")
 
-        if qr_data and qr_corners is not None:
-            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-            corners_refined = cv2.cornerSubPix(
-                gray_region_upscaled,
-                qr_corners.reshape(-1, 1, 2),
-                winSize=(5, 5),
-                zeroZone=(-1, -1),
-                criteria=criteria
-            )
-            qr_corners = corners_refined.reshape(4, 2) / 5.0
-            br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
-            marker_corners[0] = qr_corners[br_idx]
-            detected_qr_data = qr_data
-            qr_found = True
-            print(f"[INFO] Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
-            print(f"[INFO] QR Data: {qr_data}")
+    if used_rotation and used_rotation != "0":
+        print(f"[INFO] Đã xoay ảnh {used_rotation} deg trước khi làm phẳng")
 
-    if not qr_found:
-        print(f"[WARNING] Không tìm thấy QR Code trong vùng Top-Left (đã thử upscale 3x và 5x)")
-
-    # 2) Quét toàn ảnh để lấy 3 marker ArUco cùng ID 17
-    shared_markers_corners = detect_shared_aruco_marker_corners(
-        img,
-        shared_id=SHARED_ARUCO_ID,
-        refine_subpixel=True,
-    )
-
-    if 0 in marker_corners and len(shared_markers_corners) >= 3:
-        phan_loai = classify_shared_markers_from_corners(shared_markers_corners, marker_corners[0])
-        if phan_loai:
-            marker_corners[1] = phan_loai[1]
-            marker_corners[2] = phan_loai[2]
-            marker_corners[3] = phan_loai[3]
-            print(f"[INFO] Đã phân loại 3 marker ID {SHARED_ARUCO_ID} theo vị trí tương đối với QR")
-    
-    # Kiểm tra đủ 4 điểm (1 QR + 3 markers)
-    if len(marker_corners) < 4:
-        found_ids = sorted(marker_corners.keys())
-        missing_ids = [i for i in range(4) if i not in marker_corners]
-        raise ValueError(f"Cần đủ 4 điểm tham chiếu! Tìm thấy {len(marker_corners)}: {found_ids}. Thiếu: {missing_ids}")
-    
-    print(f"[INFO] Tìm thấy đủ 4 điểm tham chiếu (QR + 3 marker ID {SHARED_ARUCO_ID}): {sorted(marker_corners.keys())}")
-    
-    # Tạo source points (góc markers trên ảnh gốc)
-    src_pts = np.array([
-        marker_corners[0],  # Top-Left
-        marker_corners[1],  # Top-Right
-        marker_corners[2],  # Bottom-Right
-        marker_corners[3]   # Bottom-Left
-    ], dtype="float32")
-    
-    # Thêm padding cả 4 phía để không cắt vào nội dung
-    padding = 50
-    chieu_rong_pixel_with_padding = chieu_rong_pixel + 2 * padding
-    chieu_dai_pixel_with_padding = chieu_dai_pixel + 2 * padding
-    
-    # Tạo destination points
-    dst_pts = np.array([
-        [padding, padding],                                          # Top-Left
-        [chieu_rong_pixel + padding - 1, padding],                   # Top-Right
-        [chieu_rong_pixel + padding - 1, chieu_dai_pixel + padding - 1], # Bottom-Right
-        [padding, chieu_dai_pixel + padding - 1]                     # Bottom-Left
-    ], dtype="float32")
-    
-    print(f"[INFO] Kích thước đầu ra (với padding 20px): {chieu_rong_pixel_with_padding} x {chieu_dai_pixel_with_padding} pixels")
-    
-    # Biến đổi perspective
-    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-    warped = cv2.warpPerspective(img, M, (chieu_rong_pixel_with_padding, chieu_dai_pixel_with_padding))
-    
     # Lưu ảnh đầu ra
     success = cv2.imwrite(duong_dan_anh_dau_ra, warped)
     if not success:
         raise ValueError(f"Không thể lưu ảnh tại: {duong_dan_anh_dau_ra}")
-    
+
     print(f"[INFO] Đã lưu ảnh làm phẳng tại: {duong_dan_anh_dau_ra}")
-    
+
     return warped, detected_qr_data
 
 

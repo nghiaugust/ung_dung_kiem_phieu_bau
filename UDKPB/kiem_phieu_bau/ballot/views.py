@@ -499,3 +499,50 @@ def save_hau_kiem(request, ballot_id):
 			'success': False,
 			'message': str(e)
 		}, status=500)
+
+
+@login_required
+def toggle_ballot_validity(request, ballot_id):
+	"""
+	API để đổi trạng thái hợp lệ của phiếu bầu trong trang hậu kiểm
+	"""
+	if request.method != 'POST':
+		return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+	
+	try:
+		ballot = get_object_or_404(Ballot, ballot_id=ballot_id)
+		poll = ballot.poll
+		
+		# Check permission
+		is_manager = PollMember.objects.filter(poll=poll, account=request.user, role='manager', status='active').exists()
+		if not (request.user.is_superuser and request.user.is_active) and not is_manager:
+			return JsonResponse({'success': False, 'message': 'Permission denied'}, status=403)
+		
+		data = {}
+		if request.body:
+			try:
+				data = json.loads(request.body)
+			except json.JSONDecodeError:
+				data = {}
+		
+		new_is_valid = data.get('is_valid', None)
+		if isinstance(new_is_valid, str):
+			new_is_valid = new_is_valid.strip().lower() in ('true', '1', 'yes')
+		
+		if new_is_valid is None:
+			ballot.is_valid = not ballot.is_valid
+		else:
+			ballot.is_valid = bool(new_is_valid)
+		
+		ballot.save(update_fields=['is_valid'])
+		
+		return JsonResponse({
+			'success': True,
+			'is_valid': ballot.is_valid
+		})
+	
+	except Exception as e:
+		return JsonResponse({
+			'success': False,
+			'message': str(e)
+		}, status=500)

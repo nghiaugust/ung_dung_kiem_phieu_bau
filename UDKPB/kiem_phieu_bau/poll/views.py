@@ -8,7 +8,7 @@ from ballot.models import Ballot
 from ballot.views import delete_all_ballots
 from django.http import JsonResponse
 from django.contrib import messages
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.urls import reverse
 
 # ==================== POLL MANAGEMENT ====================
@@ -558,7 +558,13 @@ def thong_ke(request):
 	for poll in polls:
 		# Annotate số lượt chọn cho từng ứng viên thuộc poll này
 		candidates = Candidate.objects.filter(poll=poll).annotate(
-			num_selected=Count('ballotselection')
+			num_selected=Count(
+				'ballotselection',
+				filter=Q(
+					ballotselection__ballot__is_valid=True,
+					ballotselection__ballot__counting_status='completed'
+				)
+			)
 		)
 		# Tìm ứng viên được chọn nhiều nhất
 		top_candidate = candidates.order_by('-num_selected', 'name').first()
@@ -583,7 +589,13 @@ def thong_ke_detail(request, poll_id):
 	poll = get_object_or_404(Poll, poll_id=poll_id)
 	# Lấy danh sách ứng cử viên và số lượt được chọn
 	candidate_stats = Candidate.objects.filter(poll=poll).annotate(
-		count=Count('ballotselection')
+		count=Count(
+			'ballotselection',
+			filter=Q(
+				ballotselection__ballot__is_valid=True,
+				ballotselection__ballot__counting_status='completed'
+			)
+		)
 	).values('name', 'count').order_by('-count', 'name')
 	valid_checked_ballots = Ballot.objects.filter(poll=poll, is_valid=True, counting_status='completed').count()
 	return render(request, 'poll/thong_ke/detail.html', {

@@ -16,5 +16,6 @@ urlpatterns = [
     path('download-sample-ballots/', views.download_sample_ballots, name='download_sample_ballots'),
     path('hau-kiem/<int:ballot_id>/', views.hau_kiem_ballot, name='hau_kiem_ballot'),
     path('hau-kiem/<int:ballot_id>/save/', views.save_hau_kiem, name='save_hau_kiem'),
+    path('hau-kiem/<int:ballot_id>/toggle-valid/', views.toggle_ballot_validity, name='toggle_ballot_validity'),
     
 ]
