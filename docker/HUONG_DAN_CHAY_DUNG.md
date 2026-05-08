@@ -37,24 +37,24 @@ docker compose -f docker/docker-compose.yml down
 Xem log AI server:
 docker compose -f docker/docker-compose.yml logs -f ai-server
 
-## Neu loi trung port 8080 (Windows)
+## Neu loi trung port 8081 (Windows)
 
 Loi thuong gap:
-ports are not available ... bind ... 0.0.0.0:8080
+ports are not available ... bind ... 0.0.0.0:8081
 
-Nguyen nhan: may ban da co process khac dang dung port 8080.
+Nguyen nhan: may ban da co process khac dang dung port 8081.
 
 Cach nhanh nhat (doi port host cho AI server):
 
 PowerShell tam thoi cho phien hien tai:
-$env:AI_PORT_HOST='8082'
+$env:AI_PORT_HOST='8081'
 docker compose -f docker/docker-compose.yml up -d --build ai-server
 
 Hoac set co dinh trong docker/.env.docker:
-AI_PORT_HOST=8082
+AI_PORT_HOST=8081
 
 Sau do app/mobile goi AI theo port moi:
-http://<LAN_IP_MAY_TINH>:8082/api/health/
+http://<LAN_IP_MAY_TINH>:8081/api/health/
 
 ## Neu bi loi khi build pip install
 

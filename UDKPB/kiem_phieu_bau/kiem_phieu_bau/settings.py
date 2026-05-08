@@ -300,8 +300,8 @@ CACHES = {
 # AI SERVER CONFIGURATION
 # =====================================================
 
-# Base URL của AI server (local: http://localhost:8080, docker: http://ai-server:8080)
-AI_SERVER_BASE_URL = os.getenv('AI_SERVER_BASE_URL', 'http://localhost:8080').rstrip('/')
+# Base URL của AI server (local: http://localhost:8081, docker: http://ai-server:8081)
+AI_SERVER_BASE_URL = os.getenv('AI_SERVER_BASE_URL', 'http://localhost:8081').rstrip('/')
 
 # Timeout mặc định khi gọi AI server
 AI_SERVER_REQUEST_TIMEOUT = int(os.getenv('AI_SERVER_REQUEST_TIMEOUT', '300'))

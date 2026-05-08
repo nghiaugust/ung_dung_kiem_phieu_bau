@@ -130,7 +130,7 @@ def test_yolo_detect(base_url, image_paths):
 def main():
     """Main test function"""
     # Base URL
-    base_url = "http://localhost:8080"
+    base_url = "http://localhost:8081"
     
     print("\n" + "="*60)
     print("🧪 AI SERVER API TEST SUITE")

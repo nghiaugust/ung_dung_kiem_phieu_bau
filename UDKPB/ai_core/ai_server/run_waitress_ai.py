@@ -50,14 +50,14 @@ if __name__ == '__main__':
     print("Timeout: 300s (AI processing timeout)")
     print()
     print("Access URLs:")
-    print(f"   - Local:   http://127.0.0.1:8080")
-    print(f"   - Network: http://{local_ip}:8080")
+    print(f"   - Local:   http://127.0.0.1:8081")
+    print(f"   - Network: http://{local_ip}:8081")
     print()
     
     serve(
         application,
         host='0.0.0.0',  # Cho phép truy cập từ mọi IP
-        port=8080,
+        port=8081,
         
         # QUAN TRỌNG: Cấu hình cho single process + multi-thread
         threads=4,  # 4 threads để xử lý đồng thời 4 requests

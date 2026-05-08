@@ -21,6 +21,7 @@ from ballot.doc_qr import (
 	SHARED_ARUCO_ID,
 	detect_qr_codes,
 	detect_shared_aruco_marker_corners,
+	classify_shared_markers_from_corners,
 )
 
 # Import GPU utilities

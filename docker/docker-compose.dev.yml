@@ -48,7 +48,7 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8080}
+      AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8081}
       ALLOWED_HOSTS: "*"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
@@ -74,11 +74,11 @@ services:
       - ../UDKPB/ai_core:/app/ai_core
       - media_dev_files:/app/kiem_phieu_bau/media
     ports:
-      - "${DEV_AI_PORT:-8080}:8080"
+      - "${DEV_AI_PORT:-8081}:8081"
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://localhost:8080/api/health/"]
+      test: ["CMD", "wget", "--quiet", "-O", "/dev/null", "http://localhost:8081/api/health/"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -108,7 +108,7 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8080}
+      AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8081}
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - ../UDKPB/ai_core:/app/ai_core
