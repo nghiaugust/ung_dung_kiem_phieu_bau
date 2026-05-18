@@ -14,6 +14,7 @@ from ballot.doc_qr import (
     SHARED_ARUCO_ID,
     detect_qr_codes,
     detect_shared_aruco_marker_corners,
+    classify_shared_markers_from_corners,
 )
 
 
@@ -173,7 +174,7 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
     )
 
     if qr_ref_point is not None and len(shared_markers_corners) >= 3:
-        phan_loai = _phan_loai_3_marker_theo_vi_tri(shared_markers_corners, qr_ref_point)
+        phan_loai = classify_shared_markers_from_corners(shared_markers_corners, qr_ref_point)
         if phan_loai:
             marker_corners[1] = phan_loai[1]
             marker_corners[2] = phan_loai[2]

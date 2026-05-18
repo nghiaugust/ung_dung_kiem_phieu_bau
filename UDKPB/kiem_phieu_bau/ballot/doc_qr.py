@@ -18,6 +18,36 @@ except Exception as e:
 SHARED_ARUCO_ID = 17
 
 
+def _normalize_quad_points(points):
+    """Return 4 image points as a simple list, or [] when unusable."""
+    if points is None:
+        return []
+
+    try:
+        quad = np.array(points, dtype=np.float32).reshape(-1, 2)
+    except Exception:
+        return []
+
+    if quad.shape[0] < 4:
+        return []
+
+    quad = quad[:4]
+    return [(int(round(x)), int(round(y))) for x, y in quad]
+
+
+def _extract_qreader_polygon(detection):
+    """QReader versions expose the QR quadrilateral under different keys."""
+    for key in ('quad_xy', 'polygon_xy', 'quad', 'polygon', 'points'):
+        if key not in detection:
+            continue
+
+        polygon = _normalize_quad_points(detection.get(key))
+        if polygon:
+            return polygon
+
+    return []
+
+
 def build_marker_box_from_corners(corners, marker_id=None):
     """Tạo bounding box + tâm từ 4 góc marker."""
     corners = np.array(corners, dtype=np.float32)
@@ -112,7 +142,7 @@ def classify_shared_markers_from_corners(shared_markers_corners, qr_point):
     if len(shared_markers_corners) < 3:
         return None
 
-    qr_x, qr_y = float(qr_point[0]), float(qr_point[1])
+    qr_x = float(qr_point[0])
     marker_meta = []
     for corners in shared_markers_corners:
         marker_meta.append({
@@ -121,28 +151,23 @@ def classify_shared_markers_from_corners(shared_markers_corners, qr_point):
             'center_y': float(np.mean(corners[:, 1]))
         })
 
-    right_side = [m for m in marker_meta if m['center_x'] > qr_x]
-    if len(right_side) >= 2:
-        right_sorted = sorted(right_side, key=lambda m: m['center_y'])
-        top_right_marker = right_sorted[0]
-        bottom_right_marker = right_sorted[-1]
+    # The QR point passed here should be the QR center. Pick the top marker by Y,
+    # then split the two bottom markers by X to avoid swapping BL/BR on skewed photos.
+    top_candidates = [m for m in marker_meta if m['center_x'] > qr_x]
+    if top_candidates:
+        top_right_marker = min(top_candidates, key=lambda m: (m['center_y'], -m['center_x']))
     else:
-        y_sorted = sorted(marker_meta, key=lambda m: m['center_y'])
-        top_right_marker = y_sorted[0]
-        remaining = [m for m in marker_meta if m is not top_right_marker]
-        if len(remaining) < 2:
-            return None
-        bottom_right_marker = max(remaining, key=lambda m: (m['center_x'], m['center_y']))
+        top_right_marker = min(marker_meta, key=lambda m: (m['center_y'], -m['center_x']))
 
-    remaining = [m for m in marker_meta if m is not top_right_marker and m is not bottom_right_marker]
-    if not remaining:
+    remaining = [m for m in marker_meta if m is not top_right_marker]
+    if len(remaining) < 2:
         return None
 
-    below_qr = [m for m in remaining if m['center_y'] > qr_y]
-    if below_qr:
-        bottom_left_marker = min(below_qr, key=lambda m: m['center_x'])
-    else:
-        bottom_left_marker = min(remaining, key=lambda m: m['center_x'])
+    bottom_left_marker = min(remaining, key=lambda m: m['center_x'])
+    bottom_right_marker = max(remaining, key=lambda m: m['center_x'])
+
+    if bottom_left_marker is bottom_right_marker:
+        return None
 
     return {
         1: top_right_marker['corners'][3],
@@ -157,37 +182,20 @@ def classify_shared_aruco_markers(marker_boxes, top_left_box):
         return None, None, None
 
     qr_center_x = top_left_box['center_x']
-    qr_center_y = top_left_box['center_y']
     indexed_boxes = list(enumerate(marker_boxes))
 
-    right_side = [(idx, box) for idx, box in indexed_boxes if box['center_x'] > qr_center_x]
-
-    if len(right_side) >= 2:
-        right_side_sorted = sorted(right_side, key=lambda item: item[1]['center_y'])
-        tr_idx, top_right = right_side_sorted[0]
-        br_idx, bottom_right = right_side_sorted[-1]
+    top_candidates = [(idx, box) for idx, box in indexed_boxes if box['center_x'] > qr_center_x]
+    if top_candidates:
+        tr_idx, top_right = min(top_candidates, key=lambda item: (item[1]['center_y'], -item[1]['center_x']))
     else:
-        by_top = sorted(indexed_boxes, key=lambda item: item[1]['center_y'])
-        tr_idx, top_right = by_top[0]
-        remaining = [(idx, box) for idx, box in indexed_boxes if idx != tr_idx]
-        if len(remaining) < 2:
-            return None, None, None
-        br_idx, bottom_right = max(remaining, key=lambda item: (item[1]['center_x'], item[1]['center_y']))
+        tr_idx, top_right = min(indexed_boxes, key=lambda item: (item[1]['center_y'], -item[1]['center_x']))
 
-    used = {tr_idx, br_idx}
-    below_left_candidates = [
-        (idx, box)
-        for idx, box in indexed_boxes
-        if idx not in used and box['center_y'] > qr_center_y
-    ]
+    bottom_candidates = [(idx, box) for idx, box in indexed_boxes if idx != tr_idx]
+    if len(bottom_candidates) < 2:
+        return None, None, None
 
-    if below_left_candidates:
-        _, bottom_left = min(below_left_candidates, key=lambda item: item[1]['center_x'])
-    else:
-        remaining = [(idx, box) for idx, box in indexed_boxes if idx not in used]
-        if not remaining:
-            return None, None, None
-        _, bottom_left = min(remaining, key=lambda item: item[1]['center_x'])
+    _, bottom_left = min(bottom_candidates, key=lambda item: item[1]['center_x'])
+    _, bottom_right = max(bottom_candidates, key=lambda item: item[1]['center_x'])
 
     return top_right, bottom_right, bottom_left
 
@@ -278,12 +286,13 @@ def detect_qr_codes(image):
                         # Lấy tọa độ
                         bbox = detection.get('bbox_xyxy', [0, 0, 0, 0])
                         l, t, r, b = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+                        polygon = _extract_qreader_polygon(detection)
                         
                         qr_info = {
                             'type': 'QRCODE',
                             'data': str_text,
                             'rect': {'left': l, 'top': t, 'width': r-l, 'height': b-t},
-                            'polygon': [], # QReader có trả về quad_xy nhưng để trống cho nhẹ nếu không cần
+                            'polygon': polygon,
                             'confidence': float(detection.get('confidence', 1.0))
                         }
                         

@@ -669,14 +669,27 @@ def calculate_marker_distances_from_pdf(pdf_path, dpi=300):
         # QR code (thường ở top-left, marker_id=0)
         if qr_codes:
             qr = qr_codes[0]  # Lấy QR đầu tiên
-            rect = qr['rect']
+            polygon = qr.get('polygon') or []
+            if polygon:
+                qr_points = np.array(polygon, dtype=np.float32)
+                left = int(np.min(qr_points[:, 0]))
+                right = int(np.max(qr_points[:, 0]))
+                top = int(np.min(qr_points[:, 1]))
+                bottom = int(np.max(qr_points[:, 1]))
+            else:
+                rect = qr['rect']
+                left = rect['left']
+                right = rect['left'] + rect['width']
+                top = rect['top']
+                bottom = rect['top'] + rect['height']
+
             markers_info['qr'] = {
-                'left': rect['left'],
-                'right': rect['left'] + rect['width'],
-                'top': rect['top'],
-                'bottom': rect['top'] + rect['height'],
-                'center_x': rect['left'] + rect['width'] / 2.0,
-                'center_y': rect['top'] + rect['height'] / 2.0,
+                'left': left,
+                'right': right,
+                'top': top,
+                'bottom': bottom,
+                'center_x': (left + right) / 2.0,
+                'center_y': (top + bottom) / 2.0,
                 'type': 'qr'
             }
         

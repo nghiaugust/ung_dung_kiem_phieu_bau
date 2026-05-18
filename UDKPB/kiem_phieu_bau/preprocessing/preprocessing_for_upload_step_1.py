@@ -79,6 +79,74 @@ def phat_hien_qr_code(anh_mau, anh_xam=None):
 	return None, None
 
 
+def _refine_qr_corners(gray_image, qr_corners):
+	"""Refine QR corner candidates without failing the whole upload on OpenCV edge cases."""
+	try:
+		corners = np.array(qr_corners, dtype=np.float32).reshape(-1, 2)
+	except Exception:
+		return None
+
+	if corners.shape[0] != 4:
+		return None
+
+	h, w = gray_image.shape[:2]
+	corners[:, 0] = np.clip(corners[:, 0], 0, max(w - 1, 0))
+	corners[:, 1] = np.clip(corners[:, 1], 0, max(h - 1, 0))
+
+	try:
+		criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+		refined = cv2.cornerSubPix(
+			gray_image,
+			corners.reshape(-1, 1, 2),
+			winSize=(5, 5),
+			zeroZone=(-1, -1),
+			criteria=criteria
+		)
+		return refined.reshape(4, 2).astype(np.float32)
+	except cv2.error as e:
+		print(f"[STEP1 WARNING] Khong refine duoc QR corners, dung corners goc: {e}")
+		return corners.astype(np.float32)
+
+
+def _polygon_area(points):
+	points = np.array(points, dtype=np.float32)
+	x = points[:, 0]
+	y = points[:, 1]
+	return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _validate_warp_points(src_pts, rotation_label):
+	"""Reject clearly crossed or degenerate marker geometry before perspective warp."""
+	if src_pts.shape != (4, 2):
+		return False
+
+	if not np.all(np.isfinite(src_pts)):
+		print(f"[STEP1 WARNING] ({rotation_label}) Toa do marker khong hop le")
+		return False
+
+	area = _polygon_area(src_pts)
+	if area < 100:
+		print(f"[STEP1 WARNING] ({rotation_label}) Vung marker qua nho hoac bi trung diem (area={area:.2f})")
+		return False
+
+	contour = src_pts.reshape(-1, 1, 2).astype(np.float32)
+	if not cv2.isContourConvex(contour):
+		print(f"[STEP1 WARNING] ({rotation_label}) Thu tu marker tao thanh polygon bi cheo, bo qua huong xoay nay")
+		return False
+
+	edge_lengths = [
+		np.linalg.norm(src_pts[1] - src_pts[0]),
+		np.linalg.norm(src_pts[2] - src_pts[1]),
+		np.linalg.norm(src_pts[2] - src_pts[3]),
+		np.linalg.norm(src_pts[3] - src_pts[0]),
+	]
+	if min(edge_lengths) < 10:
+		print(f"[STEP1 WARNING] ({rotation_label}) Khoang cach marker qua nho: {edge_lengths}")
+		return False
+
+	return True
+
+
 def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_label):
 	"""
 	Thử làm phẳng trên 1 hướng ảnh cụ thể.
@@ -93,6 +161,7 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
 
 	# Biến lưu data QR code
 	qr_data_phat_hien = None
+	qr_ref_point = None
 
 	print(f"[STEP1] ({rotation_label}) Bắt đầu quét QR (Top-Left) + 3 ArUco dùng chung ID {SHARED_ARUCO_ID}...")
 
@@ -103,20 +172,14 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
 
 	qr_found = False
 	if qr_data and qr_corners is not None:
-		criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-		corners_refined = cv2.cornerSubPix(
-			gray_region,
-			qr_corners.reshape(-1, 1, 2),
-			winSize=(5, 5),
-			zeroZone=(-1, -1),
-			criteria=criteria
-		)
-		qr_corners = corners_refined.reshape(4, 2)
-		br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
-		marker_corners[0] = qr_corners[br_idx]
-		qr_data_phat_hien = qr_data
-		qr_found = True
-		print(f"[STEP1] ({rotation_label}) Tìm thấy QR Code (ID 0) tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+		qr_corners = _refine_qr_corners(gray_region, qr_corners)
+		if qr_corners is not None:
+			qr_ref_point = np.mean(qr_corners, axis=0)
+			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+			marker_corners[0] = qr_corners[br_idx]
+			qr_data_phat_hien = qr_data
+			qr_found = True
+			print(f"[STEP1] ({rotation_label}) Tìm thấy QR Code (ID 0) tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
 
 	if not qr_found:
 		print(f"[STEP1] ({rotation_label}) Không tìm thấy QR ở độ phân giải gốc, thử upscale 3x...")
@@ -127,20 +190,15 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
 		qr_data, qr_corners = phat_hien_qr_code(region_upscaled, gray_region_upscaled)
 
 		if qr_data and qr_corners is not None:
-			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-			corners_refined = cv2.cornerSubPix(
-				gray_region_upscaled,
-				qr_corners.reshape(-1, 1, 2),
-				winSize=(5, 5),
-				zeroZone=(-1, -1),
-				criteria=criteria
-			)
-			qr_corners = corners_refined.reshape(4, 2) / 3.0
-			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
-			marker_corners[0] = qr_corners[br_idx]
-			qr_data_phat_hien = qr_data
-			qr_found = True
-			print(f"[STEP1] ({rotation_label}) Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+			qr_corners = _refine_qr_corners(gray_region_upscaled, qr_corners)
+			if qr_corners is not None:
+				qr_corners = qr_corners / 3.0
+				qr_ref_point = np.mean(qr_corners, axis=0)
+				br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+				marker_corners[0] = qr_corners[br_idx]
+				qr_data_phat_hien = qr_data
+				qr_found = True
+				print(f"[STEP1] ({rotation_label}) Tìm thấy QR Code (ID 0) sau upscale 3x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
 
 	if not qr_found:
 		print(f"[STEP1] ({rotation_label}) Không tìm thấy QR sau upscale 3x, thử upscale 5x...")
@@ -151,20 +209,15 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
 		qr_data, qr_corners = phat_hien_qr_code(region_upscaled, gray_region_upscaled)
 
 		if qr_data and qr_corners is not None:
-			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-			corners_refined = cv2.cornerSubPix(
-				gray_region_upscaled,
-				qr_corners.reshape(-1, 1, 2),
-				winSize=(5, 5),
-				zeroZone=(-1, -1),
-				criteria=criteria
-			)
-			qr_corners = corners_refined.reshape(4, 2) / 5.0
-			br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
-			marker_corners[0] = qr_corners[br_idx]
-			qr_data_phat_hien = qr_data
-			qr_found = True
-			print(f"[STEP1] ({rotation_label}) Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
+			qr_corners = _refine_qr_corners(gray_region_upscaled, qr_corners)
+			if qr_corners is not None:
+				qr_corners = qr_corners / 5.0
+				qr_ref_point = np.mean(qr_corners, axis=0)
+				br_idx = np.argmax(qr_corners[:, 0] + qr_corners[:, 1])
+				marker_corners[0] = qr_corners[br_idx]
+				qr_data_phat_hien = qr_data
+				qr_found = True
+				print(f"[STEP1] ({rotation_label}) Tìm thấy QR Code (ID 0) sau upscale 5x tại góc bottom-right: ({marker_corners[0][0]:.3f}, {marker_corners[0][1]:.3f})")
 
 	if not qr_found:
 		print(f"[STEP1 WARNING] ({rotation_label}) Không tìm thấy QR Code trong vùng Top-Left (đã thử upscale 3x và 5x)")
@@ -177,8 +230,8 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
 		refine_subpixel=True,
 	)
 
-	if 0 in marker_corners and len(shared_markers_corners) >= 3:
-		phan_loai = classify_shared_markers_from_corners(shared_markers_corners, marker_corners[0])
+	if qr_ref_point is not None and 0 in marker_corners and len(shared_markers_corners) >= 3:
+		phan_loai = classify_shared_markers_from_corners(shared_markers_corners, qr_ref_point)
 		if phan_loai:
 			marker_corners[1] = phan_loai[1]
 			marker_corners[2] = phan_loai[2]
@@ -201,6 +254,9 @@ def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_lab
 		marker_corners[2],  # Bottom-Right
 		marker_corners[3]   # Bottom-Left
 	], dtype="float32")
+
+	if not _validate_warp_points(src_pts, rotation_label):
+		return None, None
 
 	# Thêm padding cả 4 phía để không cắt vào nội dung
 	padding = 50
