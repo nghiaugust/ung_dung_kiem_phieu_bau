@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='poll',
             name='config_number',
-            field=models.IntegerField(blank=True, choices=[(1, 'Cấu hình 1: TrOCR + YOLO'), (2, 'Cấu hình 2: Theo thứ tự + YOLO')], help_text='Cấu hình AI model đã sử dụng để kiểm phiếu', null=True),
+            field=models.IntegerField(blank=True, choices=[(1, 'Cau hinh 1: VietNameOCR + YOLO-X'), (2, 'Cau hinh 2: Theo thu tu + YOLO-X')], help_text='Cau hinh AI model da su dung de kiem phieu', null=True),
         ),
     ]

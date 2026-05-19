@@ -1,23 +1,21 @@
-# AI Server - Waitress Configuration
+# AI Server
 
-# Chạy server
+Run:
+
+```powershell
 python run_waitress_ai.py
 ```
 
-Hoặc double-click: `start_ai_server.bat`
+The server loads these models once in a single process:
 
-## 🎯 Cấu hình tối ưu
+- `model_vietnameocr`
+- `model_yolo_x`
+- `model_resnet18_crossed`
 
-- **1 Process**: Model AI chỉ load 1 lần → Tiết kiệm RAM
-- **4 Threads**: Xử lý 4 requests đồng thời → Không bị treo
-- **Port**: 8081
-- **Timeout**: 300s (cho AI processing)
+Endpoints:
 
-## 📡 Endpoints
-
-- Health: `http://localhost:8081/api/health/`
-- Info: `http://localhost:8081/api/info/`
-- TrOCR: `POST http://localhost:8081/api/trocr/recognize/`
-- YOLO: `POST http://localhost:8081/api/yolo/detect/`
-
-```
+- Health: `GET http://localhost:8081/api/health/`
+- Info: `GET http://localhost:8081/api/info/`
+- VietNameOCR: `POST http://localhost:8081/api/model_vietnameocr/recognize/`
+- YOLO-X: `POST http://localhost:8081/api/model_yolo_x/detect/`
+- ResNet18 crossed: `POST http://localhost:8081/api/model_resnet18_crossed/detect/`

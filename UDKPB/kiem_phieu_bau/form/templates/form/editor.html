@@ -298,6 +298,7 @@
 
   .table-controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 10px;
     align-items: center;
@@ -829,7 +830,7 @@
                     type="number"
                     id="candidate-start-col"
                     min="1"
-                    max="3"
+                    max="6"
                     value="1"
                     style="padding: 6px"
                   />
@@ -1217,8 +1218,9 @@
             const startRowIndex = startRow; // Starting row in table (1-based)
             const startColIndex = startCol; // Starting column in table (1-based)
 
-            // Determine number of columns needed
-            const numCols = Math.max(startColIndex, 2);
+            // Determine number of columns needed. For a name-strike ballot,
+            // start column 1 should create a real one-column table.
+            const numCols = Math.max(startColIndex, 1);
 
             // Find body rows section to add table
             const bodyRowIndex = documentData.body.length; // Add at end
@@ -1230,6 +1232,12 @@
               type: 'table',
               margin: 0,
               numCols: numCols,
+              fitContent: numCols === 1,
+              tableAlign: numCols === 1 ? 'center' : 'left',
+              fitContentPaddingCm: 2,
+              tableWidthCm: '',
+              rowHeight: 1.8,
+              columnWidths: Array(numCols).fill(100 / numCols),
               columns: [],
               nestedRows: []
             };
@@ -1567,6 +1575,41 @@
 
             // Initialize row height if not exists (default 2.0)
             const rowHeight = rowData.rowHeight || 2.0;
+            if (isTable && !isDouble && numCols === 1 && rowData.fitContent === undefined) {
+              rowData.fitContent = true;
+            }
+            if (isTable && !isDouble && numCols > 1 && rowData.fitContent === undefined) {
+              rowData.fitContent = false;
+            }
+            const tableFitContent = isTable && !isDouble && numCols === 1 && rowData.fitContent !== false;
+            const tableAlign = rowData.tableAlign || (tableFitContent ? "center" : "left");
+            const fitContentPaddingCm = rowData.fitContentPaddingCm !== undefined ? rowData.fitContentPaddingCm : 2;
+            const tableWidthCm = rowData.tableWidthCm || "";
+            const tableLayoutControls = isTable && !isDouble ? `
+                <div class="table-controls" style="border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 8px;">
+                  <label style="display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" style="width: auto;"
+                      ${tableFitContent ? "checked" : ""}
+                      ${numCols !== 1 ? "disabled" : ""}
+                      onchange="updateTableFitContent('${section}', ${rowData.id}, this.checked)" />
+                    Có theo nội dung
+                  </label>
+                  <label>Căn bảng:</label>
+                  <select onchange="updateTableAlign('${section}', ${rowData.id}, this.value)" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="left" ${tableAlign === "left" ? "selected" : ""}>Trái</option>
+                    <option value="center" ${tableAlign === "center" ? "selected" : ""}>Giữa</option>
+                    <option value="right" ${tableAlign === "right" ? "selected" : ""}>Phải</option>
+                  </select>
+                  <label>Đệm mỗi bên (cm):</label>
+                  <input type="number" value="${fitContentPaddingCm}" step="0.1" min="0" max="10"
+                    ${tableFitContent ? "" : "disabled"}
+                    onchange="updateFitContentPadding('${section}', ${rowData.id}, this.value)" />
+                  <label>Chiều rộng (cm):</label>
+                  <input type="number" value="${tableWidthCm}" step="0.1" min="1" max="20"
+                    ${tableFitContent ? "disabled" : ""}
+                    onchange="updateTableWidth('${section}', ${rowData.id}, this.value)" />
+                </div>
+              ` : "";
 
             const tableContent = `
               <div class="table-frame-container">
@@ -1594,6 +1637,7 @@
                     ⏷ Giảm cột
                   </button>
                 </div>
+                ${tableLayoutControls}
                 <div class="table-controls" style="border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 8px;">
                   ${columnWidthInputs}
                 </div>
@@ -1835,6 +1879,54 @@
           }
         }
 
+        function updateTableFitContent(section, rowId, checked) {
+          const rowData = documentData[section].find((r) => r.id === rowId);
+          if (!rowData) return;
+
+          rowData.fitContent = checked;
+          if (checked && !rowData.tableAlign) {
+            rowData.tableAlign = "center";
+          }
+          if (checked && rowData.fitContentPaddingCm === undefined) {
+            rowData.fitContentPaddingCm = 2;
+          }
+
+          reRenderRow(section, rowId);
+        }
+
+        function updateTableAlign(section, rowId, value) {
+          const rowData = documentData[section].find((r) => r.id === rowId);
+          if (!rowData) return;
+
+          rowData.tableAlign = ["left", "center", "right"].includes(value)
+            ? value
+            : "left";
+        }
+
+        function updateFitContentPadding(section, rowId, value) {
+          const rowData = documentData[section].find((r) => r.id === rowId);
+          if (!rowData) return;
+
+          const parsed = parseFloat(value);
+          rowData.fitContentPaddingCm = Number.isFinite(parsed)
+            ? Math.max(0, Math.min(10, parsed))
+            : 2;
+
+          reRenderRow(section, rowId);
+        }
+
+        function updateTableWidth(section, rowId, value) {
+          const rowData = documentData[section].find((r) => r.id === rowId);
+          if (!rowData) return;
+
+          const parsed = parseFloat(value);
+          rowData.tableWidthCm = Number.isFinite(parsed)
+            ? Math.max(1, Math.min(20, parsed))
+            : "";
+
+          reRenderRow(section, rowId);
+        }
+
     // Update row height
         function updateRowHeight(section, rowId, value) {
           const rowData = documentData[section].find((r) => r.id === rowId);
@@ -1917,6 +2009,15 @@
             sum += rowData.columnWidths[i] || 0;
           }
           rowData.columnWidths[newCols - 1] = Math.max(0, 100 - sum);
+          if (rowData.type === "table") {
+            rowData.fitContent = newCols === 1;
+            if (newCols === 1 && !rowData.tableAlign) {
+              rowData.tableAlign = "center";
+            }
+            if (newCols === 1 && rowData.fitContentPaddingCm === undefined) {
+              rowData.fitContentPaddingCm = 2;
+            }
+          }
 
           // Adjust all nested rows to have the new number of columns
           if (rowData.nestedRows) {
@@ -1967,6 +2068,12 @@
               type === "table-double" || type === "frame-double" ? 0.5 : 0;
             rowData.numCols = 1;
             rowData.nestedRows = [];
+            rowData.columnWidths = [100];
+            rowData.rowHeight = type === "table" ? 1.8 : 2.0;
+            rowData.fitContent = type === "table";
+            rowData.tableAlign = type === "table" ? "center" : "left";
+            rowData.fitContentPaddingCm = 2;
+            rowData.tableWidthCm = "";
             if (type === "table-double" || type === "frame-double") {
               rowData.doubleMode = "margin"; // Default mode
             }

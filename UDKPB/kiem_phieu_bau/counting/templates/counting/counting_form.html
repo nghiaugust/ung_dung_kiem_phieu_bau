@@ -2,7 +2,7 @@
 <div class="row align-items-center mb-3">
   <div class="col-md-6">
     <h2 class="mb-1">Kiểm Phiếu Bầu: {{ poll.poll_name }}</h2>
-    <p class="text-muted mb-0">Chọn cấu hình để xử lý với TrOCR và YOLO</p>
+    <p class="text-muted mb-0">Chọn cấu hình để xử lý với VietNameOCR, YOLO-X và ResNet18 crossed</p>
   </div>
   <div class="col-md-6 text-end">
     <a
@@ -13,7 +13,7 @@
     </a>
     
     <!-- Nút Kiểm Phiếu Bầu -->
-    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and trocr_status and yolo_status and not poll.is_counting_started and config_number %}
+    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and ai_ready_for_config and not poll.is_counting_started and config_number %}
     <button
       type="submit"
       form="counting-form"
@@ -121,8 +121,8 @@
           </div>
         </div>
         <div class="card-body">
-          <!-- Cấu hình 1: TrOCR + YOLO -->
-          <div id="config1-container" {% if config_number == 2 and is_counted %}style="display: none;"{% endif %}>
+          <!-- Cấu hình 1: VietNameOCR + YOLO-X -->
+          <div id="config1-container" {% if config_number != 1 and is_counted %}style="display: none;"{% endif %}>
             <div class="form-check mb-3">
               <input
                 class="form-check-input"
@@ -134,7 +134,7 @@
                 {% if is_counted %}disabled{% endif %}
               />
               <label class="form-check-label fw-bold" for="config1">
-                Cấu hình 1: TrOCR nhận diện tên + YOLO detect dấu X
+                Cấu hình 1: VietNameOCR nhận diện tên + YOLO-X detect dấu X
                 {% if config_number == 1 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
               </label>
             </div>
@@ -161,10 +161,10 @@
                       <strong>Cấu hình:</strong>
                       <ul class="mb-0 mt-2">
                         <li>
-                          <strong>TrOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
+                          <strong>VietNameOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
                         </li>
                         <li>
-                          <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
+                          <strong>YOLO-X</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
                         </li>
                       </ul>
                     </td>
@@ -174,8 +174,8 @@
             </div>
           </div>
 
-          <!-- Cấu hình 2: Tên theo thứ tự + YOLO -->
-          <div id="config2-container" {% if config_number == 1 and is_counted %}style="display: none;"{% endif %}>
+          <!-- Cấu hình 2: Tên theo thứ tự + YOLO-X -->
+          <div id="config2-container" {% if config_number != 2 and is_counted %}style="display: none;"{% endif %}>
             <div class="form-check mb-3">
               <input
                 class="form-check-input"
@@ -187,7 +187,7 @@
                 {% if is_counted %}disabled{% endif %}
               />
               <label class="form-check-label fw-bold" for="config2">
-                Cấu hình 2: Tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
+                Cấu hình 2: Tên theo thứ tự danh sách ứng viên + YOLO-X detect dấu X
                 {% if config_number == 2 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
               </label>
             </div>
@@ -214,10 +214,59 @@
                       <strong>Cấu hình:</strong>
                       <ul class="mb-0 mt-2">
                         <li>
-                          Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng TrOCR)
+                          Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng OCR)
                         </li>
                         <li>
-                          <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
+                          <strong>YOLO-X</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
+                        </li>
+                      </ul>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="config3-container" {% if config_number != 3 and is_counted %}style="display: none;"{% endif %}>
+            <div class="form-check mb-3">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="config_type"
+                id="config3"
+                value="3"
+                {% if config_number == 3 %}checked{% endif %}
+                {% if is_counted %}disabled{% endif %}
+              />
+              <label class="form-check-label fw-bold" for="config3">
+                Cau hinh 3: Phieu gach ten 1 cot + model_resnet18_crossed
+                {% if config_number == 3 %}<span class="badge bg-success ms-2">Dang su dung</span>{% endif %}
+              </label>
+            </div>
+
+            <div class="ms-4 mb-3">
+              <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>Ho va Ten</th>
+                  </tr>
+                  <tr>
+                    <th class="text-center">Cot 1</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="text-muted small">
+                      <strong>Cau hinh:</strong>
+                      <ul class="mb-0 mt-2">
+                        <li>
+                          <strong>model_resnet18_crossed</strong>: Detect ten bi gach trong tung o ten.
+                        </li>
+                        <li>
+                          Ung vien khong bi gach se duoc tinh la lua chon.
+                        </li>
+                        <li>
+                          API: <code>/api/model_resnet18_crossed/detect/</code>.
                         </li>
                       </ul>
                     </td>
@@ -311,11 +360,13 @@
           <!-- Điều kiện 5: Check model AI -->
           <p class="mb-2">
             <strong>Check model:</strong>
-            {% if trocr_status and yolo_status %}
-            <span class="text-success">TrOCR on, YOLO on</span>
+            {% if ai_ready_for_config %}
+            <span class="text-success">Model san sang cho cau hinh da luu</span>
             {% else %}
             <span class="text-danger">
-              TrOCR {% if trocr_status %}on{% else %}off{% endif %}, YOLO {% if yolo_status %}on{% else %}off{% endif %}
+              model_vietnameocr {% if vietnameocr_status %}on{% else %}off{% endif %},
+              model_yolo_x {% if yolo_x_status %}on{% else %}off{% endif %},
+              model_resnet18_crossed {% if resnet18_crossed_status %}on{% else %}off{% endif %}
             </span>
             {% endif %}
           </p>
@@ -325,7 +376,7 @@
           <input type="hidden" name="yolo_confidence" value="20" />
 
           <!-- Cấu hình cho config1 -->
-          <input type="hidden" name="config1_trocr_col" value="2" />
+          <input type="hidden" name="config1_vietnameocr_col" value="2" />
           <input type="hidden" name="config1_yolo_cols" value="3,4" />
           
           <!-- Cấu hình cho config2 -->
@@ -446,6 +497,7 @@
     countingForm.addEventListener("submit", function(event) {
       const config1Radio = document.getElementById("config1");
       const config2Radio = document.getElementById("config2");
+      const config3Radio = document.getElementById("config3");
       
       // Tạo hidden input để gửi config đã chọn
       const configInput1 = document.createElement("input");
@@ -459,6 +511,18 @@
       configInput2.name = "config2";
       configInput2.value = config2Radio.checked ? "1" : "0";
       countingForm.appendChild(configInput2);
+
+      const configInput3 = document.createElement("input");
+      configInput3.type = "hidden";
+      configInput3.name = "config3";
+      configInput3.value = config3Radio.checked ? "1" : "0";
+      countingForm.appendChild(configInput3);
+
+      const configNumberInput = document.createElement("input");
+      configNumberInput.type = "hidden";
+      configNumberInput.name = "config_number";
+      configNumberInput.value = config1Radio.checked ? "1" : (config2Radio.checked ? "2" : "3");
+      countingForm.appendChild(configNumberInput);
     });
   }
 
@@ -467,10 +531,12 @@
   const editConfigBtn = document.getElementById("edit-config-btn");
   const config1Radio = document.getElementById("config1");
   const config2Radio = document.getElementById("config2");
+  const config3Radio = document.getElementById("config3");
 
   // Lấy các container của từng cấu hình
   const config1Container = document.getElementById("config1-container");
   const config2Container = document.getElementById("config2-container");
+  const config3Container = document.getElementById("config3-container");
   
   // Kiểm tra trạng thái đã counted
   const isCounted = {{ is_counted|lower }};
@@ -480,8 +546,13 @@
   if (isCounted && savedConfigNumber) {
     if (savedConfigNumber === 1) {
       config2Container.style.display = "none";
+      config3Container.style.display = "none";
     } else if (savedConfigNumber === 2) {
       config1Container.style.display = "none";
+      config3Container.style.display = "none";
+    } else if (savedConfigNumber === 3) {
+      config1Container.style.display = "none";
+      config2Container.style.display = "none";
     }
   }
 
@@ -489,7 +560,7 @@
     // Xử lý nút Lưu cấu hình
     saveConfigBtn.addEventListener("click", function() {
       // Lấy config type đã chọn
-      const configType = config1Radio.checked ? 1 : 2;
+      const configType = config1Radio.checked ? 1 : (config2Radio.checked ? 2 : 3);
       
       // Hiển thị loading
       if (loadingOverlay && loadingText) {
@@ -523,13 +594,19 @@
           // Ẩn cấu hình không được chọn
           if (config1Radio.checked) {
             config2Container.style.display = "none";
+            config3Container.style.display = "none";
           } else if (config2Radio.checked) {
             config1Container.style.display = "none";
+            config3Container.style.display = "none";
+          } else if (config3Radio.checked) {
+            config1Container.style.display = "none";
+            config2Container.style.display = "none";
           }
 
           // Disable radio buttons để không thể thay đổi
           config1Radio.disabled = true;
           config2Radio.disabled = true;
+          config3Radio.disabled = true;
 
           // Hiện nút Sửa, ẩn nút Lưu
           saveConfigBtn.style.display = "none";
@@ -553,10 +630,12 @@
       // Hiện lại tất cả cấu hình
       config1Container.style.display = "block";
       config2Container.style.display = "block";
+      config3Container.style.display = "block";
 
       // Enable lại radio buttons
       config1Radio.disabled = false;
       config2Radio.disabled = false;
+      config3Radio.disabled = false;
 
       // Hiện nút Lưu, ẩn nút Sửa
       saveConfigBtn.style.display = "inline-block";

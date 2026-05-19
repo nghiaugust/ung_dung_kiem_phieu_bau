@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'api',  # API app cho TrOCR và YOLO
+    'api.apps.ApiConfig',  # API app for the three AI models
 ]
 
 MIDDLEWARE = [

@@ -242,9 +242,11 @@
             <i class="bi bi-check-circle-fill"></i>
             <strong>Cấu hình {{ poll.config_number }}:</strong>
             {% if poll.config_number == 1 %}
-            TrOCR nhận diện tên + YOLO detect dấu X
-            {% else %}
-            Tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
+            VietNameOCR nhan dien ten + YOLO-X detect dau X
+            {% elif poll.config_number == 2 %}
+            Ten theo thu tu danh sach ung vien + YOLO-X detect dau X
+            {% elif poll.config_number == 3 %}
+            Phieu gach ten 1 cot + model_resnet18_crossed
             {% endif %}
           </div>
           {% else %}

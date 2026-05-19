@@ -17,11 +17,13 @@ cd UDKPB
 pip install -r requirements.txt
 ```
 
-## 3. Tải model TrOCR
+## 3. Kiem tra model AI
 
 ```powershell
-cd UDKPB/ballot_processing_system
-python -c "from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoProcessor; AutoModelForVision2Seq.from_pretrained('microsoft/trocr-base-printed', cache_dir='model_trocr'); AutoTokenizer.from_pretrained('microsoft/trocr-base-printed', cache_dir='model_trocr'); AutoProcessor.from_pretrained('microsoft/trocr-base-printed', cache_dir='model_trocr')"
+cd UDKPB/ai_core
+dir model_vietnameocr
+dir model_yolo_x
+dir model_resnet18_crossed
 ```
 
 ## 4. Cấu hình `settings.py`

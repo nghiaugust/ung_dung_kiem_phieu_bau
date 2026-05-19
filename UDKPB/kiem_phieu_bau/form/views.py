@@ -973,6 +973,66 @@ def format_row(row):
             text = col.get('text', '')
             return format_text(text, col)
 
+
+def _safe_positive_float(value, default=None):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+
+    return number if number > 0 else default
+
+
+def _safe_nonnegative_float(value, default=0.0):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+
+    return number if number >= 0 else default
+
+
+def _normalize_column_widths(column_widths, num_cols):
+    if not column_widths or len(column_widths) != num_cols:
+        equal_width = 100.0 / num_cols
+        return [equal_width] * num_cols
+
+    normalized = []
+    for width in column_widths:
+        try:
+            normalized.append(float(width))
+        except (TypeError, ValueError):
+            normalized.append(0.0)
+
+    total = sum(normalized)
+    if total <= 0:
+        equal_width = 100.0 / num_cols
+        return [equal_width] * num_cols
+
+    return [w / total * 100 for w in normalized]
+
+
+def _table_align(row, default='left'):
+    align = row.get('tableAlign', default)
+    return align if align in ['left', 'center', 'right'] else default
+
+
+def _wrap_aligned_latex_block(content, align):
+    if align == 'center':
+        return '\\noindent\\hfill%\n' + content + '\\hfill\\mbox{}\\par\n'
+    if align == 'right':
+        return '\\noindent\\hfill%\n' + content + '\\par\n'
+    return '\\noindent\n' + content
+
+
+def _latex_cell_align(align):
+    if align == 'center':
+        return 'c'
+    if align == 'right':
+        return 'r'
+    return 'l'
+
+
 def format_table(row, is_double):
     """Format a table with borders (dòng kẻ)"""
     margin = row.get('margin', 0)
@@ -981,56 +1041,43 @@ def format_table(row, is_double):
     double_mode = row.get('doubleMode', 'margin')  # 'margin' or 'center'
     column_widths = row.get('columnWidths', [])  # % widths for each column
     row_height = row.get('rowHeight', 1.0)  # Row height multiplier (default 1.0)
+    fit_content = (not is_double and num_cols == 1 and row.get('fitContent', True))
+    table_align = _table_align(row, 'center' if fit_content else 'left')
+    table_width_cm = _safe_positive_float(row.get('tableWidthCm'))
+    fit_content_padding_cm = _safe_nonnegative_float(row.get('fitContentPaddingCm'), 2.0)
     
     if not nested_rows:
         return ''
     
-    # Validate and normalize column widths
-    if not column_widths or len(column_widths) != num_cols:
-        # Default to equal widths
-        equal_width = 100.0 / num_cols
-        column_widths = [equal_width] * num_cols
-    
-    # Ensure percentages sum to 100%
-    total = sum(column_widths)
-    if total > 0:
-        column_widths = [w / total * 100 for w in column_widths]
+    column_widths = _normalize_column_widths(column_widths, num_cols)
     
     # Ensure row height is within reasonable bounds
     row_height = max(1.0, min(5.0, float(row_height)))
     
-    # Build column specification with calculated width
-    # Calculate available width and distribute among columns
-    if is_double:
-        # For double table, use proportional width within minipage (48% of textwidth)
-        # Calculate width for each column based on percentage
+    natural_width_table = fit_content and num_cols == 1
+    fixed_custom_width = bool(table_width_cm) and not fit_content and not is_double
+
+    # Build column specification with calculated width.
+    if natural_width_table:
+        col_spec = '|l|'
+    else:
+        base_width = '\\linewidth' if (is_double or margin > 0 or fixed_custom_width) else '\\textwidth'
         col_specs = []
         for width_pct in column_widths:
-            col_width_expr = f'\\dimexpr({width_pct/100}\\linewidth-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
+            col_width_expr = f'\\dimexpr({width_pct/100}{base_width}-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
             col_specs.append(f'p{{{col_width_expr}}}')
         col_spec = '|' + '|'.join(col_specs) + '|'
-    else:
-        # For single table
-        if margin > 0:
-            # Will be wrapped in minipage, use linewidth
-            col_specs = []
-            for width_pct in column_widths:
-                col_width_expr = f'\\dimexpr({width_pct/100}\\linewidth-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
-                col_specs.append(f'p{{{col_width_expr}}}')
-            col_spec = '|' + '|'.join(col_specs) + '|'
-        else:
-            # No margin, use textwidth directly
-            col_specs = []
-            for width_pct in column_widths:
-                col_width_expr = f'\\dimexpr({width_pct/100}\\textwidth-{1}\\arrayrulewidth-{2}\\tabcolsep)\\relax'
-                col_specs.append(f'p{{{col_width_expr}}}')
-            col_spec = '|' + '|'.join(col_specs) + '|'
     
     # Build table content with row height adjustment
     # Use \renewcommand{\arraystretch}{row_height} to increase row height
     table_content = ''
+    table_group_commands = []
+    if natural_width_table:
+        table_group_commands.append(f'\\setlength{{\\tabcolsep}}{{{fit_content_padding_cm}cm}}')
     if row_height != 1.0:
-        table_content += f'{{\\renewcommand{{\\arraystretch}}{{{row_height}}}\n'
+        table_group_commands.append(f'\\renewcommand{{\\arraystretch}}{{{row_height}}}')
+    if table_group_commands:
+        table_content += '{' + ''.join(table_group_commands) + '\n'
     
     table_content += f'\\begin{{tabular}}{{{col_spec}}}\n'
     table_content += '\\hline\n'
@@ -1039,7 +1086,12 @@ def format_table(row, is_double):
     for nested_row in nested_rows:
         row_cells = []
         for col in nested_row.get('columns', []):
-            cell_text = format_text(col.get('text', ''), col)
+            if natural_width_table:
+                cell_text = format_text(col.get('text', ''), col, apply_alignment=False)
+                cell_align = _latex_cell_align(col.get('align', 'left'))
+                cell_text = f'\\multicolumn{{1}}{{|{cell_align}|}}{{{cell_text}}}'
+            else:
+                cell_text = format_text(col.get('text', ''), col, table_cell=True)
             row_cells.append(cell_text)
         
         # Fill missing columns with empty cells
@@ -1050,8 +1102,8 @@ def format_table(row, is_double):
         table_content += '\\hline\n'
     
     table_content += '\\end{tabular}\n'
-    if row_height != 1.0:
-        table_content += '}\n'  # Close the arraystretch group
+    if table_group_commands:
+        table_content += '}\n'  # Close the table settings group
     
     if is_double:
         # Create two tables side by side with different modes
@@ -1081,6 +1133,16 @@ def format_table(row, is_double):
                    '\\end{minipage}\\n'
     else:
         # Single table with margin - căn lùi cả 2 bên
+        if natural_width_table:
+            return _wrap_aligned_latex_block(table_content, table_align)
+        if fixed_custom_width:
+            table_width = f'{table_width_cm}cm'
+            return _wrap_aligned_latex_block(
+                f'\\begin{{minipage}}{{{table_width}}}\n' +
+                table_content +
+                '\\end{minipage}\n',
+                table_align
+            )
         if margin > 0:
             # Calculate table width after applying margin on both sides
             table_width = f'\\dimexpr\\textwidth-{margin * 2}cm\\relax'
@@ -1190,7 +1252,7 @@ def format_frame(row, is_double):
                    frame_content + \
                    '\\end{framed}'
 
-def format_text(text, style):
+def format_text(text, style, table_cell=False, apply_alignment=True):
     """Apply text formatting based on style"""
     if not text:
         return ''
@@ -1217,10 +1279,17 @@ def format_text(text, style):
     
     # Apply alignment
     alignment = style.get('align', 'left')
-    if alignment == 'center':
-        text = r'\begin{center}' + text + r'\end{center}'
-    elif alignment == 'right':
-        text = r'\begin{flushright}' + text + r'\end{flushright}'
+    if apply_alignment:
+        if table_cell:
+            if alignment == 'center':
+                text = r'{\centering ' + text + r'\par}'
+            elif alignment == 'right':
+                text = r'{\raggedleft ' + text + r'\par}'
+        else:
+            if alignment == 'center':
+                text = r'\begin{center}' + text + r'\end{center}'
+            elif alignment == 'right':
+                text = r'\begin{flushright}' + text + r'\end{flushright}'
     
     # Apply font size
     font_size = style.get('fontSize')

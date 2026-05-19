@@ -4,22 +4,27 @@ Celery tasks cho kiểm phiếu tự động
 import os
 import gc
 import time
-import difflib
 import requests
 import json
 from typing import Dict, List, Tuple
 from django.conf import settings
 from celery import shared_task
 
-from ballot.models import Ballot, BallotSelection
-from poll.models import Poll, Candidate
+from ballot.models import Ballot
+from poll.models import Poll
 from preprocessing.models import BallotCell
 from counting.models import AIModelResult
 from counting import config_model
+from counting.configurations.base import (
+    MODEL_RESNET18_CROSSED,
+    MODEL_VIETNAMEOCR,
+    MODEL_YOLO_X,
+)
 
 
-AI_TROCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/trocr/recognize/"
-AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
+AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_vietnameocr/recognize/"
+AI_YOLO_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_yolo_x/detect/"
+AI_RESNET18_CROSSED_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_crossed/detect/"
 
 
 def prepare_batch_requests(ballot, ai_result, all_cell_models):
@@ -32,12 +37,11 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
         all_cell_models: Dict mapping cell_key -> model_name
         
     Returns:
-        Tuple[Dict, Dict]: (trocr_batch, yolo_batch)
-            - trocr_batch: {'image_paths': [...], 'cell_mapping': {idx: (row, col)}}
-            - yolo_batch: {'image_paths': [...], 'cell_mapping': {idx: (row, col)}}
+        Tuple[Dict, Dict, Dict]: (vietnameocr_batch, yolo_x_batch, resnet18_crossed_batch)
     """
-    trocr_batch = {'image_paths': [], 'cell_mapping': {}}
-    yolo_batch = {'image_paths': [], 'cell_mapping': {}}
+    vietnameocr_batch = {'image_paths': [], 'cell_mapping': {}}
+    yolo_x_batch = {'image_paths': [], 'cell_mapping': {}}
+    resnet18_crossed_batch = {'image_paths': [], 'cell_mapping': {}}
     
     # QUAN TRỌNG: Sort cells theo thứ tự (row, col) để đảm bảo thứ tự ổn định
     sorted_cells = sorted(all_cell_models.items(), key=lambda x: tuple(map(int, x[0].split('_'))))
@@ -64,40 +68,51 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
             continue
         
         # Gom vào batch tương ứng
-        if model_name == 'trocr':
-            idx = len(trocr_batch['image_paths'])
-            trocr_batch['image_paths'].append(cell_image_path)
-            trocr_batch['cell_mapping'][idx] = (row, col)
-        elif model_name == 'yolo':
-            idx = len(yolo_batch['image_paths'])
-            yolo_batch['image_paths'].append(cell_image_path)
-            yolo_batch['cell_mapping'][idx] = (row, col)
+        if model_name == MODEL_VIETNAMEOCR:
+            idx = len(vietnameocr_batch['image_paths'])
+            vietnameocr_batch['image_paths'].append(cell_image_path)
+            vietnameocr_batch['cell_mapping'][idx] = (row, col)
+        elif model_name == MODEL_YOLO_X:
+            idx = len(yolo_x_batch['image_paths'])
+            yolo_x_batch['image_paths'].append(cell_image_path)
+            yolo_x_batch['cell_mapping'][idx] = (row, col)
+        elif model_name == MODEL_RESNET18_CROSSED:
+            idx = len(resnet18_crossed_batch['image_paths'])
+            resnet18_crossed_batch['image_paths'].append(cell_image_path)
+            resnet18_crossed_batch['cell_mapping'][idx] = (row, col)
     
-    return trocr_batch, yolo_batch
+    return vietnameocr_batch, yolo_x_batch, resnet18_crossed_batch
 
 
-def process_batch_responses(ai_result, trocr_batch, yolo_batch, trocr_response, yolo_response):
+def process_batch_responses(
+    ai_result,
+    vietnameocr_batch,
+    yolo_x_batch,
+    resnet18_crossed_batch,
+    vietnameocr_response,
+    yolo_x_response,
+    resnet18_crossed_response
+):
     """
     Xử lý kết quả trả về từ API và lưu vào database
     
     Args:
         ai_result: AIModelResult object
-        trocr_batch: Dict chứa thông tin batch TrOCR
-        yolo_batch: Dict chứa thông tin batch YOLO
-        trocr_response: Response từ TrOCR API
-        yolo_response: Response từ YOLO API
+        vietnameocr_batch: Dict chua thong tin batch VietNameOCR
+        yolo_x_batch: Dict chua thong tin batch YOLO-X
+        resnet18_crossed_batch: Dict chua thong tin batch ResNet18 crossed
         
     Returns:
         int: Số lượng cells đã xử lý thành công
     """
     total_processed_cells = 0
     
-    # Xử lý TrOCR response
-    if trocr_response and trocr_response.get('success') and trocr_response.get('results'):
-        results = trocr_response['results']
+    # Xu ly VietNameOCR response
+    if vietnameocr_response and vietnameocr_response.get('success') and vietnameocr_response.get('results'):
+        results = vietnameocr_response['results']
         for idx, result in enumerate(results):
-            if idx in trocr_batch['cell_mapping']:
-                row, col = trocr_batch['cell_mapping'][idx]
+            if idx in vietnameocr_batch['cell_mapping']:
+                row, col = vietnameocr_batch['cell_mapping'][idx]
                 recognized_text = result.get('text', '')
                 confidence = result.get('confidence', 0)
                 
@@ -105,11 +120,11 @@ def process_batch_responses(ai_result, trocr_batch, yolo_batch, trocr_response, 
                 total_processed_cells += 1
     
     # Xử lý YOLO response
-    if yolo_response and yolo_response.get('success') and yolo_response.get('results'):
-        results = yolo_response['results']
+    if yolo_x_response and yolo_x_response.get('success') and yolo_x_response.get('results'):
+        results = yolo_x_response['results']
         for idx, result in enumerate(results):
-            if idx in yolo_batch['cell_mapping']:
-                row, col = yolo_batch['cell_mapping'][idx]
+            if idx in yolo_x_batch['cell_mapping']:
+                row, col = yolo_x_batch['cell_mapping'][idx]
                 label = result.get('label', 'none')
                 detections = result.get('detections', [])
                 
@@ -127,6 +142,23 @@ def process_batch_responses(ai_result, trocr_batch, yolo_batch, trocr_response, 
                 ai_result.set_cell_result(row, col, result_data, confidence)
                 total_processed_cells += 1
     
+    # Xu ly model_resnet18_crossed response cho phieu gach ten.
+    if resnet18_crossed_response and resnet18_crossed_response.get('success') and resnet18_crossed_response.get('results'):
+        results = resnet18_crossed_response['results']
+        for idx, result in enumerate(results):
+            if idx in resnet18_crossed_batch['cell_mapping']:
+                row, col = resnet18_crossed_batch['cell_mapping'][idx]
+                result_data = {
+                    'label': result.get('label', 'unknown'),
+                    'raw_label': result.get('raw_label', ''),
+                    'is_struck': result.get('is_struck'),
+                    'probabilities': result.get('probabilities', {}),
+                    'detections': result.get('detections', [])
+                }
+                confidence = result.get('confidence', 0)
+                ai_result.set_cell_result(row, col, result_data, confidence)
+                total_processed_cells += 1
+
     return total_processed_cells
 
 
@@ -188,173 +220,6 @@ def send_batch_request(api_url, image_paths, extra_data=None, timeout=300):
             except:
                 pass
 
-
-def create_ballot_selections(ballot, poll, ai_result, config_number):
-    """
-    Tự động tạo BallotSelection từ kết quả AI
-    
-    Args:
-        ballot: Ballot object
-        poll: Poll object
-        ai_result: AIModelResult object
-        config_number: Số cấu hình (1 hoặc 2)
-        
-    Returns:
-        int: Số lượng BallotSelection đã tạo
-        
-    Raises:
-        Exception: Khi có lỗi trong quá trình tạo selections
-    """
-    # Lấy danh sách ứng viên
-    candidate_list = list(Candidate.objects.filter(poll=poll).order_by('candidate_id'))
-    candidate_names = {c.candidate_id: c.name for c in candidate_list}
-    
-    # Xóa BallotSelection cũ của ballot này
-    BallotSelection.objects.filter(ballot=ballot).delete()
-    
-    selections_to_create = []
-    
-    # Lấy config để biết start_row
-    start_row = 1  # Dòng 2 trong UI → index 1 trong DB
-    
-    # Lấy tất cả cells có YOLO
-    yolo_cells = ai_result.get_cells_by_model('yolo')
-    
-    # Lấy tất cả cells có TrOCR (nếu có)
-    trocr_cells = ai_result.get_cells_by_model('trocr')
-    
-    # Group theo row để xử lý từng dòng
-    rows_dict = {}
-    for cell_key, cell_data in yolo_cells.items():
-        row, col = map(int, cell_key.split('_'))
-        if row not in rows_dict:
-            rows_dict[row] = {'yolo': [], 'trocr': None}
-        rows_dict[row]['yolo'].append((col, cell_data))
-    
-    # Thêm TrOCR vào rows_dict
-    for cell_key, cell_data in trocr_cells.items():
-        row, col = map(int, cell_key.split('_'))
-        if row not in rows_dict:
-            rows_dict[row] = {'yolo': [], 'trocr': None}
-        rows_dict[row]['trocr'] = cell_data
-    
-    # Xử lý từng dòng
-    for row, row_data in rows_dict.items():
-        yolo_results = row_data['yolo']
-        trocr_result = row_data['trocr']
-        
-        # Sắp xếp yolo_results theo col để lấy đúng cột đồng ý (cột đầu tiên)
-        yolo_results.sort(key=lambda x: x[0])
-        
-        if not yolo_results:
-            continue
-        
-        # Lấy cột đồng ý (cột đầu tiên)
-        agree_col, agree_result = yolo_results[0]
-        result_data = agree_result.get('result', {})
-        
-        if isinstance(result_data, dict):
-            label = result_data.get('label', 'none')
-        else:
-            continue
-        
-        # Kiểm tra có dấu X không
-        if 'x_mark' not in label.lower():
-            continue
-        
-        # Xác định candidate dựa trên config_number
-        candidate_to_select = None
-        
-        if config_number == 1 and trocr_result:
-            # Config1: Sử dụng TrOCR để matching tên
-            recognized_name = trocr_result.get('result', '').strip()
-            
-            if recognized_name and recognized_name != "[Lỗi TrOCR]":
-                # Tìm candidate giống nhất với recognized_name
-                best_match_id = None
-                best_match_ratio = 0.0
-                
-                for candidate_id, candidate_name in candidate_names.items():
-                    # Sử dụng difflib để so sánh tên
-                    ratio = difflib.SequenceMatcher(
-                        None, 
-                        recognized_name.upper(), 
-                        candidate_name.upper()
-                    ).ratio()
-                    
-                    if ratio > best_match_ratio:
-                        best_match_ratio = ratio
-                        best_match_id = candidate_id
-                
-                # Chỉ chọn nếu tỉ lệ khớp >= 0.6 (60%)
-                if best_match_id and best_match_ratio >= 0.6:
-                    candidate_to_select = next(
-                        (c for c in candidate_list if c.candidate_id == best_match_id),
-                        None
-                    )
-        else:
-            # Config2: Sử dụng thứ tự dòng
-            candidate_index = row - start_row
-            
-            if 0 <= candidate_index < len(candidate_list):
-                candidate_to_select = candidate_list[candidate_index]
-        
-        # Tạo BallotSelection nếu đã xác định được candidate
-        if candidate_to_select:
-            selections_to_create.append(
-                BallotSelection(
-                    ballot=ballot,
-                    candidate_id=candidate_to_select.candidate_id
-                )
-            )
-    
-    # Bulk create
-    if selections_to_create:
-        BallotSelection.objects.bulk_create(selections_to_create)
-    
-    return len(selections_to_create)
-
-
-def _has_x_mark(result_data):
-    if isinstance(result_data, dict):
-        label = result_data.get('label', '')
-    else:
-        label = str(result_data) if result_data is not None else ''
-    return 'x_mark' in str(label).lower()
-
-
-def evaluate_ballot_validity(ai_result):
-    """
-    Kiểm tra hợp lệ dựa trên 2 ô đồng ý/không đồng ý mỗi dòng.
-    Hợp lệ khi mỗi dòng có đúng 1 dấu X.
-    """
-    cell_models = ai_result.get_all_cell_models()
-    cell_results = ai_result.get_all_cell_results()
-
-    rows = {}
-    for cell_key, model_name in cell_models.items():
-        if model_name != 'yolo':
-            continue
-        try:
-            row, col = map(int, cell_key.split('_'))
-        except ValueError:
-            continue
-        if row not in rows:
-            rows[row] = {}
-        rows[row][col] = cell_results.get(cell_key, {}).get('result')
-
-    if not rows:
-        return True
-
-    for col_results in rows.values():
-        mark_count = 0
-        for result in col_results.values():
-            if _has_x_mark(result):
-                mark_count += 1
-        if mark_count == 0 or mark_count > 1:
-            return False
-
-    return True
 
 
 @shared_task(bind=True, max_retries=3, name='counting_queue')
@@ -439,10 +304,8 @@ def counting_queue(self, ballot_id):
         # Áp dụng cấu hình
         config_number = poll.config_number
         
-        if config_number == 1:
-            config_model.apply_config1(ai_result)
-        elif config_number == 2:
-            config_model.apply_config2(ai_result)
+        if config_model.is_valid_config(config_number):
+            config_model.apply_config(ai_result, config_number)
         else:
             ai_result.status = 'failed'
             ai_result.error_message = f'Cấu hình không hợp lệ: {config_number}'
@@ -469,50 +332,67 @@ def counting_queue(self, ballot_id):
         
         # BƯỚC 1: Chuẩn bị batch requests (gom ảnh theo model)
         print(f"[COUNTING QUEUE] Chuẩn bị batch requests cho ballot {ballot_id}")
-        trocr_batch, yolo_batch = prepare_batch_requests(ballot, ai_result, all_cell_models)
+        vietnameocr_batch, yolo_x_batch, resnet18_crossed_batch = prepare_batch_requests(ballot, ai_result, all_cell_models)
         
-        print(f"[COUNTING QUEUE] TrOCR batch: {len(trocr_batch['image_paths'])} ảnh, YOLO batch: {len(yolo_batch['image_paths'])} ảnh")
+        print(
+            f"[COUNTING QUEUE] model_vietnameocr batch: {len(vietnameocr_batch['image_paths'])} anh, "
+            f"model_yolo_x batch: {len(yolo_x_batch['image_paths'])} anh, "
+            f"model_resnet18_crossed batch: {len(resnet18_crossed_batch['image_paths'])} anh"
+        )
         
         # BƯỚC 2: Gửi batch requests tới AI server
-        trocr_response = None
-        yolo_response = None
+        vietnameocr_response = None
+        yolo_x_response = None
+        resnet18_crossed_response = None
         
         try:
-            # Gửi TrOCR batch nếu có
-            if trocr_batch['image_paths']:
-                print(f"[COUNTING QUEUE] Gửi TrOCR batch với {len(trocr_batch['image_paths'])} ảnh")
-                trocr_response = send_batch_request(
-                    api_url=AI_TROCR_API_URL,
-                    image_paths=trocr_batch['image_paths'],
+            # Gui VietNameOCR batch neu co
+            if vietnameocr_batch['image_paths']:
+                print(f"[COUNTING QUEUE] Gui model_vietnameocr batch voi {len(vietnameocr_batch['image_paths'])} anh")
+                vietnameocr_response = send_batch_request(
+                    api_url=AI_VIETNAMEOCR_API_URL,
+                    image_paths=vietnameocr_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
                 
                 # Kiểm tra response
-                if not trocr_response.get('success'):
-                    error_msg = trocr_response.get('error', 'TrOCR API trả về lỗi')
-                    raise requests.exceptions.RequestException(f"TrOCR error: {error_msg}")
+                if not vietnameocr_response.get('success'):
+                    error_msg = vietnameocr_response.get('error', 'model_vietnameocr API tra ve loi')
+                    raise requests.exceptions.RequestException(f"model_vietnameocr error: {error_msg}")
             
             # Gửi YOLO batch nếu có
-            if yolo_batch['image_paths']:
-                print(f"[COUNTING QUEUE] Gửi YOLO batch với {len(yolo_batch['image_paths'])} ảnh")
+            if yolo_x_batch['image_paths']:
+                print(f"[COUNTING QUEUE] Gui model_yolo_x batch voi {len(yolo_x_batch['image_paths'])} anh")
                 
                 # Chuẩn bị image_paths_map cho YOLO
                 image_paths_map = {}
-                for path in yolo_batch['image_paths']:
+                for path in yolo_x_batch['image_paths']:
                     filename = os.path.basename(path)
                     image_paths_map[filename] = path
                 
-                yolo_response = send_batch_request(
-                    api_url=AI_YOLO_API_URL,
-                    image_paths=yolo_batch['image_paths'],
+                yolo_x_response = send_batch_request(
+                    api_url=AI_YOLO_X_API_URL,
+                    image_paths=yolo_x_batch['image_paths'],
                     extra_data={'image_paths': json.dumps(image_paths_map)},
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
                 
                 # Kiểm tra response
-                if not yolo_response.get('success'):
-                    error_msg = yolo_response.get('error', 'YOLO API trả về lỗi')
-                    raise requests.exceptions.RequestException(f"YOLO error: {error_msg}")
+                if not yolo_x_response.get('success'):
+                    error_msg = yolo_x_response.get('error', 'model_yolo_x API tra ve loi')
+                    raise requests.exceptions.RequestException(f"model_yolo_x error: {error_msg}")
+
+            if resnet18_crossed_batch['image_paths']:
+                print(f"[COUNTING QUEUE] Gui model_resnet18_crossed batch voi {len(resnet18_crossed_batch['image_paths'])} anh")
+                resnet18_crossed_response = send_batch_request(
+                    api_url=AI_RESNET18_CROSSED_API_URL,
+                    image_paths=resnet18_crossed_batch['image_paths'],
+                    timeout=settings.AI_SERVER_REQUEST_TIMEOUT
+                )
+
+                if not resnet18_crossed_response.get('success'):
+                    error_msg = resnet18_crossed_response.get('error', 'model_resnet18_crossed API tra ve loi')
+                    raise requests.exceptions.RequestException(f"model_resnet18_crossed error: {error_msg}")
                     
         except requests.exceptions.RequestException as e:
             # Lỗi kết nối hoặc API error, retry với exponential backoff
@@ -558,14 +438,16 @@ def counting_queue(self, ballot_id):
         print(f"[COUNTING QUEUE] Xử lý responses cho ballot {ballot_id}")
         total_processed_cells = process_batch_responses(
             ai_result, 
-            trocr_batch, 
-            yolo_batch, 
-            trocr_response, 
-            yolo_response
+            vietnameocr_batch,
+            yolo_x_batch,
+            resnet18_crossed_batch,
+            vietnameocr_response,
+            yolo_x_response,
+            resnet18_crossed_response
         )
 
         # BƯỚC 3.1: Kiểm tra hợp lệ của phiếu dựa trên kết quả YOLO
-        is_valid_by_marks = evaluate_ballot_validity(ai_result)
+        is_valid_by_marks = config_model.evaluate_ballot_validity(ai_result, config_number)
         ballot.is_valid = is_valid_by_marks
         ballot.save(update_fields=['is_valid'])
         
@@ -582,7 +464,7 @@ def counting_queue(self, ballot_id):
         
         # BƯỚC 4: Tự động tạo BallotSelection từ kết quả
         try:
-            selections_count = create_ballot_selections(ballot, poll, ai_result, config_number)
+            selections_count = config_model.create_ballot_selections(ballot, poll, ai_result, config_number)
         except Exception as e:
             error_msg = f"Lỗi tạo BallotSelection cho ballot {ballot_id}: {e}"
             print(f"[COUNTING QUEUE ERROR] {error_msg}")

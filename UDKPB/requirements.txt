@@ -10,16 +10,11 @@ drf-yasg==1.21.7
 # Deep Learning & AI
 torch==2.9.0
 torchvision==0.24.0
-transformers==4.54.1
-tf_keras==2.20.1
 
 # Computer Vision & OCR
 opencv-python==4.12.0.88
 ultralytics==8.3.179
 Pillow==10.2.0
-easyocr==1.7.2
-vietocr==0.3.13
-pytesseract==0.3.13
 qrcode==8.2
 qreader==3.16
 qrdet==2.5
@@ -32,6 +27,7 @@ matplotlib==3.10.5
 pandas==2.2.3
 scikit-learn==1.6.1
 scikit-image==0.24.0
+joblib==1.5.1
 albumentations==1.4.2
 imgaug==0.4.0
 
@@ -89,10 +85,8 @@ filelock==3.16.1
 prometheus_client==0.23.1
 
 # AI-specific Dependencies
-torchaudio==2.9.0
 ultralytics-thop==2.0.15
 opencv-python-headless==4.10.0.84
-huggingface-hub==0.34.3
 imutils==0.5.4
 img2pdf==0.5.1
 timm==1.0.22
@@ -101,6 +95,4 @@ PyYAML==6.0.2
 
 # Other Dependencies
 WhiteNoise==6.9.0
-tokenizers==0.21.4
-safetensors==0.4.5
 fsspec==2024.10.0

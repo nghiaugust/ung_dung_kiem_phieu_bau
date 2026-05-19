@@ -1,512 +1,254 @@
 """
-Model Services - Quản lý và cache models TrOCR và YOLO
-Models được load một lần khi server khởi động và tái sử dụng cho mọi request
+Model services for the AI server.
+
+Only three models are loaded here:
+- model_vietnameocr: OCR for candidate names.
+- model_yolo_x: X-mark detection.
+- model_resnet18_crossed: crossed-name classification.
 """
-import os
-import torch
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-from transformers import pipeline
-from ultralytics import YOLO
-from typing import List, Dict, Optional
-import warnings
+from __future__ import annotations
+
+import importlib.util
 import io
+import os
+import sys
+import warnings
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import numpy as np
+import torch
+from PIL import Image, ImageOps
+from ultralytics import YOLO
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
-class TrOCRService:
-    """Service để quản lý TrOCR model"""
-    
+def _ai_core_dir() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _load_module(module_name: str, module_path: Path, prepend_path: Optional[Path] = None):
+    if prepend_path is not None:
+        prepend_text = str(prepend_path)
+        if prepend_text not in sys.path:
+            sys.path.insert(0, prepend_text)
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module {module_name} from {module_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class VietNameOCRService:
+    """Singleton service for model_vietnameocr."""
+
     _instance = None
-    _pipe = None
-    
+    _model = None
+
     def __new__(cls):
-        """Singleton pattern để đảm bảo chỉ có 1 instance"""
         if cls._instance is None:
-            cls._instance = super(TrOCRService, cls).__new__(cls)
+            cls._instance = super(VietNameOCRService, cls).__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
-        """Khởi tạo service"""
-        if self._pipe is None:
+        if self._model is None:
             self._load_model()
-    
+
     def _load_model(self):
-        """Load TrOCR model vào bộ nhớ"""
         try:
-            # Kiểm tra GPU
-            if torch.cuda.is_available():
-                device = 0
-                print("[TrOCR Service] ✅ Sử dụng GPU")
-            else:
-                device = -1
-                print("[TrOCR Service] ⚠️ Sử dụng CPU")
-            
-            # Tìm đường dẫn model
-            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            ai_core_dir = os.path.dirname(current_dir)
-            model_trocr_root = os.path.join(ai_core_dir, "model_trocr")
-            local_model_dir = os.path.join(
-                model_trocr_root, 
-                "models--microsoft--trocr-base-printed", 
-                "snapshots"
+            model_dir = _ai_core_dir() / "model_vietnameocr" / "VietNameOCR"
+            config_path = model_dir / "config_mobilenet_svtr_ctc.yml"
+            weights_path = model_dir / "weights" / "mobilenet_svtr_ctc.pth"
+            predict_path = model_dir / "predict.py"
+
+            if not config_path.exists():
+                raise RuntimeError(f"Cannot find VietNameOCR config: {config_path}")
+            if not weights_path.exists():
+                raise RuntimeError(f"Cannot find VietNameOCR weights: {weights_path}")
+
+            module = _load_module(
+                "model_vietnameocr_predict",
+                predict_path,
+                prepend_path=model_dir,
             )
-            local_model_dir = os.path.normpath(local_model_dir)
-            
-            # Tìm snapshot directory
-            if not os.path.exists(local_model_dir):
-                raise RuntimeError(f"Không tìm thấy thư mục model: {local_model_dir}")
-            
-            snapshot_dirs = [
-                os.path.join(local_model_dir, d) 
-                for d in os.listdir(local_model_dir) 
-                if os.path.isdir(os.path.join(local_model_dir, d))
-            ]
-            
-            if not snapshot_dirs:
-                raise RuntimeError(f"Không tìm thấy snapshot trong {local_model_dir}")
-            
-            model_path = snapshot_dirs[0]
-            
-            # Load pipeline
-            self._pipe = pipeline(
-                "image-to-text",
-                model=model_path,
-                tokenizer=model_path,
-                image_processor=model_path,
-                framework="pt",
-                device=device
-            )
-            
-        except Exception as e:
-            print(f"[TrOCR Service] ❌ Lỗi load model: {e}")
+            self._model = module.VietNameOCR(str(config_path), str(weights_path))
+
+            device_name = "GPU" if torch.cuda.is_available() else "CPU"
+            print(f"[model_vietnameocr] Loaded on {device_name}")
+        except Exception as exc:
+            print(f"[model_vietnameocr] Failed to load model: {exc}")
             raise
-    
+
     def recognize_text(self, image_data: bytes, filename: str = "") -> Dict:
-        """
-        Nhận diện text từ ảnh
-        
-        Args:
-            image_data: Dữ liệu ảnh dạng bytes
-            filename: Tên file (để trả về kết quả)
-            
-        Returns:
-            Dict chứa filename và text nhận diện được
-        """
         pil_img = None
         try:
-            # Convert bytes to PIL Image
             pil_img = Image.open(io.BytesIO(image_data))
-            
-            # Chuyển sang RGB nếu cần
-            if pil_img.mode != 'RGB':
-                pil_img = pil_img.convert('RGB')
-            
-            # OCR
-            result = self._pipe(pil_img)
-            text = result[0]['generated_text'] if result else ""
-            
-            # XÓA result để giải phóng tensor memory
-            del result
-            
+            text = self._model.predict(pil_img)
             return {
-                'filename': filename,
-                'text': text,
-                'status': 'success'
+                "filename": filename,
+                "text": text,
+                "confidence": 0,
+                "status": "success",
             }
-            
-        except Exception as e:
+        except Exception as exc:
             return {
-                'filename': filename,
-                'text': '',
-                'status': 'error',
-                'error': str(e)
+                "filename": filename,
+                "text": "",
+                "confidence": 0,
+                "status": "error",
+                "error": str(exc),
             }
         finally:
-            # CLEANUP: Đóng PIL image để giải phóng memory
             if pil_img is not None:
                 pil_img.close()
-            del pil_img
-    
+
     def recognize_batch(self, images: List[tuple]) -> List[Dict]:
-        """
-        Nhận diện batch nhiều ảnh (tối ưu hơn xử lý từng ảnh)
-        
-        Args:
-            images: List of (image_data, filename) tuples
-            
-        Returns:
-            List of results
-        """
-        results = []
-        pil_images = []
-        
-        try:
-            # Prepare batch
-            filenames = []
-            
-            for image_data, filename in images:
-                try:
-                    pil_img = Image.open(io.BytesIO(image_data))
-                    if pil_img.mode != 'RGB':
-                        pil_img = pil_img.convert('RGB')
-                    pil_images.append(pil_img)
-                    filenames.append(filename)
-                except Exception as e:
-                    results.append({
-                        'filename': filename,
-                        'text': '',
-                        'status': 'error',
-                        'error': f"Lỗi đọc ảnh: {str(e)}"
-                    })
-            
-            # Batch prediction
-            if pil_images:
-                batch_results = self._pipe(pil_images)
-                
-                # batch_results có cấu trúc: [[{'generated_text': '...'}], [{'generated_text': '...'}]]
-                # Mỗi element là một list chứa 1 dict
-                for filename, result in zip(filenames, batch_results):
-                    # result là list chứa dict, cần lấy phần tử đầu tiên
-                    if isinstance(result, list) and len(result) > 0:
-                        text = result[0].get('generated_text', '') if isinstance(result[0], dict) else ""
-                    else:
-                        text = ""
-                    
-                    results.append({
-                        'filename': filename,
-                        'text': text,
-                        'status': 'success'
-                    })
-                
-                # XÓA batch_results để giải phóng tensor memory
-                del batch_results
-            
-        except Exception as e:
-            # Fallback to individual processing
-            print(f"[TrOCR Service] ⚠️ Batch processing failed, fallback to individual: {e}")
-            for image_data, filename in images:
-                results.append(self.recognize_text(image_data, filename))
-        
-        finally:
-            # CLEANUP: Đóng tất cả PIL images
-            for img in pil_images:
-                try:
-                    img.close()
-                except:
-                    pass
-            del pil_images
-        
-        return results
+        return [self.recognize_text(image_data, filename) for image_data, filename in images]
 
 
 def crop_center_horizontal(pil_img: Image.Image) -> Image.Image:
-    """
-    Cắt ảnh theo chiều dọc: bỏ 1/4 trái và 1/4 phải, giữ lại 1/2 giữa
-    
-    Args:
-        pil_img: PIL Image gốc
-        
-    Returns:
-        PIL Image đã được crop
-    """
     width, height = pil_img.size
-    
-    # Tính toán vùng crop
-    left = width // 4      # Cắt 1/4 bên trái
-    right = 3 * width // 4 # Cắt 1/4 bên phải
-    top = 0                # Giữ nguyên chiều cao
-    bottom = height
-    
-    # Crop ảnh
-    cropped_img = pil_img.crop((left, top, right, bottom))
-    
-    print(f"[Crop] Ảnh gốc: {width}x{height} -> Ảnh crop: {cropped_img.size[0]}x{cropped_img.size[1]}")
-    
-    return cropped_img
+    left = width // 4
+    right = 3 * width // 4
+    return pil_img.crop((left, 0, right, height))
 
 
-class YOLOService:
-    """Service để quản lý YOLO model"""
-    
+class YOLOXService:
+    """Singleton service for model_yolo_x."""
+
     _instance = None
     _model = None
-    
+
     def __new__(cls):
-        """Singleton pattern"""
         if cls._instance is None:
-            cls._instance = super(YOLOService, cls).__new__(cls)
+            cls._instance = super(YOLOXService, cls).__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
-        """Khởi tạo service"""
         if self._model is None:
             self._load_model()
-    
+
     def _load_model(self):
-        """Load YOLO model vào bộ nhớ"""
         try:
-            # Tìm đường dẫn model
-            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            ai_core_dir = os.path.dirname(current_dir)
-            model_path = os.path.join(ai_core_dir, "model_yolo_x", "best.pt")
-            model_path = os.path.normpath(model_path)
-            
-            if not os.path.exists(model_path):
-                raise RuntimeError(f"Không tìm thấy YOLO weights: {model_path}")
-            
-            # Load model
-            self._model = YOLO(model_path)
-            
-            # Check và set GPU
+            model_path = _ai_core_dir() / "model_yolo_x" / "best.pt"
+            if not model_path.exists():
+                raise RuntimeError(f"Cannot find YOLO weights: {model_path}")
+
+            self._model = YOLO(str(model_path))
             if torch.cuda.is_available():
-                self._model.to('cuda')  # Chuyển model lên GPU
-                print("[YOLO Service] ✅ Sử dụng GPU")
+                self._model.to("cuda")
+                print("[model_yolo_x] Loaded on GPU")
             else:
-                self._model.to('cpu')   # Đảm bảo model ở CPU
-                print("[YOLO Service] ⚠️ Sử dụng CPU")
-                
-        except Exception as e:
-            print(f"[YOLO Service] ❌ Lỗi load model: {e}")
+                self._model.to("cpu")
+                print("[model_yolo_x] Loaded on CPU")
+        except Exception as exc:
+            print(f"[model_yolo_x] Failed to load model: {exc}")
             raise
-    
+
+    def _parse_prediction(self, result, filename: str) -> Dict:
+        detections = []
+        label = "none"
+
+        if result.boxes is not None and len(result.boxes) > 0:
+            boxes = result.boxes.xyxy.cpu().numpy()
+            classes = result.boxes.cls.cpu().numpy()
+            confidences = result.boxes.conf.cpu().numpy()
+            class_names = result.names
+
+            for box, cls_id, conf in zip(boxes, classes, confidences):
+                cls_name = class_names[int(cls_id)]
+                detections.append(
+                    {
+                        "class": cls_name,
+                        "confidence": float(conf),
+                        "bbox": box.tolist(),
+                    }
+                )
+
+            if any(det["class"] == "x_mark" for det in detections):
+                label = "x_mark"
+            elif any(det["class"] == "x_cancelled" for det in detections):
+                label = "x_cancelled"
+
+        return {
+            "filename": filename,
+            "label": label,
+            "detections": detections,
+            "status": "success",
+        }
+
     def detect(self, image_data: bytes, filename: str = "", image_path: str = None) -> Dict:
-        """
-        Detect dấu X trong ảnh
-        
-        Args:
-            image_data: Dữ liệu ảnh dạng bytes
-            filename: Tên file
-            image_path: Đường dẫn ảnh gốc (để lưu ảnh có box)
-            
-        Returns:
-            Dict chứa filename và kết quả detection
-        """
         pil_img = None
         cropped_img = None
-        img_array = None
         results = None
-        
         try:
-            # Convert bytes to PIL Image
             pil_img = Image.open(io.BytesIO(image_data))
-            
-            # Chuyển sang RGB nếu cần 
-            if pil_img.mode != 'RGB':
-                pil_img = pil_img.convert('RGB')
-            
-            # CẮT ảnh: bỏ 1/4 trái và 1/4 phải, giữ 1/2 giữa
+            if pil_img.mode != "RGB":
+                pil_img = pil_img.convert("RGB")
+
             cropped_img = crop_center_horizontal(pil_img)
-            
-            # Convert to numpy array (dùng ảnh đã crop)
             img_array = np.array(cropped_img)
-            
-            # Predict với các tham số 
+
             results = self._model.predict(
                 source=img_array,
                 save=False,
                 verbose=False,
-                conf=0.25,  # Confidence threshold
-                iou=0.45    # IoU threshold for NMS
+                conf=0.25,
+                iou=0.45,
             )
-            
-            result = results[0]
-            
-            # Parse results
-            detections = []
-            label = "none"  # Mặc định không có gì
-            
-            if result.boxes is not None and len(result.boxes) > 0:
-                boxes = result.boxes.xyxy.cpu().numpy()
-                classes = result.boxes.cls.cpu().numpy()
-                confidences = result.boxes.conf.cpu().numpy()
-                class_names = result.names
-                
-                for box, cls_id, conf in zip(boxes, classes, confidences):
-                    cls_name = class_names[int(cls_id)]
-                    detections.append({
-                        'class': cls_name,
-                        'confidence': float(conf),
-                        'bbox': box.tolist()
-                    })
-                
-                # XÓA numpy arrays ngay sau khi dùng xong
-                del boxes, classes, confidences
-                
-                # Xác định label chính (ưu tiên x_mark)
-                has_x_mark = any(d['class'] == 'x_mark' for d in detections)
-                has_x_cancelled = any(d['class'] == 'x_cancelled' for d in detections)
-                
-                if has_x_mark:
-                    label = "x_mark"
-                elif has_x_cancelled:
-                    label = "x_cancelled"
-            
-            # BỎ PHẦN VẼ BOX - chỉ trả về kết quả detection
-            # if image_path:
-            #     self._draw_detections(pil_img, detections, image_path, label)
-            #     pil_img = None  # Đã được đóng trong _draw_detections
-            
+            return self._parse_prediction(results[0], filename)
+        except Exception as exc:
             return {
-                'filename': filename,
-                'label': label,
-                'detections': detections,
-                'status': 'success'
-            }
-            
-        except Exception as e:
-            return {
-                'filename': filename,
-                'label': 'none',
-                'detections': [],
-                'status': 'error',
-                'error': str(e)
+                "filename": filename,
+                "label": "none",
+                "detections": [],
+                "status": "error",
+                "error": str(exc),
             }
         finally:
-            # CLEANUP: Giải phóng memory
             if cropped_img is not None:
                 cropped_img.close()
             if pil_img is not None:
                 pil_img.close()
-            del cropped_img
-            del pil_img
-            del img_array
             if results is not None:
                 del results
-    
-    def _draw_detections(self, pil_img: Image.Image, detections: List[Dict], image_path: str, label: str = 'none'):
-        """
-        Vẽ bounding box lên ảnh và lưu lại
-        
-        Args:
-            pil_img: PIL Image object (sẽ bị đóng sau khi save)
-            detections: List các detection
-            image_path: Đường dẫn để lưu ảnh
-            label: Label chính (x_mark, x_cancelled, none)
-        """
-        draw = None
-        font = None
-        
-        try:
-            # Tạo draw object
-            draw = ImageDraw.Draw(pil_img)
-            
-            # Thử load font (nếu không có thì dùng default)
-            try:
-                # Windows: Arial
-                font = ImageFont.truetype("arial.ttf", 20)
-            except:
-                font = ImageFont.load_default()
-            
-            # Nếu không có detection, vẽ "none (0%)" ở góc trên trái
-            if not detections or label == 'none':
-                text = "none (0%)"
-                # Vẽ background cho text
-                text_bbox = draw.textbbox((10, 10), text, font=font)
-                draw.rectangle(text_bbox, fill=(128, 128, 128))  # Màu xám
-                # Vẽ text
-                draw.text((10, 10), text, fill=(255, 255, 255), font=font)
-            else:
-                # Màu cho từng class
-                color_map = {
-                    'x_mark': (0, 255, 0),      # Xanh lá
-                    'x_cancelled': (255, 0, 0),  # Đỏ
-                }
-                
-                # Vẽ từng detection
-                for det in detections:
-                    bbox = det['bbox']  # [x1, y1, x2, y2]
-                    cls_name = det['class']
-                    conf = det['confidence']
-                    
-                    # Lấy màu theo class
-                    color = color_map.get(cls_name, (255, 255, 0))  # Default: vàng
-                    
-                    # Vẽ rectangle
-                    draw.rectangle(bbox, outline=color, width=3)
-                    
-                    # Tạo label text
-                    label_text = f"{cls_name}: {conf:.0%}"
-                    
-                    # Vẽ background cho text
-                    text_bbox = draw.textbbox((bbox[0], bbox[1] - 25), label_text, font=font)
-                    draw.rectangle(text_bbox, fill=color)
-                    
-                    # Vẽ text
-                    draw.text((bbox[0], bbox[1] - 25), label_text, fill=(255, 255, 255), font=font)
-            
-            # Lưu ảnh đè lên ảnh gốc
-            pil_img.save(image_path)
-            print(f"[YOLO Service] ✅ Đã lưu ảnh với detection: {os.path.basename(image_path)}")
-            
-        except Exception as e:
-            print(f"[YOLO Service] ⚠️ Lỗi khi vẽ bounding box: {e}")
-        finally:
-            # CLEANUP: Đóng PIL image sau khi save
-            del draw, font
-            if pil_img is not None:
-                pil_img.close()
-            del pil_img
-    
+
     def detect_batch(self, images: List[tuple]) -> List[Dict]:
-        """
-        Detect batch nhiều ảnh - TẬN DỤNG GPU PARALLEL PROCESSING
-        
-        Args:
-            images: List of (image_data, filename, image_path) tuples
-            
-        Returns:
-            List of results
-        """
         results = []
         pil_images = []
         cropped_images = []
         img_arrays = []
-        
+        filenames = []
+
         try:
-            print(f"[YOLO Service] 🚀 Batch processing {len(images)} images")
-            
-            # Chuẩn bị batch (crop tất cả ảnh trước)
-            filenames = []
-            image_paths = []
-            
             for item in images:
-                # Hỗ trợ cả 2 format: (data, name) và (data, name, path)
-                if len(item) == 3:
-                    image_data, filename, image_path = item
-                    image_paths.append(image_path)
-                else:
-                    image_data, filename = item[:2]
-                    image_paths.append(None)
-                
+                image_data, filename = item[:2]
                 try:
-                    # Load và convert ảnh
                     pil_img = Image.open(io.BytesIO(image_data))
-                    if pil_img.mode != 'RGB':
-                        pil_img = pil_img.convert('RGB')
+                    if pil_img.mode != "RGB":
+                        pil_img = pil_img.convert("RGB")
                     pil_images.append(pil_img)
-                    
-                    # Crop ảnh
+
                     cropped_img = crop_center_horizontal(pil_img)
                     cropped_images.append(cropped_img)
-                    
-                    # Convert to numpy
-                    img_array = np.array(cropped_img)
-                    img_arrays.append(img_array)
-                    
+                    img_arrays.append(np.array(cropped_img))
                     filenames.append(filename)
-                    
-                except Exception as e:
-                    results.append({
-                        'filename': filename,
-                        'label': 'none',
-                        'detections': [],
-                        'status': 'error',
-                        'error': f"Lỗi đọc ảnh: {str(e)}"
-                    })
-            
-            # BATCH PREDICTION - GPU xử lý SONG SONG tất cả ảnh
+                except Exception as exc:
+                    results.append(
+                        {
+                            "filename": filename,
+                            "label": "none",
+                            "detections": [],
+                            "status": "error",
+                            "error": f"Image read error: {exc}",
+                        }
+                    )
+
             if img_arrays:
                 batch_results = self._model.predict(
                     source=img_arrays,
@@ -514,77 +256,183 @@ class YOLOService:
                     verbose=False,
                     conf=0.25,
                     iou=0.45,
-                    stream=False  # Đảm bảo trả về list results
+                    stream=False,
                 )
-                
-                # Parse từng result
-                for filename, result, image_path in zip(filenames, batch_results, image_paths):
-                    detections = []
-                    label = "none"
-                    
-                    if result.boxes is not None and len(result.boxes) > 0:
-                        boxes = result.boxes.xyxy.cpu().numpy()
-                        classes = result.boxes.cls.cpu().numpy()
-                        confidences = result.boxes.conf.cpu().numpy()
-                        class_names = result.names
-                        
-                        for box, cls_id, conf in zip(boxes, classes, confidences):
-                            cls_name = class_names[int(cls_id)]
-                            detections.append({
-                                'class': cls_name,
-                                'confidence': float(conf),
-                                'bbox': box.tolist()
-                            })
-                        
-                        # XÓA numpy arrays
-                        del boxes, classes, confidences
-                        
-                        # Xác định label chính
-                        has_x_mark = any(d['class'] == 'x_mark' for d in detections)
-                        has_x_cancelled = any(d['class'] == 'x_cancelled' for d in detections)
-                        
-                        if has_x_mark:
-                            label = "x_mark"
-                        elif has_x_cancelled:
-                            label = "x_cancelled"
-                    
-                    results.append({
-                        'filename': filename,
-                        'label': label,
-                        'detections': detections,
-                        'status': 'success'
-                    })
-                
-                # Cleanup batch results
-                del batch_results
-                
-                print(f"[YOLO Service] ✅ Batch processed {len(results)} images successfully")
-                
-        except Exception as e:
-            # Fallback to individual processing
-            print(f"[YOLO Service] ⚠️ Batch failed, fallback to individual: {e}")
-            results = []
-            for item in images:
-                if len(item) == 3:
-                    image_data, filename, image_path = item
-                    result = self.detect(image_data, filename, image_path)
-                else:
-                    image_data, filename = item
-                    result = self.detect(image_data, filename)
-                results.append(result)
-        
+                for filename, result in zip(filenames, batch_results):
+                    results.append(self._parse_prediction(result, filename))
+
+            return results
+        except Exception as exc:
+            print(f"[model_yolo_x] Batch failed, fallback to individual: {exc}")
+            return [
+                self.detect(item[0], item[1], item[2] if len(item) > 2 else None)
+                for item in images
+            ]
         finally:
-            # CLEANUP: Giải phóng tất cả images
             for img in cropped_images:
-                try:
-                    img.close()
-                except:
-                    pass
+                img.close()
             for img in pil_images:
-                try:
-                    img.close()
-                except:
-                    pass
-            del pil_images, cropped_images, img_arrays
-        
+                img.close()
+
+
+class ResNet18CrossedService:
+    """Singleton service for model_resnet18_crossed."""
+
+    _instance = None
+    _cnn_model = None
+    _svm_model = None
+    _transform = None
+    _device = None
+    _names = None
+    _predict_module = None
+    _mode = "cnn"
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ResNet18CrossedService, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if self._cnn_model is None:
+            self._load_model()
+
+    def _load_model(self):
+        try:
+            model_dir = _ai_core_dir() / "model_resnet18_crossed"
+            config_path = model_dir / "config.yaml"
+            predict_path = model_dir / "predict.py"
+
+            if not config_path.exists():
+                raise RuntimeError(f"Cannot find ResNet18 crossed config: {config_path}")
+
+            module = _load_module("model_resnet18_crossed_predict", predict_path)
+            cfg = module.load_config(config_path)
+            self._predict_module = module
+            self._names = module.label_names(cfg)
+            self._transform = module.build_transform(cfg)
+
+            device_name = cfg.get("runtime", {}).get("device", "auto")
+            self._device = module.get_device(device_name)
+
+            checkpoint_path = module.resolve_path(
+                cfg["paths"]["cnn_checkpoint"],
+                config_path.parent,
+            )
+            self._cnn_model = module.load_cnn(
+                checkpoint_path,
+                num_classes=len(self._names),
+                device=self._device,
+            )
+
+            self._mode = cfg.get("runtime", {}).get("mode", "cnn")
+            if self._mode == "svm":
+                svm_path = module.resolve_path(cfg["paths"]["svm_model"], config_path.parent)
+                if not svm_path.exists():
+                    raise RuntimeError(f"Cannot find SVM model: {svm_path}")
+                self._svm_model = module.joblib.load(svm_path)
+
+            print(f"[model_resnet18_crossed] Loaded in {self._mode} mode on {self._device}")
+        except Exception as exc:
+            print(f"[model_resnet18_crossed] Failed to load model: {exc}")
+            raise
+
+    @staticmethod
+    def _normalize_label(raw_label: str) -> tuple[str, bool]:
+        normalized = raw_label.strip().lower()
+        is_struck = normalized in {"gach_ten", "struck", "crossed_out", "name_struck"}
+        return ("struck" if is_struck else "not_struck"), is_struck
+
+    def _predict_batch_tensors(self, batch: torch.Tensor):
+        if self._mode == "svm":
+            features = self._predict_module.extract_features(self._cnn_model, batch, self._device)
+            predictions = self._svm_model.predict(features)
+            probabilities = (
+                self._svm_model.predict_proba(features)
+                if hasattr(self._svm_model, "predict_proba")
+                else None
+            )
+            return predictions, probabilities
+
+        return self._predict_module.predict_cnn(self._cnn_model, batch, self._device)
+
+    def _parse_prediction(self, filename: str, pred: int, probabilities=None) -> Dict:
+        raw_label = self._names[int(pred)]
+        label, is_struck = self._normalize_label(raw_label)
+
+        confidence = 0
+        probability_map = {}
+        if probabilities is not None:
+            probability_map = {
+                name: float(prob)
+                for name, prob in zip(self._names, probabilities)
+            }
+            confidence = float(max(probabilities))
+
+        return {
+            "filename": filename,
+            "label": label,
+            "raw_label": raw_label,
+            "is_struck": is_struck,
+            "confidence": confidence,
+            "probabilities": probability_map,
+            "detections": [],
+            "status": "success",
+        }
+
+    def detect(self, image_data: bytes, filename: str = "") -> Dict:
+        try:
+            return self.detect_batch([(image_data, filename)])[0]
+        except Exception as exc:
+            return {
+                "filename": filename,
+                "label": "unknown",
+                "raw_label": "",
+                "is_struck": None,
+                "confidence": 0,
+                "probabilities": {},
+                "detections": [],
+                "status": "error",
+                "error": str(exc),
+            }
+
+    def detect_batch(self, images: List[tuple]) -> List[Dict]:
+        tensors = []
+        filenames = []
+        results = []
+
+        for image_data, filename in images:
+            pil_img = None
+            try:
+                pil_img = Image.open(io.BytesIO(image_data))
+                pil_img = ImageOps.exif_transpose(pil_img).convert("RGB")
+                tensors.append(self._transform(pil_img))
+                filenames.append(filename)
+            except Exception as exc:
+                results.append(
+                    {
+                        "filename": filename,
+                        "label": "unknown",
+                        "raw_label": "",
+                        "is_struck": None,
+                        "confidence": 0,
+                        "probabilities": {},
+                        "detections": [],
+                        "status": "error",
+                        "error": f"Image read error: {exc}",
+                    }
+                )
+            finally:
+                if pil_img is not None:
+                    pil_img.close()
+
+        if not tensors:
+            return results
+
+        batch = torch.stack(tensors, dim=0)
+        predictions, probabilities = self._predict_batch_tensors(batch)
+
+        for idx, (filename, pred) in enumerate(zip(filenames, predictions)):
+            row_probs = probabilities[idx] if probabilities is not None else None
+            results.append(self._parse_prediction(filename, int(pred), row_probs))
+
         return results

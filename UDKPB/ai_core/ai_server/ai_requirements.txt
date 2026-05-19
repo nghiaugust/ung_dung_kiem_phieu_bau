@@ -9,7 +9,6 @@ django-cors-headers==4.3.1
 # Deep Learning frameworks
 torch==2.9.0
 torchvision==0.24.0
-torchaudio==2.9.0
 
 # Computer Vision
 ultralytics==8.3.179
@@ -17,13 +16,8 @@ ultralytics-thop==2.0.15
 opencv-python==4.12.0.88
 opencv-python-headless==4.10.0.84
 
-# NLP & OCR
-transformers==4.54.1
-tokenizers==0.21.4
+# OCR
 pillow==10.2.0
-easyocr==1.7.2
-vietocr==0.3.13
-pytesseract==0.3.13
 
 # ML Libraries
 numpy==2.0.2
@@ -31,10 +25,7 @@ scipy==1.14.1
 scikit-learn==1.6.1
 scikit-image==0.24.0
 pandas==2.2.3
-
-# HuggingFace
-huggingface-hub==0.34.3
-safetensors==0.4.5
+joblib==1.5.1
 
 # Image Processing
 albumentations==1.4.2

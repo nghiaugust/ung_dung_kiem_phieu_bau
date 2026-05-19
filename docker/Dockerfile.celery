@@ -35,8 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzbar0 \
     # PDF processing
     poppler-utils \
-    # OCR runtime
-    tesseract-ocr \
     # Git for downloading models
     git \
     wget \

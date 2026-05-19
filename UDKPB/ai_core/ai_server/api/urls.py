@@ -5,11 +5,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # TrOCR endpoints
-    path('trocr/recognize/', views.trocr_recognize, name='trocr_recognize'),
-    
-    # YOLO endpoints
-    path('yolo/detect/', views.yolo_detect, name='yolo_detect'),
+    path('model_vietnameocr/recognize/', views.vietnameocr_recognize, name='vietnameocr_recognize'),
+    path('model_yolo_x/detect/', views.yolo_x_detect, name='yolo_x_detect'),
+    path('model_resnet18_crossed/detect/', views.resnet18_crossed_detect, name='resnet18_crossed_detect'),
     
     # Health check
     path('health/', views.health_check, name='health_check'),

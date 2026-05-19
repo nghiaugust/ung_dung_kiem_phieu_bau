@@ -14,10 +14,10 @@ class AIModelResult(models.Model):
 			"cols": 4
 		},
 		"cell_models": {
-			"0_0": "trocr",
-			"0_1": "yolo",
-			"1_0": "trocr",
-			"1_1": "yolo"
+			"0_0": "model_vietnameocr",
+			"0_1": "model_yolo_x",
+			"1_0": "model_vietnameocr",
+			"1_1": "model_yolo_x"
 		}
 	}
 	
@@ -118,7 +118,7 @@ class AIModelResult(models.Model):
 		Args:
 			row: int - Số hàng (0-indexed)
 			col: int - Số cột (0-indexed)
-			model_name: str - Tên model ('trocr', 'yolo', etc.)
+			model_name: str - Ten model ('model_vietnameocr', 'model_yolo_x', etc.)
 		"""
 		cell_key = f"{row}_{col}"
 		
@@ -137,7 +137,7 @@ class AIModelResult(models.Model):
 			col: int - Số cột (0-indexed)
 			
 		Returns:
-			str hoặc None: Tên model ('trocr', 'yolo', etc.)
+			str hoac None: Ten model ('model_vietnameocr', 'model_yolo_x', etc.)
 		"""
 		cell_key = f"{row}_{col}"
 		return self.config_model.get("cell_models", {}).get(cell_key)

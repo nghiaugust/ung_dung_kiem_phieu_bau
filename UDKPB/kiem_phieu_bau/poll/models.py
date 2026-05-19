@@ -32,8 +32,9 @@ class Poll(models.Model): # cuộc bỏ phiếu
 	
 	# Cấu hình kiểm phiếu
 	config_number = models.IntegerField(null=True, blank=True, choices=[
-		(1, 'Cấu hình 1: TrOCR + YOLO'),
-		(2, 'Cấu hình 2: Theo thứ tự + YOLO'),
+		(1, 'Cau hinh 1: VietNameOCR + YOLO-X'),
+		(2, 'Cau hinh 2: Theo thu tu + YOLO-X'),
+		(3, 'Cau hinh 3: Phieu gach ten + ResNet18 crossed'),
 	], help_text='Cấu hình AI model đã sử dụng để kiểm phiếu')
 	
 	def save(self, *args, **kwargs):

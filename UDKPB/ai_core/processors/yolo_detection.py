@@ -13,6 +13,11 @@ from ultralytics import YOLO
 from core.tien_xu_ly import straighten_ballot
 
 
+DEFAULT_YOLO_WEIGHTS_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "model_yolo_x", "best.pt")
+)
+
+
 # Layout cho data1 (từ file tien_xu_ly.py)
 Y_MIN1, Y_MAX1 = 208, 2225
 COL_BOUNDARIES1 = [385, 974, 1233, 1481]
@@ -21,7 +26,7 @@ COL_BOUNDARIES1 = [385, 974, 1233, 1481]
 class BallotVisualizer:
     """Lớp để trực quan hóa kết quả detection trên phiếu bầu"""
     
-    def __init__(self, yolo_weights_path: str = "models/best.pt"):
+    def __init__(self, yolo_weights_path: str = DEFAULT_YOLO_WEIGHTS_PATH):
         """
         Khởi tạo visualizer
         
@@ -282,7 +287,7 @@ def main():
     parser = argparse.ArgumentParser(description="Trực quan hóa kết quả detection trên phiếu bầu")
     parser.add_argument("--input", type=str, help="Đường dẫn ảnh phiếu bầu đầu vào")
     parser.add_argument("--output", type=str, default=None, help="Đường dẫn lưu ảnh kết quả (tùy chọn)")
-    parser.add_argument("--weights", type=str, default="models/best.pt", help="Đường dẫn YOLO weights")
+    parser.add_argument("--weights", type=str, default=DEFAULT_YOLO_WEIGHTS_PATH, help="Đường dẫn YOLO weights")
     parser.add_argument("--input_dir", type=str, help="Thư mục chứa ảnh để xử lý batch")
     parser.add_argument("--output_dir", type=str, help="Thư mục lưu kết quả batch")
     args = parser.parse_args()

@@ -9,16 +9,21 @@ from ballot.models import Ballot, BallotSelection
 from preprocessing.models import BallotCell, PreprocessedBallot
 from .models import AIModelResult
 from . import config_model
+from .configurations.base import (
+	MODEL_RESNET18_CROSSED,
+	MODEL_VIETNAMEOCR,
+	MODEL_YOLO_X,
+)
 import requests
 import os
 import time
-import difflib
 from typing import List, Dict, Tuple
 import json
 
 
-AI_TROCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/trocr/recognize/"
-AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
+AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_vietnameocr/recognize/"
+AI_YOLO_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_yolo_x/detect/"
+AI_RESNET18_CROSSED_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_crossed/detect/"
 AI_HEALTH_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/health/"
 
 
@@ -27,17 +32,17 @@ def save_configuration(request, poll_id):
 	"""
 	Lưu cấu hình model cho tất cả các ballot trong poll
 	
-	Expects JSON: {"config_type": 1 hoặc 2}
+	Expects JSON: {"config_type": 1, 2 hoac 3}
 	"""
 	try:
 		# Parse request body
 		data = json.loads(request.body)
 		config_type = data.get('config_type')
 		
-		if config_type not in [1, 2]:
+		if not config_model.is_valid_config(config_type):
 			return JsonResponse({
 				'status': 'error',
-				'message': 'config_type phải là 1 hoặc 2'
+				'message': 'config_type phai la 1, 2 hoac 3'
 			}, status=400)
 		
 		# Lấy poll
@@ -89,10 +94,7 @@ def save_configuration(request, poll_id):
 					ai_result.save()
 				
 				# Áp dụng cấu hình tương ứng
-				if config_type == 1:
-					config_model.apply_config1(ai_result)
-				elif config_type == 2:
-					config_model.apply_config2(ai_result)
+				config_model.apply_config(ai_result, config_type)
 				
 				configured_count += 1
 				
@@ -205,9 +207,9 @@ def get_poll_cell_image_paths(poll_id: int, rows: List[int] = None, cols: List[i
 	return result
 
 
-def call_trocr_api(image_paths: List[str]) -> Dict:
+def call_vietnameocr_api(image_paths: List[str]) -> Dict:
 	"""
-	Gọi TrOCR API để nhận diện text
+	Goi model_vietnameocr API de nhan dien text
 	
 	Args:
 		image_paths: Danh sách đường dẫn ảnh
@@ -215,7 +217,7 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	api_url = AI_TROCR_API_URL
+	api_url = AI_VIETNAMEOCR_API_URL
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -252,7 +254,7 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 				pass
 
 
-def call_yolo_api(image_paths: List[str]) -> Dict:
+def call_yolo_x_api(image_paths: List[str]) -> Dict:
 	"""
 	Gọi YOLO API để detect dấu X
 	
@@ -263,7 +265,7 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		Dict chứa kết quả từ API
 	"""
 	import json
-	api_url = AI_YOLO_API_URL
+	api_url = AI_YOLO_X_API_URL
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -307,6 +309,63 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 				pass
 
 
+def call_resnet18_crossed_api(image_paths: List[str]) -> Dict:
+	"""
+	API mau cho model phieu gach ten.
+
+	Endpoint mac dinh: /api/model_resnet18_crossed/detect/
+	Expected response:
+	{
+		"success": true,
+		"results": [
+			{
+				"label": "struck" | "not_struck",
+				"is_struck": true,
+				"confidence": 0.95,
+				"detections": []
+			}
+		]
+	}
+	"""
+	file_handles = []
+	try:
+		files = []
+		for path in image_paths:
+			filename = os.path.basename(path)
+			fh = open(path, 'rb')
+			file_handles.append(fh)
+			files.append(('images', (filename, fh, 'image/jpeg')))
+
+		response = requests.post(
+			AI_RESNET18_CROSSED_API_URL,
+			files=files,
+			data={
+				'contract': json.dumps({
+					'expected_result': {
+						'label': 'struck|not_struck',
+						'is_struck': True,
+						'confidence': 0.0,
+						'detections': []
+					}
+				})
+			},
+			timeout=settings.AI_SERVER_REQUEST_TIMEOUT
+		)
+		response.raise_for_status()
+		return response.json()
+	except requests.exceptions.RequestException as e:
+		return {
+			'success': False,
+			'error': str(e)
+		}
+	finally:
+		for fh in file_handles:
+			try:
+				fh.close()
+			except:
+				pass
+
+
 
 
 def counting_form_view(request, poll_id):
@@ -336,17 +395,27 @@ def counting_form_view(request, poll_id):
 	).count()
 	
 	# Điều kiện 5: Check model AI
-	trocr_status = False
-	yolo_status = False
+	vietnameocr_status = False
+	yolo_x_status = False
+	resnet18_crossed_status = False
 	try:
 		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
 		if health_response.status_code == 200:
 			health_data = health_response.json()
-			trocr_status = health_data.get('services', {}).get('trocr', False)
-			yolo_status = health_data.get('services', {}).get('yolo', False)
+			vietnameocr_status = health_data.get('services', {}).get(MODEL_VIETNAMEOCR, False)
+			yolo_x_status = health_data.get('services', {}).get(MODEL_YOLO_X, False)
+			resnet18_crossed_status = health_data.get('services', {}).get(MODEL_RESNET18_CROSSED, False)
 	except:
 		pass  # Nếu lỗi thì để mặc định False
 	
+	ai_service_statuses = {
+		MODEL_VIETNAMEOCR: vietnameocr_status,
+		MODEL_YOLO_X: yolo_x_status,
+		MODEL_RESNET18_CROSSED: resnet18_crossed_status,
+	}
+	required_services = config_model.get_required_services(poll.config_number) if poll.config_number else []
+	ai_ready_for_config = all(ai_service_statuses.get(service, False) for service in required_services) if required_services else False
+
 	context = {
 		'poll': poll,
 		# Thêm thông tin điều kiện
@@ -355,8 +424,11 @@ def counting_form_view(request, poll_id):
 		'ballots_with_image_count': ballots_with_image_count,
 		'ballots_with_image_total': ballots_with_image_total,
 		'preprocessed_count': preprocessed_count,
-		'trocr_status': trocr_status,
-		'yolo_status': yolo_status,
+		'vietnameocr_status': vietnameocr_status,
+		'yolo_x_status': yolo_x_status,
+		'resnet18_crossed_status': resnet18_crossed_status,
+		'ai_ready_for_config': ai_ready_for_config,
+		'config_definitions': config_model.CONFIG_DEFINITIONS,
 		# Thêm config_number và status để kiểm tra
 		'config_number': poll.config_number,
 		'is_counted': poll.status in ['counted', 'Đã kiểm phiếu'],
@@ -379,7 +451,9 @@ def process_counting(request, poll_id):
 		# Lấy config_number đã lưu
 		saved_config = poll.config_number
 		# Kiểm tra xem user có đang chọn config khác không
-		requested_config = 1 if request.POST.get('config1') == '1' else 2
+		requested_config = int(request.POST.get('config_type') or request.POST.get('config_number') or 0)
+		if not requested_config:
+			requested_config = 1 if request.POST.get('config1') == '1' else (2 if request.POST.get('config2') == '1' else 3)
 		if saved_config != requested_config:
 			messages.error(request, f'Poll đã được kiểm phiếu với cấu hình {saved_config}. Không thể thay đổi cấu hình!')
 			return redirect('counting_form', poll_id=poll_id)
@@ -387,19 +461,20 @@ def process_counting(request, poll_id):
 	# Parse dữ liệu từ form
 	config1 = request.POST.get('config1') == '1'
 	config2 = request.POST.get('config2') == '1'
+	config3 = request.POST.get('config3') == '1'
 	
 	# Kiểm tra phải chọn đúng 1 cấu hình
-	if not config1 and not config2:
+	selected_configs = [config1, config2, config3]
+	if selected_configs.count(True) == 0:
 		messages.warning(request, 'Vui lòng chọn một cấu hình!')
 		return redirect('counting_form', poll_id=poll_id)
 	
-	if config1 and config2:
+	if selected_configs.count(True) > 1:
 		messages.warning(request, 'Chỉ được chọn một cấu hình!')
 		return redirect('counting_form', poll_id=poll_id)
 	
 	# Xác định loại cấu hình
-	config_type = 'config1' if config1 else 'config2'
-	config_number = 1 if config1 else 2
+	config_number = 1 if config1 else (2 if config2 else 3)
 	
 	# Lưu config_number vào Poll
 	poll.config_number = config_number
@@ -429,10 +504,7 @@ def process_counting(request, poll_id):
 			)
 			
 			# 2. Áp dụng cấu hình (config1 hoặc config2)
-			if config_type == 'config1':
-				config_model.apply_config1(ai_result)
-			else:
-				config_model.apply_config2(ai_result)
+			config_model.apply_config(ai_result, config_number)
 			
 			# 3. Lấy cấu hình đã được khởi tạo
 			rows, cols = ai_result.get_table_dimensions()
@@ -466,23 +538,41 @@ def process_counting(request, poll_id):
 					continue
 				
 				# Gọi model tương ứng
-				if model_name == 'trocr':
-					# Gọi TrOCR API
-					trocr_result = call_trocr_api([cell_image_path])
+				if model_name == MODEL_RESNET18_CROSSED:
+					resnet18_crossed_result = call_resnet18_crossed_api([cell_image_path])
+
+					if resnet18_crossed_result.get('success') and resnet18_crossed_result.get('results'):
+						detection = resnet18_crossed_result['results'][0]
+						result_data = {
+							'label': detection.get('label', 'unknown'),
+							'raw_label': detection.get('raw_label', ''),
+							'is_struck': detection.get('is_struck'),
+							'probabilities': detection.get('probabilities', {}),
+							'detections': detection.get('detections', [])
+						}
+						confidence = detection.get('confidence', 0)
+						ai_result.set_cell_result(row, col, result_data, confidence)
+						total_processed_cells += 1
+					else:
+						ai_result.set_cell_result(row, col, "[Loi model_resnet18_crossed]", 0)
+
+				elif model_name == MODEL_VIETNAMEOCR:
+					# Goi model_vietnameocr API
+					vietnameocr_result = call_vietnameocr_api([cell_image_path])
 					
-					if trocr_result.get('success') and trocr_result.get('results'):
-						recognized_text = trocr_result['results'][0].get('text', '')
-						confidence = trocr_result['results'][0].get('confidence', 0)
+					if vietnameocr_result.get('success') and vietnameocr_result.get('results'):
+						recognized_text = vietnameocr_result['results'][0].get('text', '')
+						confidence = vietnameocr_result['results'][0].get('confidence', 0)
 						
 						# Lưu kết quả vào result_model
 						ai_result.set_cell_result(row, col, recognized_text, confidence)
 						total_processed_cells += 1
 					else:
-						ai_result.set_cell_result(row, col, "[Lỗi TrOCR]", 0)
+						ai_result.set_cell_result(row, col, "[Loi model_vietnameocr]", 0)
 				
-				elif model_name == 'yolo':
+				elif model_name == MODEL_YOLO_X:
 					# Gọi YOLO API
-					yolo_result = call_yolo_api([cell_image_path])
+					yolo_result = call_yolo_x_api([cell_image_path])
 					
 					if yolo_result.get('success') and yolo_result.get('results'):
 						detection = yolo_result['results'][0]
@@ -506,6 +596,10 @@ def process_counting(request, poll_id):
 						ai_result.set_cell_result(row, col, "[Lỗi YOLO]", 0)
 			
 			# 5. Cập nhật trạng thái thành công
+			is_valid_by_config = config_model.evaluate_ballot_validity(ai_result, config_number)
+			ballot.is_valid = is_valid_by_config
+			ballot.save(update_fields=['is_valid'])
+
 			processing_time = time.time() - start_time_total
 			ai_result.status = 'success'
 			ai_result.processing_time = processing_time
@@ -520,136 +614,29 @@ def process_counting(request, poll_id):
 			ai_result.save()
 			print(f"[ERROR] Lỗi xử lý ballot {ballot.ballot_id}: {e}")
 	
-	# 6. Tự động tạo BallotSelection từ kết quả
+	# 6. Tao BallotSelection bang dispatcher cau hinh
 	try:
-		# Lấy tất cả AIModelResult đã xử lý thành công
 		successful_results = AIModelResult.objects.filter(
 			ballot__poll=poll,
 			status='success'
 		)
-		
-		# Lấy danh sách ứng viên
-		candidate_list = list(Candidate.objects.filter(poll=poll).order_by('candidate_id'))
-		candidate_names = {c.candidate_id: c.name for c in candidate_list}
-		
-		# Xóa BallotSelection cũ
 		BallotSelection.objects.filter(ballot__poll=poll).delete()
-		
-		selections_to_create = []
-		
+		selections_count = 0
 		for ai_result in successful_results:
-			ballot = ai_result.ballot
-			
-			# Lấy config_number từ Poll
-			config_number = poll.config_number
-			
-			# Lấy config để biết start_row
-			start_row = 1  # Dòng 2 trong UI → index 1 trong DB
-			
-			# Lấy tất cả cells có YOLO
-			yolo_cells = ai_result.get_cells_by_model('yolo')
-			
-			# Lấy tất cả cells có TrOCR (nếu có)
-			trocr_cells = ai_result.get_cells_by_model('trocr')
-			
-			# Group theo row để xử lý từng dòng
-			rows_dict = {}
-			for cell_key, cell_data in yolo_cells.items():
-				row, col = map(int, cell_key.split('_'))
-				if row not in rows_dict:
-					rows_dict[row] = {'yolo': [], 'trocr': None}
-				rows_dict[row]['yolo'].append((col, cell_data))
-			
-			# Thêm TrOCR vào rows_dict
-			for cell_key, cell_data in trocr_cells.items():
-				row, col = map(int, cell_key.split('_'))
-				if row not in rows_dict:
-					rows_dict[row] = {'yolo': [], 'trocr': None}
-				rows_dict[row]['trocr'] = cell_data
-			
-			# Xử lý từng dòng
-			for row, row_data in rows_dict.items():
-				yolo_results = row_data['yolo']
-				trocr_result = row_data['trocr']
-				
-				# Sắp xếp yolo_results theo col để lấy đúng cột đồng ý (cột đầu tiên)
-				yolo_results.sort(key=lambda x: x[0])
-				
-				if not yolo_results:
-					continue
-				
-				# Lấy cột đồng ý (cột đầu tiên)
-				agree_col, agree_result = yolo_results[0]
-				result_data = agree_result.get('result', {})
-				
-				if isinstance(result_data, dict):
-					label = result_data.get('label', 'none')
-				else:
-					continue
-				
-				# Kiểm tra có dấu X không
-				if 'x_mark' not in label.lower():
-					continue
-				
-				# Xác định candidate dựa trên config_number từ database
-				candidate_to_select = None
-				
-				if config_number == 1 and trocr_result:
-					# Config1: Sử dụng TrOCR để matching tên
-					recognized_name = trocr_result.get('result', '').strip()
-					
-					if recognized_name and recognized_name != "[Lỗi TrOCR]":
-						# Tìm candidate giống nhất với recognized_name
-						best_match_id = None
-						best_match_ratio = 0.0
-						
-						for candidate_id, candidate_name in candidate_names.items():
-							# Sử dụng difflib để so sánh tên
-							ratio = difflib.SequenceMatcher(
-								None, 
-								recognized_name.upper(), 
-								candidate_name.upper()
-							).ratio()
-							
-							if ratio > best_match_ratio:
-								best_match_ratio = ratio
-								best_match_id = candidate_id
-						
-						# Chỉ chọn nếu tỉ lệ khớp >= 0.6 (60%)
-						if best_match_id and best_match_ratio >= 0.6:
-							candidate_to_select = next(
-								(c for c in candidate_list if c.candidate_id == best_match_id),
-								None
-							)
-				else:
-					# Config2: Sử dụng thứ tự dòng
-					candidate_index = row - start_row
-					
-					if 0 <= candidate_index < len(candidate_list):
-						candidate_to_select = candidate_list[candidate_index]
-				
-				# Tạo BallotSelection nếu đã xác định được candidate
-				if candidate_to_select:
-					selections_to_create.append(
-						BallotSelection(
-							ballot=ballot,
-							candidate_id=candidate_to_select.candidate_id
-						)
-					)
-		
-		# Bulk create
-		if selections_to_create:
-			BallotSelection.objects.bulk_create(selections_to_create)
-			print(f"[BallotSelection] ✅ Đã tạo {len(selections_to_create)} lựa chọn")
-		
+			selections_count += config_model.create_ballot_selections(
+				ai_result.ballot,
+				poll,
+				ai_result,
+				poll.config_number
+			)
+		print(f"[BallotSelection] Created {selections_count} selections using config dispatcher")
 	except Exception as e:
-		print(f"[ERROR] Lỗi tạo BallotSelection: {e}")
-	
-	# 7. Cập nhật trạng thái Poll và Ballot
+		print(f"[ERROR] Loi tao BallotSelection bang config dispatcher: {e}")
+
+	# 7. Cap nhat trang thai Poll va Ballot
 	poll.status = 'Đã kiểm phiếu'
 	poll.save()
-	
-	# Update counting_status thay vì is_checked (is_checked giờ là property)
+
 	Ballot.objects.filter(poll=poll).update(counting_status='completed')
 	
 	messages.success(request, f'Đã xử lý thành công {total_processed_ballots} phiếu bầu với {total_processed_cells} ô!')
