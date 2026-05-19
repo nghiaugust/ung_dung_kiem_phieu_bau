@@ -29,6 +29,7 @@ urlpatterns = [
     path('form/', include('form.urls')),  # LaTeX form editor
     path('preprocessing/', include('preprocessing.urls')),  # Image preprocessing for AI
     path('counting/', include('counting.urls')),  # AI model counting
+    path('config/', include('config.urls')),  # System configuration
     path('', include('quan_ly_phieu_bau.urls')),
 ]
 

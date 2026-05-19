@@ -19,11 +19,7 @@ from counting.configurations.base import (
     MODEL_RESNET18_X,
     MODEL_VIETNAMEOCR,
 )
-
-
-AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_vietnameocr/recognize/"
-AI_RESNET18_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_x/detect/"
-AI_RESNET18_CROSSED_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_crossed/detect/"
+from config.service_manager import get_model_api_url
 
 
 def prepare_batch_requests(ballot, ai_result, all_cell_models):
@@ -349,7 +345,7 @@ def counting_queue(self, ballot_id):
             if vietnameocr_batch['image_paths']:
                 print(f"[COUNTING QUEUE] Gui model_vietnameocr batch voi {len(vietnameocr_batch['image_paths'])} anh")
                 vietnameocr_response = send_batch_request(
-                    api_url=AI_VIETNAMEOCR_API_URL,
+                    api_url=get_model_api_url(MODEL_VIETNAMEOCR),
                     image_paths=vietnameocr_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
@@ -365,7 +361,7 @@ def counting_queue(self, ballot_id):
                 
                 
                 resnet18_x_response = send_batch_request(
-                    api_url=AI_RESNET18_X_API_URL,
+                    api_url=get_model_api_url(MODEL_RESNET18_X),
                     image_paths=resnet18_x_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
@@ -378,7 +374,7 @@ def counting_queue(self, ballot_id):
             if resnet18_crossed_batch['image_paths']:
                 print(f"[COUNTING QUEUE] Gui model_resnet18_crossed batch voi {len(resnet18_crossed_batch['image_paths'])} anh")
                 resnet18_crossed_response = send_batch_request(
-                    api_url=AI_RESNET18_CROSSED_API_URL,
+                    api_url=get_model_api_url(MODEL_RESNET18_CROSSED),
                     image_paths=resnet18_crossed_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )

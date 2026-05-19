@@ -33,16 +33,16 @@ class PerformanceLoggingMiddleware(MiddlewareMixin):
                 # Log với color
                 if status < 400:
                     log_func = logger.info
-                    status_emoji = "✅"
+                    status_label = "[OK]"
                 elif status < 500:
                     log_func = logger.warning
-                    status_emoji = "⚠️"
+                    status_label = "[WARN]"
                 else:
                     log_func = logger.error
-                    status_emoji = "❌"
+                    status_label = "[ERROR]"
                 
                 log_func(
-                    f"{status_emoji} {method} {path} - {status} - {duration:.3f}s"
+                    f"{status_label} {method} {path} - {status} - {duration:.3f}s"
                 )
         
         return response

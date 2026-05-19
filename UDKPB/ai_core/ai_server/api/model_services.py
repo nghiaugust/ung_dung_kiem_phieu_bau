@@ -15,6 +15,7 @@ import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import os
 import torch
 from PIL import Image, ImageOps
 
@@ -350,3 +351,23 @@ class ResNet18CrossedService(BaseResNet18ClassifierService):
         result = super()._format_error_result(filename, error)
         result.update({"is_struck": None})
         return result
+
+
+MODEL_VIETNAMEOCR = "model_vietnameocr"
+MODEL_RESNET18_X = "model_resnet18_x"
+MODEL_RESNET18_CROSSED = "model_resnet18_crossed"
+
+MODEL_SERVICE_CLASSES = {
+    MODEL_VIETNAMEOCR: VietNameOCRService,
+    MODEL_RESNET18_X: ResNet18XService,
+    MODEL_RESNET18_CROSSED: ResNet18CrossedService,
+}
+
+
+def get_enabled_model_keys() -> List[str]:
+    raw_value = os.getenv("AI_ENABLED_MODELS", "all").strip()
+    if not raw_value or raw_value.lower() in {"all", "*"}:
+        return list(MODEL_SERVICE_CLASSES.keys())
+
+    requested = [item.strip() for item in raw_value.split(",") if item.strip()]
+    return [model_key for model_key in requested if model_key in MODEL_SERVICE_CLASSES]

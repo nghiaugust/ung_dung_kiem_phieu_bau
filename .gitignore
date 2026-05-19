@@ -56,6 +56,8 @@ coverage.xml
 local_settings.py
 db.sqlite3
 media/
+runtime/
+UDKPB/kiem_phieu_bau/runtime/
 
 # Flask stuff:
 instance/

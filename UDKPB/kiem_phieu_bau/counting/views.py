@@ -14,17 +14,12 @@ from .configurations.base import (
 	MODEL_RESNET18_X,
 	MODEL_VIETNAMEOCR,
 )
+from config.service_manager import get_ai_model_health_statuses, get_model_api_url
 import requests
 import os
 import time
 from typing import List, Dict, Tuple
 import json
-
-
-AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_vietnameocr/recognize/"
-AI_RESNET18_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_x/detect/"
-AI_RESNET18_CROSSED_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_crossed/detect/"
-AI_HEALTH_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/health/"
 
 
 @require_http_methods(["POST"])
@@ -217,7 +212,7 @@ def call_vietnameocr_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	api_url = AI_VIETNAMEOCR_API_URL
+	api_url = get_model_api_url(MODEL_VIETNAMEOCR)
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -264,7 +259,7 @@ def call_resnet18_x_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	api_url = AI_RESNET18_X_API_URL
+	api_url = get_model_api_url(MODEL_RESNET18_X)
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -329,7 +324,7 @@ def call_resnet18_crossed_api(image_paths: List[str]) -> Dict:
 			files.append(('images', (filename, fh, 'image/jpeg')))
 
 		response = requests.post(
-			AI_RESNET18_CROSSED_API_URL,
+			get_model_api_url(MODEL_RESNET18_CROSSED),
 			files=files,
 			data={
 				'contract': json.dumps({
@@ -391,12 +386,10 @@ def counting_form_view(request, poll_id):
 	resnet18_x_status = False
 	resnet18_crossed_status = False
 	try:
-		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
-		if health_response.status_code == 200:
-			health_data = health_response.json()
-			vietnameocr_status = health_data.get('services', {}).get(MODEL_VIETNAMEOCR, False)
-			resnet18_x_status = health_data.get('services', {}).get(MODEL_RESNET18_X, False)
-			resnet18_crossed_status = health_data.get('services', {}).get(MODEL_RESNET18_CROSSED, False)
+		health_statuses = get_ai_model_health_statuses()
+		vietnameocr_status = health_statuses.get(MODEL_VIETNAMEOCR, False)
+		resnet18_x_status = health_statuses.get(MODEL_RESNET18_X, False)
+		resnet18_crossed_status = health_statuses.get(MODEL_RESNET18_CROSSED, False)
 	except:
 		pass  # Nếu lỗi thì để mặc định False
 	

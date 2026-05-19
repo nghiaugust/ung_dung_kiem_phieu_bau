@@ -1,0 +1,163 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+
+{% block title %}Cấu hình hệ thống{% endblock %}
+
+{% block extra_head %}
+<style>
+  .config-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .config-table th,
+  .config-table td {
+    vertical-align: middle;
+  }
+
+  .config-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .config-actions input[type="number"] {
+    width: 96px;
+  }
+
+  .log-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 22px 0 12px;
+  }
+
+  .log-view {
+    min-height: 320px;
+    max-height: 520px;
+    overflow: auto;
+    padding: 14px;
+    background: #111827;
+    color: #e5e7eb;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+
+  .muted-small {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="config-toolbar">
+  <div>
+    <h2 class="mb-1">Cấu hình hệ thống</h2>
+    <div class="muted-small">Chỉ tài khoản superuser được bật/tắt worker và model.</div>
+  </div>
+  <a href="{% url 'account:tai_khoan' %}" class="btn btn-outline-secondary">Quay lại tài khoản</a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div
+      class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} mb-3"
+      role="alert"
+    >
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover config-table">
+    <thead class="table-light">
+      <tr>
+        <th>Thành phần</th>
+        <th>Trạng thái</th>
+        <th>PID</th>
+        <th>Concurrency / Threads</th>
+        <th>Thông tin</th>
+        <th>Thao tác</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for component in components %}
+      <tr>
+        <td>
+          <strong>{{ component.label }}</strong>
+          <div class="muted-small">{{ component.description }}</div>
+        </td>
+        <td>
+          {% if component.running %}
+            <span class="badge text-bg-success">Đang chạy</span>
+          {% else %}
+            <span class="badge text-bg-secondary">Đã tắt</span>
+          {% endif %}
+        </td>
+        <td>{{ component.pid|default:"-" }}</td>
+        <td>
+          <div class="config-actions">
+            <label class="visually-hidden" for="concurrency-{{ component.id }}">{{ component.concurrency_label }}</label>
+            <input
+              id="concurrency-{{ component.id }}"
+              form="control-{{ component.id }}"
+              class="form-control form-control-sm"
+              type="number"
+              name="concurrency"
+              min="1"
+              max="32"
+              value="{{ component.concurrency }}"
+            />
+            <span class="muted-small">{{ component.concurrency_label }}</span>
+          </div>
+        </td>
+        <td>
+          {% if component.kind == 'ai_model' %}
+            <div>URL: <code>{{ component.base_url }}</code></div>
+            <div>Port: <code>{{ component.port }}</code></div>
+          {% else %}
+            <div>Queue: <code>{{ component.queue }}</code></div>
+            <div>Hostname: <code>{{ component.hostname }}</code></div>
+          {% endif %}
+        </td>
+        <td>
+            <div class="config-actions">
+              <form id="control-{{ component.id }}" method="post" action="{% url 'config:start_component' component.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-success" formaction="{% url 'config:start_component' component.id %}">Bật</button>
+                <button type="submit" class="btn btn-sm btn-warning" formaction="{% url 'config:restart_component' component.id %}">Khởi động lại</button>
+              </form>
+              <form method="post" action="{% url 'config:stop_component' component.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-danger">Tắt</button>
+              </form>
+              <a href="{% url 'config:dashboard' %}?log={{ component.id }}" class="btn btn-sm btn-outline-primary">Xem log</a>
+            </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="log-tabs">
+  {% for component in components %}
+    <a
+      href="{% url 'config:dashboard' %}?log={{ component.id }}"
+      class="btn btn-sm {% if selected_log == component.id %}btn-primary{% else %}btn-outline-primary{% endif %}"
+    >
+      {{ component.label }}
+    </a>
+  {% endfor %}
+</div>
+
+<h3 class="h5 mb-2">Log: {{ selected_log_label }}</h3>
+<pre class="log-view">{{ log_text }}</pre>
+{% endblock %}

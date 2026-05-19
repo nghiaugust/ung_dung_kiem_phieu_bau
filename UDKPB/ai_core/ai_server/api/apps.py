@@ -7,26 +7,22 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         """
-        Load the three AI services once when the Django app starts.
+        Load the enabled AI services once when the Django app starts.
         """
-        from .model_services import ResNet18CrossedService, ResNet18XService, VietNameOCRService
+        from .model_services import MODEL_SERVICE_CLASSES, get_enabled_model_keys
 
         print("\n" + "=" * 60)
         print("AI SERVER STARTING")
         print("=" * 60)
 
         try:
-            print("Loading model_vietnameocr...")
-            VietNameOCRService()
-            print("model_vietnameocr ready")
+            enabled_model_keys = get_enabled_model_keys()
+            print(f"Enabled models: {', '.join(enabled_model_keys) or 'none'}")
 
-            print("Loading model_resnet18_x...")
-            ResNet18XService()
-            print("model_resnet18_x ready")
-
-            print("Loading model_resnet18_crossed...")
-            ResNet18CrossedService()
-            print("model_resnet18_crossed ready")
+            for model_key in enabled_model_keys:
+                print(f"Loading {model_key}...")
+                MODEL_SERVICE_CLASSES[model_key]()
+                print(f"{model_key} ready")
 
             print("=" * 60)
             print("AI SERVER READY")
