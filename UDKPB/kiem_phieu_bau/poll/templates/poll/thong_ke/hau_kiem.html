@@ -333,7 +333,7 @@
   const pollId = {{ poll.poll_id }};
   const horizontalLines = {{ horizontal_lines_json|safe }};
   const ballotResults = {{ ballot_results_json|safe }};
-  const yoloResults = {{ yolo_results_json|safe }};
+  const markResults = {{ mark_results_json|safe }};
   
   let hasChanges = false;
   let voteStates = {};
@@ -374,9 +374,9 @@
       }
       
       const confidenceBadge = document.getElementById(`confidence-${index}`);
-      if (confidenceBadge && yoloResults[index]) {
-        const conf = yoloResults[index].confidence;
-        const aiVoted = yoloResults[index].ai_voted;
+      if (confidenceBadge && markResults[index]) {
+        const conf = markResults[index].confidence;
+        const aiVoted = markResults[index].ai_voted;
         const label = aiVoted ? 'Đồng ý' : 'Không đồng ý';
         
         if (conf && conf > 0) {

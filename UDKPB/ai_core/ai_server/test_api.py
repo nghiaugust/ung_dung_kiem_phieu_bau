@@ -49,9 +49,9 @@ def test_vietnameocr_recognize(base_url, image_paths):
     return post_images(f"{base_url}/api/model_vietnameocr/recognize/", image_paths)
 
 
-def test_yolo_x_detect(base_url, image_paths):
-    print("\nTEST 4: model_yolo_x Detect")
-    return post_images(f"{base_url}/api/model_yolo_x/detect/", image_paths)
+def test_resnet18_x_detect(base_url, image_paths):
+    print("\nTEST 4: model_resnet18_x Detect")
+    return post_images(f"{base_url}/api/model_resnet18_x/detect/", image_paths)
 
 
 def test_resnet18_crossed_detect(base_url, image_paths):
@@ -71,14 +71,14 @@ def main():
     sample_images = [str(path) for path in static_ballot_dir.glob("*.jpg")][:2]
 
     test3 = test_vietnameocr_recognize(base_url, sample_images) if sample_images else None
-    test4 = test_yolo_x_detect(base_url, sample_images) if sample_images else None
+    test4 = test_resnet18_x_detect(base_url, sample_images) if sample_images else None
     test5 = test_resnet18_crossed_detect(base_url, sample_images) if sample_images else None
 
     print("\nTEST SUMMARY")
     print(f"Health Check: {'PASS' if test1 else 'FAIL'}")
     print(f"Model Info: {'PASS' if test2 else 'FAIL'}")
     print(f"model_vietnameocr: {'PASS' if test3 else 'SKIPPED' if test3 is None else 'FAIL'}")
-    print(f"model_yolo_x: {'PASS' if test4 else 'SKIPPED' if test4 is None else 'FAIL'}")
+    print(f"model_resnet18_x: {'PASS' if test4 else 'SKIPPED' if test4 is None else 'FAIL'}")
     print(f"model_resnet18_crossed: {'PASS' if test5 else 'SKIPPED' if test5 is None else 'FAIL'}")
 
 

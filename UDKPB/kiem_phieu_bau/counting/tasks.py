@@ -5,7 +5,6 @@ import os
 import gc
 import time
 import requests
-import json
 from typing import Dict, List, Tuple
 from django.conf import settings
 from celery import shared_task
@@ -17,13 +16,13 @@ from counting.models import AIModelResult
 from counting import config_model
 from counting.configurations.base import (
     MODEL_RESNET18_CROSSED,
+    MODEL_RESNET18_X,
     MODEL_VIETNAMEOCR,
-    MODEL_YOLO_X,
 )
 
 
 AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_vietnameocr/recognize/"
-AI_YOLO_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_yolo_x/detect/"
+AI_RESNET18_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_x/detect/"
 AI_RESNET18_CROSSED_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_crossed/detect/"
 
 
@@ -37,10 +36,10 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
         all_cell_models: Dict mapping cell_key -> model_name
         
     Returns:
-        Tuple[Dict, Dict, Dict]: (vietnameocr_batch, yolo_x_batch, resnet18_crossed_batch)
+        Tuple[Dict, Dict, Dict]: (vietnameocr_batch, resnet18_x_batch, resnet18_crossed_batch)
     """
     vietnameocr_batch = {'image_paths': [], 'cell_mapping': {}}
-    yolo_x_batch = {'image_paths': [], 'cell_mapping': {}}
+    resnet18_x_batch = {'image_paths': [], 'cell_mapping': {}}
     resnet18_crossed_batch = {'image_paths': [], 'cell_mapping': {}}
     
     # QUAN TRỌNG: Sort cells theo thứ tự (row, col) để đảm bảo thứ tự ổn định
@@ -72,25 +71,25 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
             idx = len(vietnameocr_batch['image_paths'])
             vietnameocr_batch['image_paths'].append(cell_image_path)
             vietnameocr_batch['cell_mapping'][idx] = (row, col)
-        elif model_name == MODEL_YOLO_X:
-            idx = len(yolo_x_batch['image_paths'])
-            yolo_x_batch['image_paths'].append(cell_image_path)
-            yolo_x_batch['cell_mapping'][idx] = (row, col)
+        elif model_name == MODEL_RESNET18_X:
+            idx = len(resnet18_x_batch['image_paths'])
+            resnet18_x_batch['image_paths'].append(cell_image_path)
+            resnet18_x_batch['cell_mapping'][idx] = (row, col)
         elif model_name == MODEL_RESNET18_CROSSED:
             idx = len(resnet18_crossed_batch['image_paths'])
             resnet18_crossed_batch['image_paths'].append(cell_image_path)
             resnet18_crossed_batch['cell_mapping'][idx] = (row, col)
     
-    return vietnameocr_batch, yolo_x_batch, resnet18_crossed_batch
+    return vietnameocr_batch, resnet18_x_batch, resnet18_crossed_batch
 
 
 def process_batch_responses(
     ai_result,
     vietnameocr_batch,
-    yolo_x_batch,
+    resnet18_x_batch,
     resnet18_crossed_batch,
     vietnameocr_response,
-    yolo_x_response,
+    resnet18_x_response,
     resnet18_crossed_response
 ):
     """
@@ -99,7 +98,7 @@ def process_batch_responses(
     Args:
         ai_result: AIModelResult object
         vietnameocr_batch: Dict chua thong tin batch VietNameOCR
-        yolo_x_batch: Dict chua thong tin batch YOLO-X
+        resnet18_x_batch: Dict chua thong tin batch model_resnet18_x
         resnet18_crossed_batch: Dict chua thong tin batch ResNet18 crossed
         
     Returns:
@@ -119,25 +118,25 @@ def process_batch_responses(
                 ai_result.set_cell_result(row, col, recognized_text, confidence)
                 total_processed_cells += 1
     
-    # Xử lý YOLO response
-    if yolo_x_response and yolo_x_response.get('success') and yolo_x_response.get('results'):
-        results = yolo_x_response['results']
+    # Xu ly model_resnet18_x response
+    if resnet18_x_response and resnet18_x_response.get('success') and resnet18_x_response.get('results'):
+        results = resnet18_x_response['results']
         for idx, result in enumerate(results):
-            if idx in yolo_x_batch['cell_mapping']:
-                row, col = yolo_x_batch['cell_mapping'][idx]
+            if idx in resnet18_x_batch['cell_mapping']:
+                row, col = resnet18_x_batch['cell_mapping'][idx]
                 label = result.get('label', 'none')
-                detections = result.get('detections', [])
                 
                 # Lấy confidence cao nhất
-                confidence = 0
-                if detections:
-                    max_conf_detection = max(detections, key=lambda d: d.get('confidence', 0))
-                    confidence = max_conf_detection.get('confidence', 0)
+                confidence = result.get('confidence', 0)
                 
                 # Lưu kết quả (label + detections)
                 result_data = {
                     'label': label,
-                    'detections': detections
+                    'raw_label': result.get('raw_label', ''),
+                    'is_marked': result.get('is_marked'),
+                    'is_cancelled': result.get('is_cancelled'),
+                    'probabilities': result.get('probabilities', {}),
+                    'detections': result.get('detections', [])
                 }
                 ai_result.set_cell_result(row, col, result_data, confidence)
                 total_processed_cells += 1
@@ -332,17 +331,17 @@ def counting_queue(self, ballot_id):
         
         # BƯỚC 1: Chuẩn bị batch requests (gom ảnh theo model)
         print(f"[COUNTING QUEUE] Chuẩn bị batch requests cho ballot {ballot_id}")
-        vietnameocr_batch, yolo_x_batch, resnet18_crossed_batch = prepare_batch_requests(ballot, ai_result, all_cell_models)
+        vietnameocr_batch, resnet18_x_batch, resnet18_crossed_batch = prepare_batch_requests(ballot, ai_result, all_cell_models)
         
         print(
             f"[COUNTING QUEUE] model_vietnameocr batch: {len(vietnameocr_batch['image_paths'])} anh, "
-            f"model_yolo_x batch: {len(yolo_x_batch['image_paths'])} anh, "
+            f"model_resnet18_x batch: {len(resnet18_x_batch['image_paths'])} anh, "
             f"model_resnet18_crossed batch: {len(resnet18_crossed_batch['image_paths'])} anh"
         )
         
         # BƯỚC 2: Gửi batch requests tới AI server
         vietnameocr_response = None
-        yolo_x_response = None
+        resnet18_x_response = None
         resnet18_crossed_response = None
         
         try:
@@ -360,27 +359,21 @@ def counting_queue(self, ballot_id):
                     error_msg = vietnameocr_response.get('error', 'model_vietnameocr API tra ve loi')
                     raise requests.exceptions.RequestException(f"model_vietnameocr error: {error_msg}")
             
-            # Gửi YOLO batch nếu có
-            if yolo_x_batch['image_paths']:
-                print(f"[COUNTING QUEUE] Gui model_yolo_x batch voi {len(yolo_x_batch['image_paths'])} anh")
+            # Gui model_resnet18_x batch neu co
+            if resnet18_x_batch['image_paths']:
+                print(f"[COUNTING QUEUE] Gui model_resnet18_x batch voi {len(resnet18_x_batch['image_paths'])} anh")
                 
-                # Chuẩn bị image_paths_map cho YOLO
-                image_paths_map = {}
-                for path in yolo_x_batch['image_paths']:
-                    filename = os.path.basename(path)
-                    image_paths_map[filename] = path
                 
-                yolo_x_response = send_batch_request(
-                    api_url=AI_YOLO_X_API_URL,
-                    image_paths=yolo_x_batch['image_paths'],
-                    extra_data={'image_paths': json.dumps(image_paths_map)},
+                resnet18_x_response = send_batch_request(
+                    api_url=AI_RESNET18_X_API_URL,
+                    image_paths=resnet18_x_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
                 
                 # Kiểm tra response
-                if not yolo_x_response.get('success'):
-                    error_msg = yolo_x_response.get('error', 'model_yolo_x API tra ve loi')
-                    raise requests.exceptions.RequestException(f"model_yolo_x error: {error_msg}")
+                if not resnet18_x_response.get('success'):
+                    error_msg = resnet18_x_response.get('error', 'model_resnet18_x API tra ve loi')
+                    raise requests.exceptions.RequestException(f"model_resnet18_x error: {error_msg}")
 
             if resnet18_crossed_batch['image_paths']:
                 print(f"[COUNTING QUEUE] Gui model_resnet18_crossed batch voi {len(resnet18_crossed_batch['image_paths'])} anh")
@@ -439,14 +432,14 @@ def counting_queue(self, ballot_id):
         total_processed_cells = process_batch_responses(
             ai_result, 
             vietnameocr_batch,
-            yolo_x_batch,
+            resnet18_x_batch,
             resnet18_crossed_batch,
             vietnameocr_response,
-            yolo_x_response,
+            resnet18_x_response,
             resnet18_crossed_response
         )
 
-        # BƯỚC 3.1: Kiểm tra hợp lệ của phiếu dựa trên kết quả YOLO
+        # Buoc 3.1: Kiem tra hop le cua phieu dua tren ket qua model_resnet18_x
         is_valid_by_marks = config_model.evaluate_ballot_validity(ai_result, config_number)
         ballot.is_valid = is_valid_by_marks
         ballot.save(update_fields=['is_valid'])

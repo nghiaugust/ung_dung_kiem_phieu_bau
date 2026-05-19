@@ -42,7 +42,7 @@ def optimize_ballot_image(uploaded_file, max_size_kb=500, quality=85):
             raise ValueError("Không thể đọc ảnh")
         
         # 2. Lọc nhiễu nhẹ để giảm dung lượng khi nén
-        # Sử dụng bilateral filter để giữ cạnh sắc nét (quan trọng cho YOLO)
+        # Su dung bilateral filter de giu canh sac net cho model AI.
         denoised = cv2.bilateralFilter(img, d=5, sigmaColor=50, sigmaSpace=50)
         
         # 3. Tang do tuong phan nhe de chu ro hon

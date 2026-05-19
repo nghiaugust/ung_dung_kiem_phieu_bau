@@ -6,7 +6,7 @@ from . import views
 
 urlpatterns = [
     path('model_vietnameocr/recognize/', views.vietnameocr_recognize, name='vietnameocr_recognize'),
-    path('model_yolo_x/detect/', views.yolo_x_detect, name='yolo_x_detect'),
+    path('model_resnet18_x/detect/', views.resnet18_x_detect, name='resnet18_x_detect'),
     path('model_resnet18_crossed/detect/', views.resnet18_crossed_detect, name='resnet18_crossed_detect'),
     
     # Health check

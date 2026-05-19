@@ -1,21 +1,20 @@
 """
-API endpoints for model_vietnameocr, model_yolo_x and model_resnet18_crossed.
+API endpoints for model_vietnameocr, model_resnet18_x and model_resnet18_crossed.
 """
 from __future__ import annotations
 
 import gc
-import json
 
 import torch
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .model_services import ResNet18CrossedService, VietNameOCRService, YOLOXService
+from .model_services import ResNet18CrossedService, ResNet18XService, VietNameOCRService
 
 
 vietnameocr_service = VietNameOCRService()
-yolo_x_service = YOLOXService()
+resnet18_x_service = ResNet18XService()
 resnet18_crossed_service = ResNet18CrossedService()
 
 
@@ -73,37 +72,18 @@ def vietnameocr_recognize(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def yolo_x_detect(request):
+def resnet18_x_detect(request):
     """
-    POST /api/model_yolo_x/detect/
+    POST /api/model_resnet18_x/detect/
     Form data:
       - images: multiple files
-      - image_paths: optional JSON mapping {filename: path}
     """
     try:
-        files = request.FILES.getlist("images")
-        if not files:
-            return JsonResponse(
-                {"success": False, "error": "Khong co anh nao duoc gui len"},
-                status=400,
-            )
+        images, error_response = _collect_images(request)
+        if error_response:
+            return error_response
 
-        try:
-            image_paths_map = json.loads(request.POST.get("image_paths", "{}"))
-        except Exception:
-            image_paths_map = {}
-
-        images = []
-        for file in files:
-            image_data = file.read()
-            filename = file.name
-            image_path = image_paths_map.get(filename)
-            if image_path:
-                images.append((image_data, filename, image_path))
-            else:
-                images.append((image_data, filename))
-
-        results = yolo_x_service.detect_batch(images)
+        results = resnet18_x_service.detect_batch(images)
         results = _sort_results_by_filename_index(results)
 
         del images
@@ -147,7 +127,7 @@ def health_check(request):
             "status": "healthy",
             "services": {
                 "model_vietnameocr": vietnameocr_service._model is not None,
-                "model_yolo_x": yolo_x_service._model is not None,
+                "model_resnet18_x": resnet18_x_service._cnn_model is not None,
                 "model_resnet18_crossed": resnet18_crossed_service._cnn_model is not None,
             },
         }
@@ -164,9 +144,10 @@ def model_info(request):
                     "loaded": vietnameocr_service._model is not None,
                     "device": device,
                 },
-                "model_yolo_x": {
-                    "loaded": yolo_x_service._model is not None,
-                    "device": device,
+                "model_resnet18_x": {
+                    "loaded": resnet18_x_service._cnn_model is not None,
+                    "device": str(resnet18_x_service._device),
+                    "mode": resnet18_x_service._mode,
                 },
                 "model_resnet18_crossed": {
                     "loaded": resnet18_crossed_service._cnn_model is not None,

@@ -8,7 +8,7 @@ from .base import (
 )
 
 
-CONFIG_NUMBER = 3
+CONFIG_NUMBER = 1
 MODEL_NAME = MODEL_RESNET18_CROSSED
 START_ROW = 0
 NAME_COL = 0
@@ -20,7 +20,7 @@ def apply(ai_result):
     rows, cols = initialize_ai_result(ai_result)
 
     if cols < 1:
-        raise ValueError("Cau hinh 3 yeu cau bang toi thieu 1 cot")
+        raise ValueError("Cau hinh 1 yeu cau bang toi thieu 1 cot")
 
     for row in range(START_ROW, rows):
         ai_result.set_cell_model_config(row, NAME_COL, MODEL_NAME)

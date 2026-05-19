@@ -5,25 +5,25 @@ from poll.models import Candidate
 
 
 MODEL_VIETNAMEOCR = 'model_vietnameocr'
-MODEL_YOLO_X = 'model_yolo_x'
+MODEL_RESNET18_X = 'model_resnet18_x'
 MODEL_RESNET18_CROSSED = 'model_resnet18_crossed'
 
 
 CONFIG_DEFINITIONS = {
     1: {
-        'label': 'Cau hinh 1: VietNameOCR + YOLO-X',
-        'description': 'VietNameOCR nhan dien ten, YOLO-X detect dau X o cot Dong y/Khong dong y',
-        'required_services': [MODEL_VIETNAMEOCR, MODEL_YOLO_X],
-    },
-    2: {
-        'label': 'Cau hinh 2: Theo thu tu + YOLO-X',
-        'description': 'Ten theo thu tu danh sach ung vien, YOLO-X detect dau X',
-        'required_services': [MODEL_YOLO_X],
-    },
-    3: {
-        'label': 'Cau hinh 3: Phieu gach ten',
+        'label': 'Cau hinh 1: Phieu gach ten + ResNet18 crossed',
         'description': 'model_resnet18_crossed detect ung vien bi gach ten trong bang 1 cot',
         'required_services': [MODEL_RESNET18_CROSSED],
+    },
+    2: {
+        'label': 'Cau hinh 2: Theo thu tu + ResNet18-X',
+        'description': 'Ten theo thu tu danh sach ung vien, model_resnet18_x detect dau X',
+        'required_services': [MODEL_RESNET18_X],
+    },
+    3: {
+        'label': 'Cau hinh 3: VietNameOCR + ResNet18-X',
+        'description': 'VietNameOCR nhan dien ten, model_resnet18_x detect dau X',
+        'required_services': [MODEL_VIETNAMEOCR, MODEL_RESNET18_X],
     },
 }
 
@@ -38,6 +38,9 @@ def initialize_ai_result(ai_result):
 
 def has_x_mark(result_data):
     if isinstance(result_data, dict):
+        is_marked = result_data.get('is_marked')
+        if isinstance(is_marked, bool):
+            return is_marked
         label = result_data.get('label', '')
     else:
         label = str(result_data) if result_data is not None else ''
@@ -102,20 +105,20 @@ def bulk_create_selections(ballot, candidates):
 
 
 def group_vote_table_rows(ai_result):
-    yolo_cells = ai_result.get_cells_by_model(MODEL_YOLO_X)
+    mark_cells = ai_result.get_cells_by_model(MODEL_RESNET18_X)
     ocr_cells = ai_result.get_cells_by_model(MODEL_VIETNAMEOCR)
 
     rows_dict = {}
-    for cell_key, cell_data in yolo_cells.items():
+    for cell_key, cell_data in mark_cells.items():
         row, col = map(int, cell_key.split('_'))
         if row not in rows_dict:
-            rows_dict[row] = {'yolo': [], 'ocr': None}
-        rows_dict[row]['yolo'].append((col, cell_data))
+            rows_dict[row] = {'marks': [], 'ocr': None}
+        rows_dict[row]['marks'].append((col, cell_data))
 
     for cell_key, cell_data in ocr_cells.items():
         row, col = map(int, cell_key.split('_'))
         if row not in rows_dict:
-            rows_dict[row] = {'yolo': [], 'ocr': None}
+            rows_dict[row] = {'marks': [], 'ocr': None}
         rows_dict[row]['ocr'] = cell_data
 
     return rows_dict
@@ -127,7 +130,7 @@ def evaluate_two_mark_columns(ai_result):
 
     rows = {}
     for cell_key, model_name in cell_models.items():
-        if model_name != MODEL_YOLO_X:
+        if model_name != MODEL_RESNET18_X:
             continue
         try:
             row, col = map(int, cell_key.split('_'))

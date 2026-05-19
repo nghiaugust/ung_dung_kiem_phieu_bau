@@ -342,8 +342,8 @@ def hau_kiem_ballot(request, ballot_id):
 	if ballot.metadata and 'horizontal_lines' in ballot.metadata:
 		horizontal_lines = ballot.metadata['horizontal_lines']
 	
-	# Lấy kết quả YOLO detection từ AIModelResult (CHỈ để hiển thị confidence, không dùng cho voted)
-	yolo_results = []  # List indexed by candidate order: [{'ai_voted': bool, 'confidence': float}, ...]
+	# Lay ket qua model_resnet18_x tu AIModelResult de hien thi confidence.
+	mark_results = []  # List indexed by candidate order: [{'ai_voted': bool, 'confidence': float}, ...]
 	try:
 		ai_model_result = AIModelResult.objects.filter(ballot=ballot).order_by('-created_at').first()
 		if ai_model_result and ai_model_result.result_model:
@@ -383,14 +383,14 @@ def hau_kiem_ballot(request, ballot_id):
 				# Row index bắt đầu từ 1, candidate index từ 0
 				row = idx + 1
 				if row in row_results:
-					yolo_results.append(row_results[row])
+					mark_results.append(row_results[row])
 				else:
-					yolo_results.append({'ai_voted': False, 'confidence': 0})
+					mark_results.append({'ai_voted': False, 'confidence': 0})
 					
 	except Exception as e:
-		print(f"Error loading YOLO results: {e}")
+		print(f"Error loading model_resnet18_x results: {e}")
 		# Tạo list rỗng với số lượng bằng candidates
-		yolo_results = [{'ai_voted': False, 'confidence': 0} for _ in candidates]
+		mark_results = [{'ai_voted': False, 'confidence': 0} for _ in candidates]
 
 	context = {
 		'poll': poll,
@@ -405,7 +405,7 @@ def hau_kiem_ballot(request, ballot_id):
 		'next_ballot_url': next_ballot_url,
 		'detection_image': detection_image,
 		'horizontal_lines_json': json.dumps(horizontal_lines),
-		'yolo_results_json': json.dumps(yolo_results),
+		'mark_results_json': json.dumps(mark_results),
 		'MEDIA_URL': settings.MEDIA_URL,
 	}
 	

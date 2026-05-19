@@ -7,26 +7,28 @@ from .base import (
     group_vote_table_rows,
     initialize_ai_result,
     has_x_mark,
+    MODEL_RESNET18_X,
     MODEL_VIETNAMEOCR,
-    MODEL_YOLO_X,
 )
 
 
-CONFIG_NUMBER = 1
+CONFIG_NUMBER = 3
+START_ROW = 2 - 1
+OCR_COL = 2 - 1
+AGREE_COL = 3 - 1
+DISAGREE_COL = 4 - 1
 
 
 def apply(ai_result):
     rows, cols = initialize_ai_result(ai_result)
 
-    ocr_col = 2 - 1
-    yolo_col1 = 3 - 1
-    yolo_col2 = 4 - 1
-    start_row = 2 - 1
+    if cols < 4:
+        raise ValueError("Cau hinh 3 yeu cau bang 4 cot: STT, ten, dong y, khong dong y")
 
-    for row in range(start_row, rows):
-        ai_result.set_cell_model_config(row, ocr_col, MODEL_VIETNAMEOCR)
-        ai_result.set_cell_model_config(row, yolo_col1, MODEL_YOLO_X)
-        ai_result.set_cell_model_config(row, yolo_col2, MODEL_YOLO_X)
+    for row in range(START_ROW, rows):
+        ai_result.set_cell_model_config(row, OCR_COL, MODEL_VIETNAMEOCR)
+        ai_result.set_cell_model_config(row, AGREE_COL, MODEL_RESNET18_X)
+        ai_result.set_cell_model_config(row, DISAGREE_COL, MODEL_RESNET18_X)
 
     return ai_result
 
@@ -43,14 +45,20 @@ def create_ballot_selections(ballot, poll, ai_result):
     rows_dict = group_vote_table_rows(ai_result)
 
     for row_data in rows_dict.values():
-        yolo_results = row_data['yolo']
+        mark_results = row_data['marks']
         ocr_result = row_data['ocr']
-        yolo_results.sort(key=lambda x: x[0])
+        mark_results.sort(key=lambda x: x[0])
 
-        if not yolo_results or not ocr_result:
+        if not mark_results or not ocr_result:
             continue
 
-        agree_col, agree_result = yolo_results[0]
+        agree_result = next(
+            (cell_data for col, cell_data in mark_results if col == AGREE_COL),
+            None
+        )
+        if not agree_result:
+            continue
+
         result_data = agree_result.get('result', {})
 
         if not has_x_mark(result_data):

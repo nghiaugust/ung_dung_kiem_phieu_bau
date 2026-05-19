@@ -5,19 +5,19 @@ Moi cau hinh nam trong mot file rieng tai counting/configurations/ de tranh
 tron logic cau hinh, validate va tao BallotSelection vao task/view.
 """
 
-from .configurations import config1, config2, config3_name_strike
+from .configurations import config1_resnet18_crossed, config2_resnet18_x, config3_ocr_resnet18_x
 from .configurations.base import (
     CONFIG_DEFINITIONS,
     MODEL_RESNET18_CROSSED,
+    MODEL_RESNET18_X,
     MODEL_VIETNAMEOCR,
-    MODEL_YOLO_X,
 )
 
 
 CONFIG_MODULES = {
-    1: config1,
-    2: config2,
-    3: config3_name_strike,
+    1: config1_resnet18_crossed,
+    2: config2_resnet18_x,
+    3: config3_ocr_resnet18_x,
 }
 
 
@@ -83,7 +83,7 @@ def get_config_summary(ai_result):
         'cols': cols,
         'models_by_name': models_by_name,
         'vietnameocr_cells': models_by_name.get(MODEL_VIETNAMEOCR, []),
-        'yolo_x_cells': models_by_name.get(MODEL_YOLO_X, []),
+        'resnet18_x_cells': models_by_name.get(MODEL_RESNET18_X, []),
         'resnet18_crossed_cells': models_by_name.get(MODEL_RESNET18_CROSSED, []),
         'total_configured': len(all_models)
     }

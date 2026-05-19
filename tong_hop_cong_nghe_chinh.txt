@@ -17,14 +17,14 @@ Django đóng vai trò trung tâm trong quản lý dữ liệu, xử lý luồng
 Hệ thống sử dụng kết hợp nhiều thành phần AI để xử lý phiếu bầu:
 - PyTorch/TorchVision/Torchaudio: nền tảng deep learning.
 - Transformers (TrOCR): OCR nhận diện chữ viết tay/in trên phiếu bầu, đặc biệt cho tên ứng viên.
-- Ultralytics YOLO: nhận diện dấu X hợp lệ và dấu X bị gạch bỏ.
+- ResNet18-X: phan loai o dau X hop le, dau X huy va o trong.
 - OpenCV + NumPy: tiền xử lý ảnh, cạnh biên, chỉnh phối cảnh, cắt ô, xử lý marker.
 - QReader: đọc QR code trên phiếu bầu.
 - qrcode: tạo QR code khi sinh mẫu phiếu.
 - pdf2image: chuyển PDF sang ảnh để phục vụ quy trình đo marker/kiểm tra bố cục.
 - SciPy, Matplotlib: hỗ trợ một số bước phân tích tín hiệu hình ảnh và debug tiền xử lý.
 
-Mô hình xử lý tổng quát là kết hợp TrOCR + YOLO: TrOCR phục vụ OCR tên, YOLO phục vụ nhận diện lựa chọn, sau đó hệ thống tổng hợp kết quả theo từng dòng phiếu bầu.
+Mo hinh xu ly tong quat la ket hop VietNameOCR + ResNet18-X: VietNameOCR phuc vu OCR ten, ResNet18-X phuc vu nhan dien lua chon, sau do he thong tong hop ket qua theo tung dong phieu bau.
 
 4. Xử lý bất đồng bộ và hàng đợi tác vụ
 Để đảm bảo hiệu năng khi upload nhiều phiếu và xử lý AI tốn tài nguyên, hệ thống sử dụng:
@@ -77,6 +77,6 @@ Giao diện được tổ chức theo hướng quản trị nghiệp vụ, tập
 Tập công nghệ của đề tài được lựa chọn theo hướng thực tiễn và dễ mở rộng:
 - Django + MySQL cho nền tảng nghiệp vụ ổn định.
 - Celery + Redis cho xử lý nền tải lớn.
-- TrOCR + YOLO + OpenCV cho bài toán kiểm phiếu bằng AI.
+- VietNameOCR + ResNet18-X + OpenCV cho bai toan kiem phieu bang AI.
 - Docker + Nginx cho triển khai linh hoạt.
 - Cryptography + HMAC cho bảo mật và xác thực.

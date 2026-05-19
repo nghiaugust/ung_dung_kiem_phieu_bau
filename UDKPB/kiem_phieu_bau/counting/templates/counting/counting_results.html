@@ -28,10 +28,10 @@
             <div class="col">
               <h5 class="mb-0">
                 {% if result.model_id == 'vote_table_combined' %}
-                <i class="bi bi-table"></i> Bảng Biểu Quyết (VietNameOCR + YOLO-X) 
+                <i class="bi bi-table"></i> Bang Bieu Quyet (VietNameOCR + ResNet18-X)
                 {% elif result.model_id == 'model_vietnameocr' %}
                 <i class="bi bi-fonts"></i> VietNameOCR {% else %}
-                <i class="bi bi-box"></i> YOLO-X {% endif %}
+                <i class="bi bi-box"></i> ResNet18-X {% endif %}
               </h5>
             </div>
             <div class="col-auto">
@@ -101,7 +101,7 @@
                         (Tên)
                       </li>
                       <li>
-                        YOLO-X: Cột {{ result.result_model.config.yolo_cols_ui }}
+                        ResNet18-X: Cot {{ result.result_model.config.resnet18_x_cols_ui }}
                         (Đồng ý, Không đồng ý)
                       </li>
                       <li>
@@ -111,7 +111,7 @@
                         {% else %}Cuối{% endif %}
                       </li>
                       <li>
-                        Ngưỡng YOLO-X: {{ result.result_model.config.yolo_confidence }}%
+                        Nguong ResNet18-X: {{ result.result_model.config.resnet18_x_confidence }}%
                       </li>
                     </ul>
                   </div>

@@ -242,11 +242,11 @@
             <i class="bi bi-check-circle-fill"></i>
             <strong>Cấu hình {{ poll.config_number }}:</strong>
             {% if poll.config_number == 1 %}
-            VietNameOCR nhan dien ten + YOLO-X detect dau X
-            {% elif poll.config_number == 2 %}
-            Ten theo thu tu danh sach ung vien + YOLO-X detect dau X
-            {% elif poll.config_number == 3 %}
             Phieu gach ten 1 cot + model_resnet18_crossed
+            {% elif poll.config_number == 2 %}
+            Ten theo thu tu danh sach ung vien + model_resnet18_x detect dau X
+            {% elif poll.config_number == 3 %}
+            VietNameOCR nhan dien ten + model_resnet18_x detect dau X
             {% endif %}
           </div>
           {% else %}

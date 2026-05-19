@@ -11,8 +11,8 @@ from .models import AIModelResult
 from . import config_model
 from .configurations.base import (
 	MODEL_RESNET18_CROSSED,
+	MODEL_RESNET18_X,
 	MODEL_VIETNAMEOCR,
-	MODEL_YOLO_X,
 )
 import requests
 import os
@@ -22,7 +22,7 @@ import json
 
 
 AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_vietnameocr/recognize/"
-AI_YOLO_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_yolo_x/detect/"
+AI_RESNET18_X_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_x/detect/"
 AI_RESNET18_CROSSED_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/model_resnet18_crossed/detect/"
 AI_HEALTH_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/health/"
 
@@ -254,9 +254,9 @@ def call_vietnameocr_api(image_paths: List[str]) -> Dict:
 				pass
 
 
-def call_yolo_x_api(image_paths: List[str]) -> Dict:
+def call_resnet18_x_api(image_paths: List[str]) -> Dict:
 	"""
-	Gọi YOLO API để detect dấu X
+	Goi model_resnet18_x API de detect dau X
 	
 	Args:
 		image_paths: Danh sách đường dẫn ảnh
@@ -264,29 +264,21 @@ def call_yolo_x_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	import json
-	api_url = AI_YOLO_X_API_URL
+	api_url = AI_RESNET18_X_API_URL
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
 	try:
 		files = []
-		image_paths_map = {}  # Mapping filename -> full_path
 		
 		for path in image_paths:
 			filename = os.path.basename(path)
 			fh = open(path, 'rb')
 			file_handles.append(fh)
 			files.append(('images', (filename, fh, 'image/jpeg')))
-			image_paths_map[filename] = path
-		
-		# Gửi cả image_paths để API có thể lưu ảnh có box
-		data = {
-			'image_paths': json.dumps(image_paths_map)
-		}
 		
 		# Giảm timeout xuống 300s (5 phút) - tránh worker bị block quá lâu
-		response = requests.post(api_url, files=files, data=data, timeout=settings.AI_SERVER_REQUEST_TIMEOUT)
+		response = requests.post(api_url, files=files, timeout=settings.AI_SERVER_REQUEST_TIMEOUT)
 		response.raise_for_status()
 		result = response.json()
 		
@@ -396,21 +388,21 @@ def counting_form_view(request, poll_id):
 	
 	# Điều kiện 5: Check model AI
 	vietnameocr_status = False
-	yolo_x_status = False
+	resnet18_x_status = False
 	resnet18_crossed_status = False
 	try:
 		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
 		if health_response.status_code == 200:
 			health_data = health_response.json()
 			vietnameocr_status = health_data.get('services', {}).get(MODEL_VIETNAMEOCR, False)
-			yolo_x_status = health_data.get('services', {}).get(MODEL_YOLO_X, False)
+			resnet18_x_status = health_data.get('services', {}).get(MODEL_RESNET18_X, False)
 			resnet18_crossed_status = health_data.get('services', {}).get(MODEL_RESNET18_CROSSED, False)
 	except:
 		pass  # Nếu lỗi thì để mặc định False
 	
 	ai_service_statuses = {
 		MODEL_VIETNAMEOCR: vietnameocr_status,
-		MODEL_YOLO_X: yolo_x_status,
+		MODEL_RESNET18_X: resnet18_x_status,
 		MODEL_RESNET18_CROSSED: resnet18_crossed_status,
 	}
 	required_services = config_model.get_required_services(poll.config_number) if poll.config_number else []
@@ -425,7 +417,7 @@ def counting_form_view(request, poll_id):
 		'ballots_with_image_total': ballots_with_image_total,
 		'preprocessed_count': preprocessed_count,
 		'vietnameocr_status': vietnameocr_status,
-		'yolo_x_status': yolo_x_status,
+		'resnet18_x_status': resnet18_x_status,
 		'resnet18_crossed_status': resnet18_crossed_status,
 		'ai_ready_for_config': ai_ready_for_config,
 		'config_definitions': config_model.CONFIG_DEFINITIONS,
@@ -570,30 +562,30 @@ def process_counting(request, poll_id):
 					else:
 						ai_result.set_cell_result(row, col, "[Loi model_vietnameocr]", 0)
 				
-				elif model_name == MODEL_YOLO_X:
-					# Gọi YOLO API
-					yolo_result = call_yolo_x_api([cell_image_path])
+				elif model_name == MODEL_RESNET18_X:
+					# Goi model_resnet18_x API
+					resnet18_x_result = call_resnet18_x_api([cell_image_path])
 					
-					if yolo_result.get('success') and yolo_result.get('results'):
-						detection = yolo_result['results'][0]
+					if resnet18_x_result.get('success') and resnet18_x_result.get('results'):
+						detection = resnet18_x_result['results'][0]
 						label = detection.get('label', 'none')
-						detections = detection.get('detections', [])
 						
-						# Lấy confidence cao nhất
-						confidence = 0
-						if detections:
-							max_conf_detection = max(detections, key=lambda d: d.get('confidence', 0))
-							confidence = max_conf_detection.get('confidence', 0)
+						# Lay confidence tu ket qua classifier
+						confidence = detection.get('confidence', 0)
 						
-						# Lưu kết quả (label + detections)
+						# Luu ket qua theo contract chung cua model dau X
 						result_data = {
 							'label': label,
-							'detections': detections
+							'raw_label': detection.get('raw_label', ''),
+							'is_marked': detection.get('is_marked'),
+							'is_cancelled': detection.get('is_cancelled'),
+							'probabilities': detection.get('probabilities', {}),
+							'detections': detection.get('detections', [])
 						}
 						ai_result.set_cell_result(row, col, result_data, confidence)
 						total_processed_cells += 1
 					else:
-						ai_result.set_cell_result(row, col, "[Lỗi YOLO]", 0)
+						ai_result.set_cell_result(row, col, "[Loi model_resnet18_x]", 0)
 			
 			# 5. Cập nhật trạng thái thành công
 			is_valid_by_config = config_model.evaluate_ballot_validity(ai_result, config_number)

@@ -14,11 +14,11 @@ class Migration(migrations.Migration):
             field=models.IntegerField(
                 blank=True,
                 choices=[
-                    (1, 'Cau hinh 1: VietNameOCR + YOLO-X'),
-                    (2, 'Cau hinh 2: Theo thu tu + YOLO-X'),
-                    (3, 'Cau hinh 3: Phieu gach ten + ResNet18 crossed'),
+                    (1, 'Cau hinh 1: Phieu gach ten + ResNet18 crossed'),
+                    (2, 'Cau hinh 2: Theo thu tu + ResNet18-X'),
+                    (3, 'Cau hinh 3: VietNameOCR + ResNet18-X'),
                 ],
-                help_text='Cau hinh AI model da su dung de kiem phieu',
+                help_text='Cấu hình AI model đã sử dụng để kiểm phiếu',
                 null=True,
             ),
         ),

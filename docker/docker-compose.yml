@@ -82,7 +82,7 @@ services:
       start_period: 40s
 
   # ================================
-  # AI Server (VietNameOCR + YOLO-X + ResNet18 crossed API)
+  # AI Server (VietNameOCR + ResNet18-X + ResNet18 crossed API)
   # ================================
   ai-server:
     build:

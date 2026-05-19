@@ -9,7 +9,7 @@ class ApiConfig(AppConfig):
         """
         Load the three AI services once when the Django app starts.
         """
-        from .model_services import ResNet18CrossedService, VietNameOCRService, YOLOXService
+        from .model_services import ResNet18CrossedService, ResNet18XService, VietNameOCRService
 
         print("\n" + "=" * 60)
         print("AI SERVER STARTING")
@@ -20,9 +20,9 @@ class ApiConfig(AppConfig):
             VietNameOCRService()
             print("model_vietnameocr ready")
 
-            print("Loading model_yolo_x...")
-            YOLOXService()
-            print("model_yolo_x ready")
+            print("Loading model_resnet18_x...")
+            ResNet18XService()
+            print("model_resnet18_x ready")
 
             print("Loading model_resnet18_crossed...")
             ResNet18CrossedService()

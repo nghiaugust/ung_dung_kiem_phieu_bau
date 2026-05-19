@@ -22,7 +22,7 @@ pip install -r requirements.txt
 ```powershell
 cd UDKPB/ai_core
 dir model_vietnameocr
-dir model_yolo_x
+dir model_resnet18_x
 dir model_resnet18_crossed
 ```
 

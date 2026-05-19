@@ -17,7 +17,7 @@ import django
 django.setup()
 
 from ai_server.wsgi import application
-from api.model_services import ResNet18CrossedService, VietNameOCRService, YOLOXService
+from api.model_services import ResNet18CrossedService, ResNet18XService, VietNameOCRService
 
 
 logging.basicConfig(
@@ -36,8 +36,8 @@ if __name__ == "__main__":
         VietNameOCRService()
         print("model_vietnameocr loaded successfully")
 
-        YOLOXService()
-        print("model_yolo_x loaded successfully")
+        ResNet18XService()
+        print("model_resnet18_x loaded successfully")
 
         ResNet18CrossedService()
         print("model_resnet18_crossed loaded successfully")

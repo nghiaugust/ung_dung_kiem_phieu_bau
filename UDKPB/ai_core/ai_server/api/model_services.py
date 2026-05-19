@@ -3,23 +3,20 @@ Model services for the AI server.
 
 Only three models are loaded here:
 - model_vietnameocr: OCR for candidate names.
-- model_yolo_x: X-mark detection.
+- model_resnet18_x: X-mark classification.
 - model_resnet18_crossed: crossed-name classification.
 """
 from __future__ import annotations
 
 import importlib.util
 import io
-import os
 import sys
 import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import numpy as np
 import torch
 from PIL import Image, ImageOps
-from ultralytics import YOLO
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -111,172 +108,8 @@ class VietNameOCRService:
         return [self.recognize_text(image_data, filename) for image_data, filename in images]
 
 
-def crop_center_horizontal(pil_img: Image.Image) -> Image.Image:
-    width, height = pil_img.size
-    left = width // 4
-    right = 3 * width // 4
-    return pil_img.crop((left, 0, right, height))
-
-
-class YOLOXService:
-    """Singleton service for model_yolo_x."""
-
-    _instance = None
-    _model = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(YOLOXService, cls).__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if self._model is None:
-            self._load_model()
-
-    def _load_model(self):
-        try:
-            model_path = _ai_core_dir() / "model_yolo_x" / "best.pt"
-            if not model_path.exists():
-                raise RuntimeError(f"Cannot find YOLO weights: {model_path}")
-
-            self._model = YOLO(str(model_path))
-            if torch.cuda.is_available():
-                self._model.to("cuda")
-                print("[model_yolo_x] Loaded on GPU")
-            else:
-                self._model.to("cpu")
-                print("[model_yolo_x] Loaded on CPU")
-        except Exception as exc:
-            print(f"[model_yolo_x] Failed to load model: {exc}")
-            raise
-
-    def _parse_prediction(self, result, filename: str) -> Dict:
-        detections = []
-        label = "none"
-
-        if result.boxes is not None and len(result.boxes) > 0:
-            boxes = result.boxes.xyxy.cpu().numpy()
-            classes = result.boxes.cls.cpu().numpy()
-            confidences = result.boxes.conf.cpu().numpy()
-            class_names = result.names
-
-            for box, cls_id, conf in zip(boxes, classes, confidences):
-                cls_name = class_names[int(cls_id)]
-                detections.append(
-                    {
-                        "class": cls_name,
-                        "confidence": float(conf),
-                        "bbox": box.tolist(),
-                    }
-                )
-
-            if any(det["class"] == "x_mark" for det in detections):
-                label = "x_mark"
-            elif any(det["class"] == "x_cancelled" for det in detections):
-                label = "x_cancelled"
-
-        return {
-            "filename": filename,
-            "label": label,
-            "detections": detections,
-            "status": "success",
-        }
-
-    def detect(self, image_data: bytes, filename: str = "", image_path: str = None) -> Dict:
-        pil_img = None
-        cropped_img = None
-        results = None
-        try:
-            pil_img = Image.open(io.BytesIO(image_data))
-            if pil_img.mode != "RGB":
-                pil_img = pil_img.convert("RGB")
-
-            cropped_img = crop_center_horizontal(pil_img)
-            img_array = np.array(cropped_img)
-
-            results = self._model.predict(
-                source=img_array,
-                save=False,
-                verbose=False,
-                conf=0.25,
-                iou=0.45,
-            )
-            return self._parse_prediction(results[0], filename)
-        except Exception as exc:
-            return {
-                "filename": filename,
-                "label": "none",
-                "detections": [],
-                "status": "error",
-                "error": str(exc),
-            }
-        finally:
-            if cropped_img is not None:
-                cropped_img.close()
-            if pil_img is not None:
-                pil_img.close()
-            if results is not None:
-                del results
-
-    def detect_batch(self, images: List[tuple]) -> List[Dict]:
-        results = []
-        pil_images = []
-        cropped_images = []
-        img_arrays = []
-        filenames = []
-
-        try:
-            for item in images:
-                image_data, filename = item[:2]
-                try:
-                    pil_img = Image.open(io.BytesIO(image_data))
-                    if pil_img.mode != "RGB":
-                        pil_img = pil_img.convert("RGB")
-                    pil_images.append(pil_img)
-
-                    cropped_img = crop_center_horizontal(pil_img)
-                    cropped_images.append(cropped_img)
-                    img_arrays.append(np.array(cropped_img))
-                    filenames.append(filename)
-                except Exception as exc:
-                    results.append(
-                        {
-                            "filename": filename,
-                            "label": "none",
-                            "detections": [],
-                            "status": "error",
-                            "error": f"Image read error: {exc}",
-                        }
-                    )
-
-            if img_arrays:
-                batch_results = self._model.predict(
-                    source=img_arrays,
-                    save=False,
-                    verbose=False,
-                    conf=0.25,
-                    iou=0.45,
-                    stream=False,
-                )
-                for filename, result in zip(filenames, batch_results):
-                    results.append(self._parse_prediction(result, filename))
-
-            return results
-        except Exception as exc:
-            print(f"[model_yolo_x] Batch failed, fallback to individual: {exc}")
-            return [
-                self.detect(item[0], item[1], item[2] if len(item) > 2 else None)
-                for item in images
-            ]
-        finally:
-            for img in cropped_images:
-                img.close()
-            for img in pil_images:
-                img.close()
-
-
-class ResNet18CrossedService:
-    """Singleton service for model_resnet18_crossed."""
+class BaseResNet18ClassifierService:
+    """Singleton base service for local ResNet18 classifier packages."""
 
     _instance = None
     _cnn_model = None
@@ -286,10 +119,16 @@ class ResNet18CrossedService:
     _names = None
     _predict_module = None
     _mode = "cnn"
+    model_key = ""
+    model_dir_name = ""
+    module_name = ""
+    error_label = "unknown"
 
     def __new__(cls):
+        if "_instance" not in cls.__dict__:
+            cls._instance = None
         if cls._instance is None:
-            cls._instance = super(ResNet18CrossedService, cls).__new__(cls)
+            cls._instance = super(BaseResNet18ClassifierService, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):
@@ -298,14 +137,17 @@ class ResNet18CrossedService:
 
     def _load_model(self):
         try:
-            model_dir = _ai_core_dir() / "model_resnet18_crossed"
+            if not self.model_key or not self.model_dir_name or not self.module_name:
+                raise RuntimeError("ResNet18 service is missing model metadata")
+
+            model_dir = _ai_core_dir() / self.model_dir_name
             config_path = model_dir / "config.yaml"
             predict_path = model_dir / "predict.py"
 
             if not config_path.exists():
-                raise RuntimeError(f"Cannot find ResNet18 crossed config: {config_path}")
+                raise RuntimeError(f"Cannot find {self.model_key} config: {config_path}")
 
-            module = _load_module("model_resnet18_crossed_predict", predict_path)
+            module = _load_module(self.module_name, predict_path)
             cfg = module.load_config(config_path)
             self._predict_module = module
             self._names = module.label_names(cfg)
@@ -331,16 +173,10 @@ class ResNet18CrossedService:
                     raise RuntimeError(f"Cannot find SVM model: {svm_path}")
                 self._svm_model = module.joblib.load(svm_path)
 
-            print(f"[model_resnet18_crossed] Loaded in {self._mode} mode on {self._device}")
+            print(f"[{self.model_key}] Loaded in {self._mode} mode on {self._device}")
         except Exception as exc:
-            print(f"[model_resnet18_crossed] Failed to load model: {exc}")
+            print(f"[{self.model_key}] Failed to load model: {exc}")
             raise
-
-    @staticmethod
-    def _normalize_label(raw_label: str) -> tuple[str, bool]:
-        normalized = raw_label.strip().lower()
-        is_struck = normalized in {"gach_ten", "struck", "crossed_out", "name_struck"}
-        return ("struck" if is_struck else "not_struck"), is_struck
 
     def _predict_batch_tensors(self, batch: torch.Tensor):
         if self._mode == "svm":
@@ -355,10 +191,7 @@ class ResNet18CrossedService:
 
         return self._predict_module.predict_cnn(self._cnn_model, batch, self._device)
 
-    def _parse_prediction(self, filename: str, pred: int, probabilities=None) -> Dict:
-        raw_label = self._names[int(pred)]
-        label, is_struck = self._normalize_label(raw_label)
-
+    def _probability_payload(self, probabilities=None):
         confidence = 0
         probability_map = {}
         if probabilities is not None:
@@ -368,32 +201,39 @@ class ResNet18CrossedService:
             }
             confidence = float(max(probabilities))
 
+        return confidence, probability_map
+
+    def _format_success_result(
+        self,
+        filename: str,
+        raw_label: str,
+        confidence: float,
+        probability_map: Dict,
+    ) -> Dict:
+        raise NotImplementedError
+
+    def _parse_prediction(self, filename: str, pred: int, probabilities=None) -> Dict:
+        raw_label = self._names[int(pred)]
+        confidence, probability_map = self._probability_payload(probabilities)
+        return self._format_success_result(filename, raw_label, confidence, probability_map)
+
+    def _format_error_result(self, filename: str, error: str) -> Dict:
         return {
             "filename": filename,
-            "label": label,
-            "raw_label": raw_label,
-            "is_struck": is_struck,
-            "confidence": confidence,
-            "probabilities": probability_map,
+            "label": self.error_label,
+            "raw_label": "",
+            "confidence": 0,
+            "probabilities": {},
             "detections": [],
-            "status": "success",
+            "status": "error",
+            "error": error,
         }
 
     def detect(self, image_data: bytes, filename: str = "") -> Dict:
         try:
             return self.detect_batch([(image_data, filename)])[0]
         except Exception as exc:
-            return {
-                "filename": filename,
-                "label": "unknown",
-                "raw_label": "",
-                "is_struck": None,
-                "confidence": 0,
-                "probabilities": {},
-                "detections": [],
-                "status": "error",
-                "error": str(exc),
-            }
+            return self._format_error_result(filename, str(exc))
 
     def detect_batch(self, images: List[tuple]) -> List[Dict]:
         tensors = []
@@ -408,19 +248,7 @@ class ResNet18CrossedService:
                 tensors.append(self._transform(pil_img))
                 filenames.append(filename)
             except Exception as exc:
-                results.append(
-                    {
-                        "filename": filename,
-                        "label": "unknown",
-                        "raw_label": "",
-                        "is_struck": None,
-                        "confidence": 0,
-                        "probabilities": {},
-                        "detections": [],
-                        "status": "error",
-                        "error": f"Image read error: {exc}",
-                    }
-                )
+                results.append(self._format_error_result(filename, f"Image read error: {exc}"))
             finally:
                 if pil_img is not None:
                     pil_img.close()
@@ -436,3 +264,89 @@ class ResNet18CrossedService:
             results.append(self._parse_prediction(filename, int(pred), row_probs))
 
         return results
+
+
+class ResNet18XService(BaseResNet18ClassifierService):
+    """Singleton service for model_resnet18_x."""
+
+    _instance = None
+    model_key = "model_resnet18_x"
+    model_dir_name = "model_resnet18_x"
+    module_name = "model_resnet18_x_predict"
+    error_label = "unknown"
+
+    @staticmethod
+    def _normalize_label(raw_label: str) -> tuple[str, bool, bool]:
+        normalized = raw_label.strip().lower()
+        if normalized in {"x_mark", "mark", "marked"}:
+            return "x_mark", True, False
+        if normalized in {"x_cancel", "x_cancelled", "cancel", "cancelled"}:
+            return "x_cancel", False, True
+        if normalized in {"no_x", "none", "no_mark", "blank"}:
+            return "none", False, False
+        return normalized or "unknown", False, False
+
+    def _format_success_result(
+        self,
+        filename: str,
+        raw_label: str,
+        confidence: float,
+        probability_map: Dict,
+    ) -> Dict:
+        label, is_marked, is_cancelled = self._normalize_label(raw_label)
+        return {
+            "filename": filename,
+            "label": label,
+            "raw_label": raw_label,
+            "is_marked": is_marked,
+            "is_cancelled": is_cancelled,
+            "confidence": confidence,
+            "probabilities": probability_map,
+            "detections": [],
+            "status": "success",
+        }
+
+    def _format_error_result(self, filename: str, error: str) -> Dict:
+        result = super()._format_error_result(filename, error)
+        result.update({"is_marked": None, "is_cancelled": None})
+        return result
+
+
+class ResNet18CrossedService(BaseResNet18ClassifierService):
+    """Singleton service for model_resnet18_crossed."""
+
+    _instance = None
+    model_key = "model_resnet18_crossed"
+    model_dir_name = "model_resnet18_crossed"
+    module_name = "model_resnet18_crossed_predict"
+    error_label = "unknown"
+
+    @staticmethod
+    def _normalize_label(raw_label: str) -> tuple[str, bool]:
+        normalized = raw_label.strip().lower()
+        is_struck = normalized in {"gach_ten", "struck", "crossed_out", "name_struck"}
+        return ("struck" if is_struck else "not_struck"), is_struck
+
+    def _format_success_result(
+        self,
+        filename: str,
+        raw_label: str,
+        confidence: float,
+        probability_map: Dict,
+    ) -> Dict:
+        label, is_struck = self._normalize_label(raw_label)
+        return {
+            "filename": filename,
+            "label": label,
+            "raw_label": raw_label,
+            "is_struck": is_struck,
+            "confidence": confidence,
+            "probabilities": probability_map,
+            "detections": [],
+            "status": "success",
+        }
+
+    def _format_error_result(self, filename: str, error: str) -> Dict:
+        result = super()._format_error_result(filename, error)
+        result.update({"is_struck": None})
+        return result
