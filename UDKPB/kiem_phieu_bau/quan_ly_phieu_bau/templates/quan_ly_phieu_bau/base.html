@@ -98,7 +98,7 @@
         <a href="{% url 'home' %}" {% if request.path == '/' %}class="active"{% endif %}>Trang chủ</a>
         <a href="{% url 'poll:tao_cuoc_bo_phieu' %}" {% if 'tao_cuoc_bo_phieu' in request.path %}class="active"{% endif %}>Tạo cuộc bỏ phiếu</a>
         <a href="{% url 'poll:danh_sach_cuoc_bo_phieu' %}" {% if 'danh_sach_cuoc_bo_phieu' in request.path %}class="active"{% endif %}>Danh sách cuộc bỏ phiếu</a>
-        <a href="#" {% if 'cau_hinh_kiem_phieu' in request.path %}class="active"{% endif %}>Cấu hình kiểm phiếu</a>
+        <a href="{% url 'counting_config_list' %}" {% if '/counting/' in request.path %}class="active"{% endif %}>Cấu hình kiểm phiếu</a>
         <a href="{% url 'api:checking_list' %}" {% if 'checking' in request.path %}class="active"{% endif %}>Hậu kiểm</a>
         <a href="{% url 'poll:thong_ke' %}" {% if 'thong_ke' in request.path %}class="active"{% endif %}>Thống kê</a>
         {% if request.user.is_authenticated %}

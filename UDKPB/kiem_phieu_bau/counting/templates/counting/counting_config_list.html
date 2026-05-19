@@ -1,0 +1,114 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+
+{% block title %}Cấu hình kiểm phiếu{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="mb-1">Cấu hình kiểm phiếu</h2>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover align-middle counting-config-table">
+    <thead class="table-light">
+      <tr>
+        <th>STT</th>
+        <th>Tên cuộc bỏ phiếu</th>
+        <th>Ngày bắt đầu</th>
+        <th>Ứng viên</th>
+        <th>Phiếu</th>
+        <th>Đã upload</th>
+        <th>Đã kiểm</th>
+        <th>Hậu kiểm</th>
+        <th>Cấu hình</th>
+        <th>Trạng thái</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for poll in polls %}
+      <tr onclick="window.location.href='{% url 'counting_form' poll.poll_id %}'" style="cursor: pointer;">
+        <td>{{ forloop.counter|add:polls.start_index|add:"-1" }}</td>
+        <td class="fw-semibold">{{ poll.title }}</td>
+        <td>{{ poll.start_time|date:'d/m/Y H:i' }}</td>
+        <td>{{ poll.num_candidates }}</td>
+        <td>{{ poll.num_ballots }}</td>
+        <td>{{ poll.num_uploaded }}</td>
+        <td>{{ poll.num_counted }}</td>
+        <td>{{ poll.num_checked }}/{{ poll.num_pending_check|add:poll.num_checked }}</td>
+        <td>
+          {% if poll.config_number %}
+          <span class="badge bg-primary">Cấu hình {{ poll.config_number }}</span>
+          {% else %}
+          <span class="badge bg-secondary">Chưa lưu</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if poll.is_counting_started or poll.is_checking_started %}
+          <span class="badge bg-success">Đang kiểm phiếu</span>
+          {% else %}
+          <span class="badge bg-light text-dark border">Tắt</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="10" class="text-center text-muted py-4">Chưa có cuộc bỏ phiếu nào.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if polls.has_other_pages %}
+<nav aria-label="Phân trang" class="mt-4">
+  <ul class="pagination justify-content-center">
+    {% if polls.has_previous %}
+    <li class="page-item">
+      <a class="page-link" href="?page=1">&laquo; Đầu</a>
+    </li>
+    <li class="page-item">
+      <a class="page-link" href="?page={{ polls.previous_page_number }}">Trước</a>
+    </li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link">&laquo; Đầu</span></li>
+    <li class="page-item disabled"><span class="page-link">Trước</span></li>
+    {% endif %}
+
+    {% for num in polls.paginator.page_range %}
+      {% if polls.number == num %}
+      <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+      {% elif num > polls.number|add:'-3' and num < polls.number|add:'3' %}
+      <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+      {% endif %}
+    {% endfor %}
+
+    {% if polls.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="?page={{ polls.next_page_number }}">Sau</a>
+    </li>
+    <li class="page-item">
+      <a class="page-link" href="?page={{ polls.paginator.num_pages }}">Cuối &raquo;</a>
+    </li>
+    {% else %}
+    <li class="page-item disabled"><span class="page-link">Sau</span></li>
+    <li class="page-item disabled"><span class="page-link">Cuối &raquo;</span></li>
+    {% endif %}
+  </ul>
+</nav>
+
+<div class="text-center text-muted">
+  <small>Trang {{ polls.number }} / {{ polls.paginator.num_pages }} (Tổng {{ polls.paginator.count }} cuộc bỏ phiếu)</small>
+</div>
+{% endif %}
+
+<style>
+  .counting-config-table tbody tr {
+    transition: background-color 0.2s ease;
+  }
+
+  .counting-config-table tbody tr:hover {
+    background-color: #f5f9ff;
+  }
+</style>
+{% endblock %}

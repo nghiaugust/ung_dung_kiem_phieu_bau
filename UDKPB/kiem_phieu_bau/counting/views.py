@@ -3,6 +3,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.conf import settings
 from django.db import models
+from django.core.paginator import Paginator
+from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from poll.models import Poll, Candidate
 from ballot.models import Ballot, BallotSelection
@@ -20,6 +22,44 @@ import os
 import time
 from typing import List, Dict, Tuple
 import json
+
+
+def _get_counting_poll_queryset(request):
+	if request.user.is_authenticated and request.user.is_superuser and request.user.is_active:
+		polls_queryset = Poll.objects.all()
+	else:
+		polls_queryset = Poll.objects.filter(members__account=request.user)
+
+	return polls_queryset.annotate(
+		num_candidates=models.Count('candidate', distinct=True),
+		num_ballots=models.Count('ballot', distinct=True),
+		num_uploaded=models.Count('ballot', filter=models.Q(ballot__process_status='completed'), distinct=True),
+		num_counted=models.Count('ballot', filter=models.Q(ballot__counting_status='completed'), distinct=True),
+		num_pending_check=models.Count(
+			'ballot',
+			filter=models.Q(
+				ballot__checking_status='NEW',
+				ballot__process_status='completed',
+				ballot__counting_status='completed'
+			),
+			distinct=True
+		),
+		num_checked=models.Count('ballot', filter=models.Q(ballot__checking_status='DONE'), distinct=True),
+	).order_by('-poll_id')
+
+
+@login_required
+def counting_config_list(request):
+	"""
+	Danh sách cuộc bỏ phiếu để cấu hình và bật/tắt kiểm phiếu.
+	"""
+	polls_queryset = _get_counting_poll_queryset(request)
+	paginator = Paginator(polls_queryset, 10)
+	page_obj = paginator.get_page(request.GET.get('page', 1))
+
+	return render(request, 'counting/counting_config_list.html', {
+		'polls': page_obj
+	})
 
 
 @require_http_methods(["POST"])
@@ -400,6 +440,16 @@ def counting_form_view(request, poll_id):
 	}
 	required_services = config_model.get_required_services(poll.config_number) if poll.config_number else []
 	ai_ready_for_config = all(ai_service_statuses.get(service, False) for service in required_services) if required_services else False
+	can_start_counting = (
+		candidates_count > 0
+		and ballots_count > 0
+		and ballots_with_image_count > 0
+		and preprocessed_count == ballots_with_image_total
+		and ballots_with_image_total > 0
+		and ai_ready_for_config
+		and bool(poll.config_number)
+	)
+	total_ballots_count = poll.total_ballots_count or ballots_count
 
 	context = {
 		'poll': poll,
@@ -416,6 +466,10 @@ def counting_form_view(request, poll_id):
 		'config_definitions': config_model.CONFIG_DEFINITIONS,
 		# Thêm config_number và status để kiểm tra
 		'config_number': poll.config_number,
+		'total_ballots': ballots_count,
+		'total_ballots_count': total_ballots_count,
+		'can_start_counting': can_start_counting,
+		'is_counting_active': poll.is_counting_started or poll.is_checking_started,
 		'is_counted': poll.status in ['counted', 'Đã kiểm phiếu'],
 	}
 	
@@ -656,86 +710,64 @@ def counting_results_view(request, poll_id):
 
 def auto_counting_view(request, poll_id):
 	"""
-	Trang quản lý kiểm phiếu tự động
+	Giữ route cũ, chuyển về trang cấu hình đã gộp.
 	"""
-	poll = get_object_or_404(Poll, poll_id=poll_id)
-	
-	# Đếm tổng số ballot
-	total_ballots = Ballot.objects.filter(poll=poll).count()
-	
-	context = {
-		'poll': poll,
-		'total_ballots': total_ballots,
-	}
-	
-	return render(request, 'counting/auto_counting.html', context)
+	return redirect('counting_form', poll_id=poll_id)
 
 
 @require_http_methods(["POST"])
 def toggle_auto_counting(request, poll_id):
 	"""
-	Bật/tắt chế độ kiểm phiếu tự động
+	Bật/tắt kiểm phiếu: kiểm tự động và cleanup hậu kiểm cùng trạng thái.
 	"""
 	poll = get_object_or_404(Poll, poll_id=poll_id)
+	is_turning_on = not (poll.is_counting_started or poll.is_checking_started)
 	
-	# Kiểm tra phải có config_number trước khi bật
-	if not poll.is_counting_started and not poll.config_number:
-		messages.error(request, 'Vui lòng lưu cấu hình trước khi bật kiểm tự động!')
-		return redirect('auto_counting', poll_id=poll_id)
+	if is_turning_on and not poll.config_number:
+		messages.error(request, 'Vui lòng lưu cấu hình trước khi bật kiểm phiếu!')
+		return redirect('counting_form', poll_id=poll_id)
 	
-	# Toggle trạng thái
-	poll.is_counting_started = not poll.is_counting_started
+	poll.is_counting_started = is_turning_on
+	poll.is_checking_started = is_turning_on
 	
-	# Nếu đang BẬT, lưu total_ballots_count từ form (hoặc mặc định = tổng ballot)
-	if poll.is_counting_started:
+	if is_turning_on:
 		total_ballots = Ballot.objects.filter(poll=poll).count()
-		
-		# Lấy giá trị từ form, nếu không có thì dùng mặc định
 		total_ballots_count = request.POST.get('total_ballots_count', total_ballots)
 		
 		try:
 			total_ballots_count = int(total_ballots_count)
-			
-			# Validate: không được vượt quá tổng số ballot thực tế
 			if total_ballots_count > total_ballots:
 				total_ballots_count = total_ballots
-			
-			# Validate: phải >= 0
 			if total_ballots_count < 0:
 				total_ballots_count = 0
-			
 			poll.total_ballots_count = total_ballots_count
 		except (ValueError, TypeError):
-			# Nếu lỗi convert, dùng giá trị mặc định
 			poll.total_ballots_count = total_ballots
 	
 	poll.save()
 	
-	if poll.is_counting_started:
-		# KHI BẬT: Đẩy tất cả phiếu đã xử lý xong (process_status='completed') nhưng chưa kiểm (counting_status='pending') vào queue
+	if is_turning_on:
 		from counting.tasks import counting_queue
 		
-		# Lấy tất cả ballot đã completed nhưng chưa kiểm
 		pending_ballots = Ballot.objects.filter(
 			poll=poll,
 			process_status='completed',
 			counting_status='pending'
 		).values_list('ballot_id', flat=True)
 		
-		# Đẩy vào queue
 		queued_count = 0
 		for ballot_id in pending_ballots:
 			counting_queue.delay(ballot_id)
 			queued_count += 1
 		
 		if queued_count > 0:
-			messages.success(request, f'Đã BẬT chế độ kiểm phiếu tự động! Đang xử lý {queued_count} phiếu đã upload trước đó...')
+			messages.success(request, f'Đã bật kiểm phiếu. Đang xử lý {queued_count} phiếu đã upload trước đó.')
 		else:
-			messages.success(request, 'Đã BẬT chế độ kiểm phiếu tự động!')
+			messages.success(request, 'Đã bật kiểm phiếu.')
 	else:
-		messages.info(request, 'Đã TẮT chế độ kiểm phiếu tự động!')
+		messages.info(request, 'Đã tắt kiểm phiếu.')
 	
-	return redirect('auto_counting', poll_id=poll_id)
+	return redirect('counting_form', poll_id=poll_id)
 
 
 def get_counting_stats(request, poll_id):
@@ -835,6 +867,8 @@ def get_counting_stats(request, poll_id):
 		},
 		
 		'is_counting_started': poll.is_counting_started,
+		'is_checking_started': poll.is_checking_started,
+		'is_counting_active': poll.is_counting_started or poll.is_checking_started,
 	})
 
 
