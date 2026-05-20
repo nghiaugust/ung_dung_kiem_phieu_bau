@@ -13,8 +13,10 @@ from ballot.models import Ballot
 from poll.models import Poll
 from preprocessing.models import BallotCell
 from counting.models import AIModelResult
-from counting import config_model
+from counting import config_crossed, config_model
 from counting.configurations.base import (
+    get_candidate_by_row,
+    get_candidates,
     MODEL_RESNET18_CROSSED,
     MODEL_RESNET18_X,
     MODEL_VIETNAMEOCR,
@@ -79,6 +81,34 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
     return vietnameocr_batch, resnet18_x_batch, resnet18_crossed_batch
 
 
+def prepare_crossed_ocr_batch(resnet18_crossed_batch, resnet18_crossed_response):
+    """
+    Tao batch OCR chi cho cac o model_resnet18_crossed con can hau quyet dinh.
+    """
+    crossed_ocr_batch = {'image_paths': [], 'cell_mapping': {}}
+
+    if not (
+        resnet18_crossed_response
+        and resnet18_crossed_response.get('success')
+        and resnet18_crossed_response.get('results')
+    ):
+        return crossed_ocr_batch
+
+    for idx, result in enumerate(resnet18_crossed_response['results']):
+        if idx not in resnet18_crossed_batch['cell_mapping']:
+            continue
+        if idx >= len(resnet18_crossed_batch['image_paths']):
+            continue
+        if not config_crossed.needs_ocr(result):
+            continue
+
+        ocr_idx = len(crossed_ocr_batch['image_paths'])
+        crossed_ocr_batch['image_paths'].append(resnet18_crossed_batch['image_paths'][idx])
+        crossed_ocr_batch['cell_mapping'][ocr_idx] = resnet18_crossed_batch['cell_mapping'][idx]
+
+    return crossed_ocr_batch
+
+
 def process_batch_responses(
     ai_result,
     vietnameocr_batch,
@@ -86,7 +116,9 @@ def process_batch_responses(
     resnet18_crossed_batch,
     vietnameocr_response,
     resnet18_x_response,
-    resnet18_crossed_response
+    resnet18_crossed_response,
+    crossed_ocr_batch=None,
+    crossed_ocr_response=None,
 ):
     """
     Xử lý kết quả trả về từ API và lưu vào database
@@ -101,6 +133,7 @@ def process_batch_responses(
         int: Số lượng cells đã xử lý thành công
     """
     total_processed_cells = 0
+    ocr_results_by_cell = {}
     
     # Xu ly VietNameOCR response
     if vietnameocr_response and vietnameocr_response.get('success') and vietnameocr_response.get('results'):
@@ -110,9 +143,20 @@ def process_batch_responses(
                 row, col = vietnameocr_batch['cell_mapping'][idx]
                 recognized_text = result.get('text', '')
                 confidence = result.get('confidence', 0)
-                
                 ai_result.set_cell_result(row, col, recognized_text, confidence)
                 total_processed_cells += 1
+
+    # Xu ly OCR co dieu kien cho cac o model_resnet18_crossed can OCR.
+    if crossed_ocr_response and crossed_ocr_response.get('success') and crossed_ocr_response.get('results'):
+        crossed_ocr_batch = crossed_ocr_batch or {'cell_mapping': {}}
+        results = crossed_ocr_response['results']
+        for idx, result in enumerate(results):
+            if idx in crossed_ocr_batch['cell_mapping']:
+                row, col = crossed_ocr_batch['cell_mapping'][idx]
+                ocr_results_by_cell[(row, col)] = {
+                    'text': result.get('text', ''),
+                    'confidence': result.get('confidence', 0),
+                }
     
     # Xu ly model_resnet18_x response
     if resnet18_x_response and resnet18_x_response.get('success') and resnet18_x_response.get('results'):
@@ -140,17 +184,17 @@ def process_batch_responses(
     # Xu ly model_resnet18_crossed response cho phieu gach ten.
     if resnet18_crossed_response and resnet18_crossed_response.get('success') and resnet18_crossed_response.get('results'):
         results = resnet18_crossed_response['results']
+        candidate_list, _candidate_names = get_candidates(ai_result.ballot.poll)
         for idx, result in enumerate(results):
             if idx in resnet18_crossed_batch['cell_mapping']:
                 row, col = resnet18_crossed_batch['cell_mapping'][idx]
-                result_data = {
-                    'label': result.get('label', 'unknown'),
-                    'raw_label': result.get('raw_label', ''),
-                    'is_struck': result.get('is_struck'),
-                    'probabilities': result.get('probabilities', {}),
-                    'detections': result.get('detections', [])
-                }
-                confidence = result.get('confidence', 0)
+                candidate = get_candidate_by_row(candidate_list, row, 0)
+                result_data = config_crossed.build_crossed_result(
+                    visual_result=result,
+                    ocr_result=ocr_results_by_cell.get((row, col), {}),
+                    candidate_name=candidate.name if candidate else '',
+                )
+                confidence = result_data.get('confidence', 0)
                 ai_result.set_cell_result(row, col, result_data, confidence)
                 total_processed_cells += 1
 
@@ -339,6 +383,8 @@ def counting_queue(self, ballot_id):
         vietnameocr_response = None
         resnet18_x_response = None
         resnet18_crossed_response = None
+        crossed_ocr_batch = {'image_paths': [], 'cell_mapping': {}}
+        crossed_ocr_response = None
         
         try:
             # Gui VietNameOCR batch neu co
@@ -376,12 +422,29 @@ def counting_queue(self, ballot_id):
                 resnet18_crossed_response = send_batch_request(
                     api_url=get_model_api_url(MODEL_RESNET18_CROSSED),
                     image_paths=resnet18_crossed_batch['image_paths'],
+                    extra_data=config_crossed.get_cascade_request_data(),
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
 
                 if not resnet18_crossed_response.get('success'):
                     error_msg = resnet18_crossed_response.get('error', 'model_resnet18_crossed API tra ve loi')
                     raise requests.exceptions.RequestException(f"model_resnet18_crossed error: {error_msg}")
+
+                crossed_ocr_batch = prepare_crossed_ocr_batch(
+                    resnet18_crossed_batch,
+                    resnet18_crossed_response
+                )
+                if crossed_ocr_batch['image_paths']:
+                    print(f"[COUNTING QUEUE] Gui model_vietnameocr cho {len(crossed_ocr_batch['image_paths'])} anh crossed can OCR")
+                    crossed_ocr_response = send_batch_request(
+                        api_url=get_model_api_url(MODEL_VIETNAMEOCR),
+                        image_paths=crossed_ocr_batch['image_paths'],
+                        timeout=settings.AI_SERVER_REQUEST_TIMEOUT
+                    )
+
+                    if not crossed_ocr_response.get('success'):
+                        error_msg = crossed_ocr_response.get('error', 'model_vietnameocr API tra ve loi')
+                        raise requests.exceptions.RequestException(f"model_vietnameocr crossed OCR error: {error_msg}")
                     
         except requests.exceptions.RequestException as e:
             # Lỗi kết nối hoặc API error, retry với exponential backoff
@@ -432,7 +495,9 @@ def counting_queue(self, ballot_id):
             resnet18_crossed_batch,
             vietnameocr_response,
             resnet18_x_response,
-            resnet18_crossed_response
+            resnet18_crossed_response,
+            crossed_ocr_batch,
+            crossed_ocr_response
         )
 
         # Buoc 3.1: Kiem tra hop le cua phieu dua tren ket qua model_resnet18_x

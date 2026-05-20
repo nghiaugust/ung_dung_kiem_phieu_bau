@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import gc
 import sys
 import warnings
 from pathlib import Path
@@ -322,11 +323,68 @@ class ResNet18CrossedService(BaseResNet18ClassifierService):
     module_name = "model_resnet18_crossed_predict"
     error_label = "unknown"
 
+    DEFAULT_RESNET_CONF_HIGH = 0.90
+    DEFAULT_RESNET_MARGIN_HIGH = 0.25
+    DEFAULT_SVM_CONF_HIGH = 0.80
+
     @staticmethod
     def _normalize_label(raw_label: str) -> tuple[str, bool]:
         normalized = raw_label.strip().lower()
-        is_struck = normalized in {"gach_ten", "struck", "crossed_out", "name_struck"}
-        return ("struck" if is_struck else "not_struck"), is_struck
+        is_crossed = normalized in {"gach_ten", "crossed", "crossed_out", "name_crossed"}
+        return ("crossed" if is_crossed else "not_crossed"), is_crossed
+
+    @staticmethod
+    def _margin(probabilities) -> float:
+        if probabilities is None or len(probabilities) < 2:
+            return 0.0
+        ordered = sorted((float(prob) for prob in probabilities), reverse=True)
+        return ordered[0] - ordered[1]
+
+    def _model_output_payload(self, raw_label: str, probabilities=None) -> Dict:
+        label, is_crossed = self._normalize_label(raw_label)
+        confidence, probability_map = self._probability_payload(probabilities)
+        return {
+            "label": label,
+            "raw_label": raw_label,
+            "is_crossed": is_crossed,
+            "confidence": confidence,
+            "probabilities": probability_map,
+            "margin": self._margin(probabilities),
+        }
+
+    def _load_svm_model(self):
+        if self._svm_model is not None:
+            return self._svm_model
+
+        model_dir = _ai_core_dir() / self.model_dir_name
+        config_path = model_dir / "config.yaml"
+        cfg = self._predict_module.load_config(config_path)
+        svm_path = self._predict_module.resolve_path(cfg["paths"]["svm_model"], config_path.parent)
+        if not svm_path.exists():
+            raise RuntimeError(f"Cannot find SVM model: {svm_path}")
+
+        self._svm_model = self._predict_module.joblib.load(svm_path)
+        return self._svm_model
+
+    @torch.no_grad()
+    def _predict_cnn_with_features(self, batch: torch.Tensor):
+        model = self._cnn_model
+        x = batch.to(self._device)
+        x = model.conv1(x)
+        x = model.bn1(x)
+        x = model.relu(x)
+        x = model.maxpool(x)
+        x = model.layer1(x)
+        x = model.layer2(x)
+        x = model.layer3(x)
+        x = model.layer4(x)
+        x = model.avgpool(x)
+        features = torch.flatten(x, 1)
+        logits = model.fc(features)
+        probabilities = torch.softmax(logits, dim=1).detach().cpu().numpy()
+        predictions = probabilities.argmax(axis=1)
+        feature_rows = features.detach().cpu().numpy().astype("float32")
+        return predictions, probabilities, feature_rows
 
     def _format_success_result(
         self,
@@ -335,12 +393,12 @@ class ResNet18CrossedService(BaseResNet18ClassifierService):
         confidence: float,
         probability_map: Dict,
     ) -> Dict:
-        label, is_struck = self._normalize_label(raw_label)
+        label, is_crossed = self._normalize_label(raw_label)
         return {
             "filename": filename,
             "label": label,
             "raw_label": raw_label,
-            "is_struck": is_struck,
+            "is_crossed": is_crossed,
             "confidence": confidence,
             "probabilities": probability_map,
             "detections": [],
@@ -349,8 +407,165 @@ class ResNet18CrossedService(BaseResNet18ClassifierService):
 
     def _format_error_result(self, filename: str, error: str) -> Dict:
         result = super()._format_error_result(filename, error)
-        result.update({"is_struck": None})
+        result.update({"is_crossed": None})
         return result
+
+    def _format_cascade_result(
+        self,
+        filename: str,
+        output: Dict,
+        decision_stage: str,
+        needs_review: bool,
+        model_outputs: Dict,
+    ) -> Dict:
+        return {
+            "filename": filename,
+            "label": output["label"],
+            "raw_label": output["raw_label"],
+            "is_crossed": output["is_crossed"],
+            "confidence": output["confidence"],
+            "probabilities": output["probabilities"],
+            "detections": [],
+            "status": "success",
+            "decision_stage": decision_stage,
+            "needs_review": needs_review,
+            "model_outputs": model_outputs,
+        }
+
+    @staticmethod
+    def _thresholds(thresholds: Optional[Dict] = None) -> Dict[str, float]:
+        values = thresholds or {}
+
+        def parse(name: str, default: float) -> float:
+            try:
+                return float(values.get(name, default))
+            except (TypeError, ValueError):
+                return default
+
+        return {
+            "resnet_conf_high": parse("resnet_conf_high", ResNet18CrossedService.DEFAULT_RESNET_CONF_HIGH),
+            "resnet_margin_high": parse("resnet_margin_high", ResNet18CrossedService.DEFAULT_RESNET_MARGIN_HIGH),
+            "svm_conf_high": parse("svm_conf_high", ResNet18CrossedService.DEFAULT_SVM_CONF_HIGH),
+        }
+
+    def detect_batch(
+        self,
+        images: List[tuple],
+        cascade: bool = False,
+        thresholds: Optional[Dict] = None,
+    ) -> List[Dict]:
+        if not cascade:
+            return super().detect_batch(images)
+
+        tensors = []
+        filenames = []
+        results = []
+
+        for image_data, filename in images:
+            pil_img = None
+            try:
+                pil_img = Image.open(io.BytesIO(image_data))
+                pil_img = ImageOps.exif_transpose(pil_img).convert("RGB")
+                tensors.append(self._transform(pil_img))
+                filenames.append(filename)
+            except Exception as exc:
+                results.append(self._format_error_result(filename, f"Image read error: {exc}"))
+            finally:
+                if pil_img is not None:
+                    pil_img.close()
+
+        if not tensors:
+            return results
+
+        limits = self._thresholds(thresholds)
+        batch = None
+        features = None
+        try:
+            batch = torch.stack(tensors, dim=0)
+            predictions, probabilities, features = self._predict_cnn_with_features(batch)
+            pending = []
+            pending_outputs = {}
+
+            for idx, (filename, pred) in enumerate(zip(filenames, predictions)):
+                raw_label = self._names[int(pred)]
+                cnn_output = self._model_output_payload(raw_label, probabilities[idx])
+                model_outputs = {"resnet18": cnn_output}
+
+                if (
+                    cnn_output["confidence"] >= limits["resnet_conf_high"]
+                    and cnn_output["margin"] >= limits["resnet_margin_high"]
+                ):
+                    results.append(
+                        self._format_cascade_result(
+                            filename,
+                            cnn_output,
+                            "resnet18",
+                            False,
+                            model_outputs,
+                        )
+                    )
+                    continue
+
+                pending.append(idx)
+                pending_outputs[idx] = (filename, cnn_output, model_outputs)
+
+            if pending:
+                svm_model = self._load_svm_model()
+                svm_features = features[pending]
+                svm_predictions = svm_model.predict(svm_features)
+                svm_probabilities = (
+                    svm_model.predict_proba(svm_features)
+                    if hasattr(svm_model, "predict_proba")
+                    else None
+                )
+
+                for pending_pos, original_idx in enumerate(pending):
+                    filename, cnn_output, model_outputs = pending_outputs[original_idx]
+                    raw_label = self._names[int(svm_predictions[pending_pos])]
+                    row_probs = svm_probabilities[pending_pos] if svm_probabilities is not None else None
+                    svm_output = self._model_output_payload(raw_label, row_probs)
+                    model_outputs["svm"] = svm_output
+
+                    if (
+                        svm_output["label"] == cnn_output["label"]
+                        and svm_output["confidence"] >= limits["svm_conf_high"]
+                    ):
+                        results.append(
+                            self._format_cascade_result(
+                                filename,
+                                svm_output,
+                                "svm",
+                                False,
+                                model_outputs,
+                            )
+                        )
+                        continue
+
+                    fallback_output = (
+                        svm_output
+                        if svm_output["confidence"] > cnn_output["confidence"]
+                        else cnn_output
+                    )
+                    results.append(
+                        self._format_cascade_result(
+                            filename,
+                            fallback_output,
+                            "visual_fallback",
+                            True,
+                            model_outputs,
+                        )
+                    )
+
+            return results
+        finally:
+            del tensors
+            if batch is not None:
+                del batch
+            if features is not None:
+                del features
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 
 MODEL_VIETNAMEOCR = "model_vietnameocr"

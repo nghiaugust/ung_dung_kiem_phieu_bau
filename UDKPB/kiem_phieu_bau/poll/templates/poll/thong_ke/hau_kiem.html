@@ -141,9 +141,19 @@
     border-radius: 4px;
     font-size: 0.85rem;
     font-weight: 600;
-    white-space: nowrap;
-    min-width: 100px;
-    text-align: center;
+    white-space: normal;
+    min-width: 220px;
+    max-width: 340px;
+    text-align: left;
+    line-height: 1.35;
+  }
+
+  .confidence-detail {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 500;
+    opacity: 0.92;
+    margin-top: 2px;
   }
   
   .confidence-badge.voted {
@@ -377,10 +387,21 @@
       if (confidenceBadge && markResults[index]) {
         const conf = markResults[index].confidence;
         const aiVoted = markResults[index].ai_voted;
+        const displayText = markResults[index].display_text;
+        const detailLines = markResults[index].detail_lines || [];
         const label = aiVoted ? 'Đồng ý' : 'Không đồng ý';
         
         if (conf && conf > 0) {
-          confidenceBadge.textContent = `${conf}% - ${label}`;
+          confidenceBadge.textContent = '';
+          const summary = document.createElement('span');
+          summary.textContent = displayText || `${conf}% - ${label}`;
+          confidenceBadge.appendChild(summary);
+          detailLines.forEach((line) => {
+            const detail = document.createElement('span');
+            detail.className = 'confidence-detail';
+            detail.textContent = line;
+            confidenceBadge.appendChild(detail);
+          });
           confidenceBadge.className = `confidence-badge ${aiVoted ? 'voted' : 'not-voted'}`;
           confidenceBadge.style.display = 'block';
         } else {

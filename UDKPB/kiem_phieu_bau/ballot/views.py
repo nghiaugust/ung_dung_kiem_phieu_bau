@@ -11,6 +11,117 @@ from django.db import transaction
 from account.models import Account
 from poll.models import Poll, Candidate, PollMember
 from .models import Ballot, BallotSelection
+from counting import config_crossed
+
+
+def _percent(value):
+	try:
+		return round(float(value or 0) * 100, 1)
+	except (TypeError, ValueError):
+		return 0
+
+
+def _crossed_label_text(label):
+	if label == config_crossed.CROSSED_LABEL:
+		return 'Gach ten'
+	if label == config_crossed.NOT_CROSSED_LABEL:
+		return 'Ten binh thuong'
+	return 'Unknown'
+
+
+def _probability_label(raw_label):
+	return _crossed_label_text(config_crossed.normalize_crossed_label(raw_label))
+
+
+def _format_two_label_probabilities(probabilities):
+	if not isinstance(probabilities, dict) or not probabilities:
+		return ''
+
+	prob_by_label = {}
+	for raw_label, value in probabilities.items():
+		normalized_label = config_crossed.normalize_crossed_label(raw_label)
+		prob_by_label[normalized_label] = _percent(value)
+
+	ordered_labels = [
+		config_crossed.CROSSED_LABEL,
+		config_crossed.NOT_CROSSED_LABEL,
+	]
+	parts = [
+		f"{_crossed_label_text(label)} {prob_by_label[label]}%"
+		for label in ordered_labels
+		if label in prob_by_label
+	]
+
+	if parts:
+		return ', '.join(parts)
+
+	return ', '.join(
+		f"{_probability_label(raw_label)} {_percent(value)}%"
+		for raw_label, value in probabilities.items()
+	)
+
+
+def _crossed_output_line(model_name, output):
+	if not isinstance(output, dict):
+		return None
+	label = _crossed_label_text(config_crossed.normalize_crossed_label(output.get('label')))
+	two_label_text = _format_two_label_probabilities(output.get('probabilities'))
+	if two_label_text:
+		return f"{model_name}: {two_label_text} => {label}"
+	return f"{model_name}: {_percent(output.get('confidence'))}% - {label}"
+
+
+def _build_crossed_mark_result(cell_data):
+	result = cell_data.get('result', {}) if isinstance(cell_data, dict) else {}
+	if not isinstance(result, dict):
+		return {'ai_voted': False, 'confidence': 0, 'display_text': '0% - none', 'detail_lines': []}
+
+	label = config_crossed.normalize_crossed_label(result.get('label'))
+	is_crossed = result.get('is_crossed')
+	if not isinstance(is_crossed, bool):
+		is_crossed = label == config_crossed.CROSSED_LABEL
+
+	confidence = _percent(cell_data.get('confidence', result.get('confidence', 0)))
+	label_text = _crossed_label_text(label)
+	detail_lines = []
+
+	stage = result.get('decision_stage')
+	if stage:
+		detail_lines.append(f"Stage: {stage}")
+
+	model_outputs = result.get('model_outputs', {})
+	pipeline_parts = []
+	resnet_line = _crossed_output_line('ResNet18', model_outputs.get('resnet18'))
+	if resnet_line:
+		pipeline_parts.append('ResNet18')
+		detail_lines.append(resnet_line)
+
+	svm_line = _crossed_output_line('SVM', model_outputs.get('svm'))
+	if svm_line:
+		pipeline_parts.append('SVM')
+		detail_lines.append(svm_line)
+
+	ocr = result.get('ocr', {})
+	if isinstance(ocr, dict):
+		ocr_text = ocr.get('text') or ''
+		ocr_similarity = _percent(ocr.get('similarity'))
+		ocr_used = bool(ocr.get('used')) or bool(ocr_text) or bool(ocr_similarity) or result.get('decision_stage') == 'ocr'
+		if ocr_used:
+			pipeline_parts.append('OCR')
+			detail_lines.append(f"OCR: {ocr_similarity}% - {ocr_text}")
+
+	if result.get('needs_review'):
+		detail_lines.append('Can hau kiem')
+
+	pipeline_text = ' + '.join(pipeline_parts) if pipeline_parts else 'AI'
+
+	return {
+		'ai_voted': not is_crossed,
+		'confidence': confidence,
+		'display_text': f"{confidence}% - {label_text} | {pipeline_text}",
+		'detail_lines': detail_lines,
+		'needs_review': bool(result.get('needs_review')),
+	}
 
 @login_required
 def upload_ballots(request, poll_id):
@@ -367,16 +478,27 @@ def hau_kiem_ballot(request, ballot_id):
 						label = result.get('label', '')
 						
 						if row not in row_results:
-							row_results[row] = {'ai_voted': False, 'confidence': 0}
+							row_results[row] = {
+								'ai_voted': False,
+								'confidence': 0,
+								'display_text': '0% - none',
+								'detail_lines': [],
+							}
 						
 						# Cột 2 là "Đồng ý" - nếu có x_mark thì AI prediction = True
 						if col == 2 and label == 'x_mark':
+							conf = round(confidence * 100, 1)
 							row_results[row]['ai_voted'] = True
-							row_results[row]['confidence'] = round(confidence * 100, 1)
+							row_results[row]['confidence'] = conf
+							row_results[row]['display_text'] = f"{conf}% - Dong y"
+							row_results[row]['detail_lines'] = [f"model_resnet18_x: {conf}% - x_mark"]
 						# Cột 3 là "Không đồng ý" - nếu có x_mark thì AI prediction = False  
 						elif col == 3 and label == 'x_mark':
+							conf = round(confidence * 100, 1)
 							row_results[row]['ai_voted'] = False
-							row_results[row]['confidence'] = round(confidence * 100, 1)
+							row_results[row]['confidence'] = conf
+							row_results[row]['display_text'] = f"{conf}% - Khong dong y"
+							row_results[row]['detail_lines'] = [f"model_resnet18_x: {conf}% - x_mark"]
 			
 			# Chuyển dict thành list theo thứ tự candidates
 			for idx, candidate in enumerate(candidates):
@@ -385,12 +507,27 @@ def hau_kiem_ballot(request, ballot_id):
 				if row in row_results:
 					mark_results.append(row_results[row])
 				else:
-					mark_results.append({'ai_voted': False, 'confidence': 0})
+					mark_results.append({'ai_voted': False, 'confidence': 0, 'display_text': '0% - none', 'detail_lines': []})
+
+			if poll.config_number == 1:
+				crossed_mark_results = []
+				for idx, candidate in enumerate(candidates):
+					cell_data = cells.get(f"{idx}_0")
+					if cell_data:
+						crossed_mark_results.append(_build_crossed_mark_result(cell_data))
+					else:
+						crossed_mark_results.append({
+							'ai_voted': False,
+							'confidence': 0,
+							'display_text': '0% - none',
+							'detail_lines': [],
+						})
+				mark_results = crossed_mark_results
 					
 	except Exception as e:
-		print(f"Error loading model_resnet18_x results: {e}")
+		print(f"Error loading AI model results: {e}")
 		# Tạo list rỗng với số lượng bằng candidates
-		mark_results = [{'ai_voted': False, 'confidence': 0} for _ in candidates]
+		mark_results = [{'ai_voted': False, 'confidence': 0, 'display_text': '0% - none', 'detail_lines': []} for _ in candidates]
 
 	context = {
 		'poll': poll,

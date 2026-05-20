@@ -322,7 +322,7 @@
                   {% if is_counted or config_number %}disabled{% endif %}
                 >
                 <label class="form-check-label fw-bold" for="config1">
-                  Cấu hình 1: Phiếu gạch tên 1 cột + model_resnet18_crossed
+                  Cấu hình 1: Phiếu gạch tên 1 cột + ResNet18 crossed cascade + VietNameOCR
                   {% if config_number == 1 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
                 </label>
               </div>
@@ -338,7 +338,7 @@
                 <tbody>
                   <tr>
                     <td class="text-muted small">
-                      <strong>model_resnet18_crossed</strong> phát hiện tên bị gạch. Ứng viên không bị gạch được tính là lựa chọn.
+                      <strong>model_resnet18_crossed</strong> chạy cascade CNN/SVM, <strong>VietNameOCR</strong> hỗ trợ so khớp tên ở các ca biên. Ứng viên không bị gạch được tính là lựa chọn.
                     </td>
                   </tr>
                 </tbody>

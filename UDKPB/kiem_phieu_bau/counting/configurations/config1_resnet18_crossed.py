@@ -6,14 +6,13 @@ from .base import (
     initialize_ai_result,
     MODEL_RESNET18_CROSSED,
 )
+from counting import config_crossed
 
 
 CONFIG_NUMBER = 1
 MODEL_NAME = MODEL_RESNET18_CROSSED
 START_ROW = 0
 NAME_COL = 0
-STRUCK_LABELS = {'struck', 'gach_ten', 'crossed_out', 'name_struck'}
-NOT_STRUCK_LABELS = {'not_struck', 'khong_gach_ten', 'clear', 'normal'}
 
 
 def apply(ai_result):
@@ -28,35 +27,8 @@ def apply(ai_result):
     return ai_result
 
 
-def _is_struck(result_data):
-    if not isinstance(result_data, dict):
-        return False
-
-    is_struck = result_data.get('is_struck')
-    if isinstance(is_struck, bool):
-        return is_struck
-
-    label = str(result_data.get('label', '')).lower()
-    return label in STRUCK_LABELS
-
-
-def _has_strike_decision(result_data):
-    if not isinstance(result_data, dict):
-        return False
-
-    if isinstance(result_data.get('is_struck'), bool):
-        return True
-
-    label = str(result_data.get('label', '')).lower()
-    return label in STRUCK_LABELS or label in NOT_STRUCK_LABELS
-
-
 def _is_error_result(result_data):
-    if isinstance(result_data, str):
-        return result_data.startswith("[")
-    if isinstance(result_data, dict):
-        return bool(result_data.get('error')) or not _has_strike_decision(result_data)
-    return result_data is None
+    return config_crossed.is_error_result(result_data)
 
 
 def evaluate_ballot_validity(ai_result):
@@ -100,7 +72,7 @@ def create_ballot_selections(ballot, poll, ai_result):
             continue
 
         # Phieu gach ten: ung vien khong bi gach la ung vien duoc chon.
-        if _is_struck(result_data):
+        if config_crossed.is_crossed_result(result_data):
             continue
 
         candidate = get_candidate_by_row(candidate_list, row, START_ROW)

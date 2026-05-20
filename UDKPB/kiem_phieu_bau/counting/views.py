@@ -10,7 +10,7 @@ from poll.models import Poll, Candidate
 from ballot.models import Ballot, BallotSelection
 from preprocessing.models import BallotCell, PreprocessedBallot
 from .models import AIModelResult
-from . import config_model
+from . import config_crossed, config_model
 from .configurations.base import (
 	MODEL_RESNET18_CROSSED,
 	MODEL_RESNET18_X,
@@ -336,7 +336,7 @@ def call_resnet18_x_api(image_paths: List[str]) -> Dict:
 				pass
 
 
-def call_resnet18_crossed_api(image_paths: List[str]) -> Dict:
+def call_resnet18_crossed_api(image_paths: List[str], cascade: bool = False) -> Dict:
 	"""
 	API mau cho model phieu gach ten.
 
@@ -346,8 +346,8 @@ def call_resnet18_crossed_api(image_paths: List[str]) -> Dict:
 		"success": true,
 		"results": [
 			{
-				"label": "struck" | "not_struck",
-				"is_struck": true,
+				"label": "crossed" | "not_crossed",
+				"is_crossed": true,
 				"confidence": 0.95,
 				"detections": []
 			}
@@ -363,19 +363,23 @@ def call_resnet18_crossed_api(image_paths: List[str]) -> Dict:
 			file_handles.append(fh)
 			files.append(('images', (filename, fh, 'image/jpeg')))
 
+		data = {
+			'contract': json.dumps({
+				'expected_result': {
+					'label': 'crossed|not_crossed',
+					'is_crossed': True,
+					'confidence': 0.0,
+					'detections': []
+				}
+			})
+		}
+		if cascade:
+			data.update(config_crossed.get_cascade_request_data())
+
 		response = requests.post(
 			get_model_api_url(MODEL_RESNET18_CROSSED),
 			files=files,
-			data={
-				'contract': json.dumps({
-					'expected_result': {
-						'label': 'struck|not_struck',
-						'is_struck': True,
-						'confidence': 0.0,
-						'detections': []
-					}
-				})
-			},
+			data=data,
 			timeout=settings.AI_SERVER_REQUEST_TIMEOUT
 		)
 		response.raise_for_status()
@@ -532,6 +536,7 @@ def process_counting(request, poll_id):
 	total_processed_ballots = 0
 	total_processed_cells = 0
 	start_time_total = time.time()
+	candidate_list = list(Candidate.objects.filter(poll=poll).order_by('candidate_id'))
 	
 	# Xử lý từng ballot
 	for ballot in ballots:
@@ -578,18 +583,31 @@ def process_counting(request, poll_id):
 				
 				# Gọi model tương ứng
 				if model_name == MODEL_RESNET18_CROSSED:
-					resnet18_crossed_result = call_resnet18_crossed_api([cell_image_path])
+					resnet18_crossed_result = call_resnet18_crossed_api([cell_image_path], cascade=True)
 
-					if resnet18_crossed_result.get('success') and resnet18_crossed_result.get('results'):
+					if (
+						resnet18_crossed_result.get('success')
+						and resnet18_crossed_result.get('results')
+					):
 						detection = resnet18_crossed_result['results'][0]
-						result_data = {
-							'label': detection.get('label', 'unknown'),
-							'raw_label': detection.get('raw_label', ''),
-							'is_struck': detection.get('is_struck'),
-							'probabilities': detection.get('probabilities', {}),
-							'detections': detection.get('detections', [])
-						}
-						confidence = detection.get('confidence', 0)
+						ocr_result = {}
+						if config_crossed.needs_ocr(detection):
+							vietnameocr_result = call_vietnameocr_api([cell_image_path])
+							if not (vietnameocr_result.get('success') and vietnameocr_result.get('results')):
+								ai_result.set_cell_result(row, col, "[Loi model_vietnameocr]", 0)
+								continue
+							ocr_detection = vietnameocr_result['results'][0]
+							ocr_result = {
+								'text': ocr_detection.get('text', ''),
+								'confidence': ocr_detection.get('confidence', 0),
+							}
+						candidate = candidate_list[row] if 0 <= row < len(candidate_list) else None
+						result_data = config_crossed.build_crossed_result(
+							visual_result=detection,
+							ocr_result=ocr_result,
+							candidate_name=candidate.name if candidate else '',
+						)
+						confidence = result_data.get('confidence', 0)
 						ai_result.set_cell_result(row, col, result_data, confidence)
 						total_processed_cells += 1
 					else:

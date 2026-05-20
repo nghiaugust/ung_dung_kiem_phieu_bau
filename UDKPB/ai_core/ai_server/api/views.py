@@ -77,6 +77,23 @@ def _sort_results_by_filename_index(results):
     return sorted(results, key=get_index)
 
 
+def _truthy(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _crossed_cascade_thresholds(request):
+    threshold_keys = (
+        "resnet_conf_high",
+        "resnet_margin_high",
+        "svm_conf_high",
+    )
+    return {
+        key: request.POST.get(key)
+        for key in threshold_keys
+        if request.POST.get(key) is not None
+    }
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def vietnameocr_recognize(request):
@@ -152,7 +169,11 @@ def resnet18_crossed_detect(request):
         if error_response:
             return error_response
 
-        results = service.detect_batch(images)
+        results = service.detect_batch(
+            images,
+            cascade=_truthy(request.POST.get("cascade")),
+            thresholds=_crossed_cascade_thresholds(request),
+        )
         results = _sort_results_by_filename_index(results)
 
         del images

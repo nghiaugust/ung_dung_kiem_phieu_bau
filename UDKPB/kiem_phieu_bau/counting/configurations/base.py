@@ -12,8 +12,8 @@ MODEL_RESNET18_CROSSED = 'model_resnet18_crossed'
 CONFIG_DEFINITIONS = {
     1: {
         'label': 'Cau hinh 1: Phieu gach ten + ResNet18 crossed',
-        'description': 'model_resnet18_crossed detect ung vien bi gach ten trong bang 1 cot',
-        'required_services': [MODEL_RESNET18_CROSSED],
+        'description': 'model_resnet18_crossed cascade voi VietNameOCR de detect ung vien bi gach ten',
+        'required_services': [MODEL_RESNET18_CROSSED, MODEL_VIETNAMEOCR],
     },
     2: {
         'label': 'Cau hinh 2: Theo thu tu + ResNet18-X',
