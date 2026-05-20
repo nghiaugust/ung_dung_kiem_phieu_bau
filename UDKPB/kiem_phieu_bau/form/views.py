@@ -579,24 +579,17 @@ def generate_latex_multi_page(margins, font_family, font_size, header_rows, titl
 '''
         
         # Add header content (Quốc hiệu tiêu ngữ)
-        if header_rows:
-            for row in header_rows:
-                latex += format_row(row) + '\n\n'
+        latex += format_rows(header_rows)
         
         # Add title content
-        if title_rows:
-            for row in title_rows:
-                latex += format_row(row) + '\n\n'
+        latex += format_rows(title_rows)
         
         # Add body content
-        if body_rows:
-            for row in body_rows:
-                latex += format_row(row) + '\n\n'
+        latex += format_rows(body_rows)
+        latex += format_section_gap(body_rows, footer_rows, 0.8)
         
         # Add footer content
-        if footer_rows:
-            for row in footer_rows:
-                latex += format_row(row) + '\n\n'
+        latex += format_rows(footer_rows)
         
         # Add bottom markers
         latex += r'''
@@ -890,24 +883,17 @@ def generate_latex(margins, font_family, font_size, header_rows, title_rows, bod
 '''
     
     # Add header content (Quốc hiệu tiêu ngữ)
-    if header_rows:
-        for row in header_rows:
-            latex += format_row(row) + '\n\n'
+    latex += format_rows(header_rows)
     
     # Add title content
-    if title_rows:
-        for row in title_rows:
-            latex += format_row(row) + '\n\n'
+    latex += format_rows(title_rows)
     
     # Add body content
-    if body_rows:
-        for row in body_rows:
-            latex += format_row(row) + '\n\n'
+    latex += format_rows(body_rows)
+    latex += format_section_gap(body_rows, footer_rows, 0.8)
     
     # Add footer content
-    if footer_rows:
-        for row in footer_rows:
-            latex += format_row(row) + '\n\n'
+    latex += format_rows(footer_rows)
     
     # Add bottom markers - simple approach with exact positioning
     latex += r'''
@@ -924,6 +910,49 @@ def generate_latex(margins, font_family, font_size, header_rows, title_rows, bod
     latex += r'\end{document}'
     
     return latex
+
+def format_rows(rows):
+    """Format rows and apply optional row spacing."""
+    if not rows:
+        return ''
+
+    latex = ''
+    for row in rows:
+        formatted_row = format_row(row)
+        if formatted_row:
+            latex += formatted_row + format_row_spacing(row) + '\n\n'
+    return latex
+
+
+def format_section_gap(previous_rows, next_rows, gap_cm):
+    """Add vertical space between populated sections."""
+    if previous_rows and next_rows:
+        return f'\\vspace{{{gap_cm}cm}}\n\n'
+    return ''
+
+
+def format_row_spacing(row):
+    """Return a sanitized LaTeX vspace for row spacing tweaks."""
+    if not row:
+        return ''
+
+    spacing = row.get('spaceAfterCm')
+    if spacing is None:
+        columns = row.get('columns', [])
+        if columns:
+            spacing = columns[0].get('spaceAfterCm')
+
+    if spacing is None:
+        return ''
+
+    try:
+        spacing = float(spacing)
+    except (TypeError, ValueError):
+        return ''
+
+    spacing = max(-1.0, min(1.0, spacing))
+    return f'\n\\par\\vspace{{{spacing}cm}}'
+
 
 def format_row(row):
     """Format a single row for PDF generation"""
@@ -952,6 +981,55 @@ def format_row(row):
     elif row_type == 'single':
         col = columns[0] if columns else {}
         text = col.get('text', '')
+        if col.get('horizontalRule'):
+            width = _safe_positive_float(col.get('ruleWidthCm'), 3.2)
+            thickness = _safe_positive_float(col.get('ruleThicknessPt'), 0.6)
+            width = min(max(width, 0.5), 12.0)
+            thickness = min(max(thickness, 0.2), 2.0)
+            align = col.get('align', 'center')
+            if align not in ['left', 'center', 'right']:
+                align = 'center'
+            align_map = {
+                'left': 'l',
+                'center': 'c',
+                'right': 'r',
+            }
+            center_within = col.get('centerWithin')
+            if center_within and center_within.get('text'):
+                reference_text = format_text(
+                    center_within.get('text', ''),
+                    center_within.get('style', {}),
+                    apply_alignment=False
+                )
+                return (
+                    r'\noindent\makebox[\widthof{' + reference_text + r'}][c]{'
+                    + f'\\rule{{{width}cm}}{{{thickness}pt}}'
+                    + '}'
+                )
+            return (
+                r'\noindent\makebox[\textwidth][' + align_map[align] + r']{'
+                + f'\\rule{{{width}cm}}{{{thickness}pt}}'
+                + '}'
+            )
+        center_under = col.get('centerUnder')
+        if center_under and center_under.get('text'):
+            reference_text = format_text(
+                center_under.get('text', ''),
+                center_under.get('style', {}),
+                apply_alignment=False
+            )
+            centered_text = format_text(text, col, apply_alignment=False)
+            return r'\noindent\makebox[\widthof{' + reference_text + r'}][c]{' + centered_text + '}'
+        if col.get('compactLine'):
+            formatted_text = format_text(text, col, apply_alignment=False)
+            alignment = col.get('align', 'left')
+            if alignment == 'center':
+                return r'\noindent\makebox[\textwidth][c]{' + formatted_text + '}'
+            if alignment == 'right':
+                return r'\noindent\makebox[\textwidth][r]{' + formatted_text + '}'
+            return r'\noindent ' + formatted_text
+        if col.get('noIndent') and col.get('align', 'left') == 'left':
+            return r'\noindent ' + format_text(text, col)
         return format_text(text, col)
     
     # Handle double column row

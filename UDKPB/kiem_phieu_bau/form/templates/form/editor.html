@@ -2260,132 +2260,106 @@
         window.addEventListener("DOMContentLoaded", () => {
           // Load ballot count if poll_id exists
           loadBallotCount();
-          // Quốc hiệu tiêu ngữ - Dòng đôi 1
-          addRow("header");
-          setTimeout(() => {
-            setRowType("header", 1, "double");
-            setTimeout(() => {
-              const row1 = document.querySelector(
-                '#header-rows [data-row-id="1"]'
-              );
-              if (row1) {
-                const textareas = row1.querySelectorAll("textarea");
-                const selects = row1.querySelectorAll(
-                  '.column-settings select[onchange*="align"]'
-                );
 
-                if (textareas[0]) {
-                  textareas[0].value = "PHÒNG GD&ĐT HUYỆN............";
-                  updateRowData("header", 1, 0, "text", textareas[0].value);
-                }
-                if (textareas[1]) {
-                  textareas[1].value = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM";
-                  updateRowData("header", 1, 1, "text", textareas[1].value);
-                  updateRowData("header", 1, 1, "align", "center");
-                  if (selects[1]) selects[1].value = "center";
-                }
-              }
-            }, 150);
-          }, 100);
+          const makeTextRow = (id, text, style = {}) => ({
+            id,
+            type: "single",
+            columns: [
+              {
+                text,
+                bold: false,
+                italic: false,
+                underline: false,
+                align: "left",
+                fontSize: 12,
+                ...style,
+              },
+            ],
+          });
 
-          // Quốc hiệu tiêu ngữ - Dòng đôi 2
-          setTimeout(() => {
-            addRow("header");
-            setTimeout(() => {
-              setRowType("header", 2, "double");
-              setTimeout(() => {
-                const row2 = document.querySelector(
-                  '#header-rows [data-row-id="2"]'
-                );
-                if (row2) {
-                  const textareas = row2.querySelectorAll("textarea");
-                  const selects = row2.querySelectorAll(
-                    '.column-settings select[onchange*="align"]'
-                  );
+          const makeRuleRow = (id, style = {}) => ({
+            id,
+            type: "single",
+            columns: [
+              {
+                text: "",
+                horizontalRule: true,
+                ruleWidthCm: 3.2,
+                ruleThicknessPt: 0.6,
+                align: "center",
+                fontSize: 12,
+                ...style,
+              },
+            ],
+          });
 
-                  if (textareas[0]) {
-                    textareas[0].value = "TRƯỜNG............................";
-                    updateRowData("header", 2, 0, "text", textareas[0].value);
-                  }
-                  if (textareas[1]) {
-                    textareas[1].value = "Độc lập - Tự do - Hạnh phúc";
-                    updateRowData("header", 2, 1, "text", textareas[1].value);
-                    updateRowData("header", 2, 1, "align", "center");
-                    if (selects[1]) selects[1].value = "center";
-                  }
-                }
-              }, 150);
-            }, 100);
-          }, 300);
+          documentData.header = [
+            makeTextRow(1, "HỘI ĐỒNG THI ĐUA KHEN THƯỞNG", {
+              bold: true,
+              align: "left",
+              noIndent: true,
+              spaceAfterCm: 0.05,
+            }),
+            makeTextRow(2, "HỌC VIỆN KỸ THUẬT MẬT MÃ", {
+              align: "center",
+              spaceAfterCm: -0.05,
+              centerUnder: {
+                text: "HỘI ĐỒNG THI ĐUA KHEN THƯỞNG",
+                style: {
+                  bold: true,
+                  fontSize: 12,
+                },
+              },
+            }),
+            makeRuleRow(7, {
+              centerWithin: {
+                text: "HỘI ĐỒNG THI ĐUA KHEN THƯỞNG",
+                style: {
+                  bold: true,
+                  fontSize: 12,
+                },
+              },
+              spaceAfterCm: 0.8,
+            }),
+          ];
 
-          // Tiêu đề - Dòng đơn 1
-          setTimeout(() => {
-            addRow("title");
-            setTimeout(() => {
-              const row1 = document.querySelector(
-                '#title-rows [data-row-id="3"]'
-              );
-              if (row1) {
-                const textarea = row1.querySelector("textarea");
-                const select = row1.querySelector(
-                  '.column-settings select[onchange*="align"]'
-                );
+          documentData.title = [
+            makeTextRow(3, "PHIẾU BÌNH BẦU", {
+              bold: true,
+              align: "center",
+              fontSize: 20,
+              compactLine: true,
+              spaceAfterCm: 0.08,
+            }),
+            makeTextRow(4, "CHIẾN SĨ THI ĐUA CƠ SỞ NĂM 2026", {
+              bold: true,
+              align: "center",
+              fontSize: 18,
+              compactLine: true,
+              spaceAfterCm: 0.06,
+            }),
+            makeTextRow(5, "( Khối giảng viên )", {
+              bold: true,
+              align: "center",
+              compactLine: true,
+              fontSize: 12,
+              spaceAfterCm: 0.04,
+            }),
+            makeTextRow(6, "( ngày 20/05/2026 )", {
+              italic: true,
+              align: "center",
+              fontSize: 10,
+              compactLine: true,
+              spaceAfterCm: -0.05,
+            }),
+            makeRuleRow(8, {
+              spaceAfterCm: 0.8,
+            }),
+          ];
 
-                if (textarea) {
-                  textarea.value = "PHIẾU BẦU CỬ";
-                  updateRowData("title", 3, 0, "text", textarea.value);
-                  updateRowData("title", 3, 0, "align", "center");
-                  if (select) select.value = "center";
-                }
-              }
-            }, 100);
-          }, 500);
-
-          // Tiêu đề - Dòng đơn 2
-          setTimeout(() => {
-            addRow("title");
-            setTimeout(() => {
-              const row2 = document.querySelector(
-                '#title-rows [data-row-id="4"]'
-              );
-              if (row2) {
-                const textarea = row2.querySelector("textarea");
-                const select = row2.querySelector(
-                  '.column-settings select[onchange*="align"]'
-                );
-
-                if (textarea) {
-                  textarea.value = "BAN THÀNH TRA NHÂN DÂN";
-                  updateRowData("title", 4, 0, "text", textarea.value);
-                  updateRowData("title", 4, 0, "align", "center");
-                  if (select) select.value = "center";
-                }
-              }
-            }, 100);
-          }, 700);
-
-          // Tiêu đề - Dòng đơn 3
-          setTimeout(() => {
-            addRow("title");
-            setTimeout(() => {
-              const row3 = document.querySelector(
-                '#title-rows [data-row-id="5"]'
-              );
-              if (row3) {
-                const textarea = row3.querySelector("textarea");
-                const select = row3.querySelector(
-                  '.column-settings select[onchange*="align"]'
-                );
-
-                if (textarea) {
-                  textarea.value = "NHIỆM KỲ...........";
-                  updateRowData("title", 5, 0, "text", textarea.value);
-                  updateRowData("title", 5, 0, "align", "center");
-                  if (select) select.value = "center";
-                }
-              }
-            }, 100);
-          }, 900);
+          rowCounter = 8;
+          renderSection("header", documentData.header);
+          renderSection("title", documentData.title);
         });
   </script>
 
