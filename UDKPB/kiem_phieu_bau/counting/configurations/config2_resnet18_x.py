@@ -52,12 +52,17 @@ def create_ballot_selections(ballot, poll, ai_result):
             (cell_data for col, cell_data in mark_results if col == AGREE_COL),
             None
         )
+        disagree_result = next(
+            (cell_data for col, cell_data in mark_results if col == DISAGREE_COL),
+            None
+        )
         if not agree_result:
             continue
 
-        result_data = agree_result.get('result', {})
+        agree_data = agree_result.get('result', {})
+        disagree_data = disagree_result.get('result', {}) if disagree_result else {}
 
-        if not has_x_mark(result_data):
+        if not has_x_mark(agree_data) or has_x_mark(disagree_data):
             continue
 
         candidate = get_candidate_by_row(candidate_list, row, START_ROW)

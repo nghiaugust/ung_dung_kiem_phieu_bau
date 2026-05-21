@@ -12,6 +12,14 @@ from account.models import Account
 from poll.models import Poll, Candidate, PollMember
 from .models import Ballot, BallotSelection
 from counting import config_crossed
+from counting.configurations import config2_resnet18_x, config3_ocr_resnet18_x
+from counting.configurations.base import has_x_mark
+
+
+REVIEW_STATE_AGREE = 'agree'
+REVIEW_STATE_DISAGREE = 'disagree'
+REVIEW_STATE_ERROR = 'error'
+REVIEW_ROW_STATES_METADATA_KEY = 'hau_kiem_row_states'
 
 
 def _percent(value):
@@ -121,6 +129,99 @@ def _build_crossed_mark_result(cell_data):
 		'display_text': f"{confidence}% - {label_text} | {pipeline_text}",
 		'detail_lines': detail_lines,
 		'needs_review': bool(result.get('needs_review')),
+	}
+
+
+def _normalize_review_state(state, voted=False):
+	state = str(state or '').strip().lower()
+	if state in (REVIEW_STATE_AGREE, REVIEW_STATE_DISAGREE, REVIEW_STATE_ERROR):
+		return state
+	return REVIEW_STATE_AGREE if voted else REVIEW_STATE_DISAGREE
+
+
+def _review_state_to_voted(state):
+	return state == REVIEW_STATE_AGREE
+
+
+def _get_saved_review_row_states(ballot):
+	metadata = ballot.metadata if isinstance(ballot.metadata, dict) else {}
+	row_states = metadata.get(REVIEW_ROW_STATES_METADATA_KEY, {})
+	if not isinstance(row_states, dict):
+		return {}
+
+	return {
+		str(candidate_id): _normalize_review_state(state)
+		for candidate_id, state in row_states.items()
+	}
+
+
+def _set_saved_review_row_states(ballot, row_states):
+	metadata = dict(ballot.metadata) if isinstance(ballot.metadata, dict) else {}
+	metadata[REVIEW_ROW_STATES_METADATA_KEY] = {
+		str(candidate_id): _normalize_review_state(state)
+		for candidate_id, state in row_states.items()
+	}
+	ballot.metadata = metadata
+
+
+def _parse_bool(value):
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, str):
+		return value.strip().lower() in ('true', '1', 'yes')
+	return bool(value)
+
+
+def _get_x_mark_config(config_number):
+	if config_number == 2:
+		return config2_resnet18_x.START_ROW, config2_resnet18_x.AGREE_COL, config2_resnet18_x.DISAGREE_COL
+	if config_number == 3:
+		return config3_ocr_resnet18_x.START_ROW, config3_ocr_resnet18_x.AGREE_COL, config3_ocr_resnet18_x.DISAGREE_COL
+	return None
+
+
+def _x_mark_cell_summary(cell_data):
+	if not isinstance(cell_data, dict):
+		return False, 0, 'none'
+
+	result = cell_data.get('result', {})
+	confidence = _percent(cell_data.get('confidence', result.get('confidence', 0) if isinstance(result, dict) else 0))
+	label = result.get('label', 'none') if isinstance(result, dict) else str(result or 'none')
+	return has_x_mark(result), confidence, label or 'none'
+
+
+def _build_x_mark_row_result(agree_cell, disagree_cell):
+	agree_marked, agree_conf, agree_label = _x_mark_cell_summary(agree_cell)
+	disagree_marked, disagree_conf, disagree_label = _x_mark_cell_summary(disagree_cell)
+	confidence = max(agree_conf, disagree_conf)
+	mark_count = int(agree_marked) + int(disagree_marked)
+
+	detail_lines = [
+		f"Dong y: {agree_conf}% - {agree_label}",
+		f"Khong dong y: {disagree_conf}% - {disagree_label}",
+	]
+
+	if mark_count != 1:
+		reason = 'ca 2 o deu co dau X' if mark_count > 1 else 'khong co dau X'
+		detail_lines.append(f"Loi dong: {reason}")
+		return {
+			'ai_voted': False,
+			'state': REVIEW_STATE_ERROR,
+			'is_error': True,
+			'confidence': confidence,
+			'display_text': f"{confidence}% - Loi ({reason})",
+			'detail_lines': detail_lines,
+		}
+
+	state = REVIEW_STATE_AGREE if agree_marked else REVIEW_STATE_DISAGREE
+	label = 'Dong y' if state == REVIEW_STATE_AGREE else 'Khong dong y'
+	return {
+		'ai_voted': state == REVIEW_STATE_AGREE,
+		'state': state,
+		'is_error': False,
+		'confidence': confidence,
+		'display_text': f"{confidence}% - {label}",
+		'detail_lines': detail_lines,
 	}
 
 @login_required
@@ -428,14 +529,8 @@ def hau_kiem_ballot(request, ballot_id):
 	# Lấy các lựa chọn hiện tại
 	selections = BallotSelection.objects.filter(ballot=ballot).values_list('candidate_id', flat=True)
 	
-	# Tạo danh sách kết quả
-	ballot_results = []
-	for candidate in candidates:
-		ballot_results.append({
-			'candidate_id': candidate.candidate_id,
-			'name': candidate.name,
-			'voted': candidate.candidate_id in selections
-		})
+	# Lay trang thai tung dong da duoc hau kiem neu co.
+	saved_row_states = _get_saved_review_row_states(ballot)
 	
 	# Lấy ảnh detection và metadata
 	from preprocessing.models import PreprocessedBallot
@@ -523,11 +618,49 @@ def hau_kiem_ballot(request, ballot_id):
 							'detail_lines': [],
 						})
 				mark_results = crossed_mark_results
+
+			x_mark_config = _get_x_mark_config(poll.config_number)
+			if x_mark_config:
+				start_row, agree_col, disagree_col = x_mark_config
+				x_mark_results = []
+				for idx, candidate in enumerate(candidates):
+					row = start_row + idx
+					agree_cell = cells.get(f"{row}_{agree_col}")
+					disagree_cell = cells.get(f"{row}_{disagree_col}")
+					x_mark_results.append(_build_x_mark_row_result(agree_cell, disagree_cell))
+				mark_results = x_mark_results
 					
 	except Exception as e:
 		print(f"Error loading AI model results: {e}")
 		# Tạo list rỗng với số lượng bằng candidates
 		mark_results = [{'ai_voted': False, 'confidence': 0, 'display_text': '0% - none', 'detail_lines': []} for _ in candidates]
+
+	if len(mark_results) < len(candidates):
+		mark_results.extend([
+			{'ai_voted': False, 'state': REVIEW_STATE_DISAGREE, 'confidence': 0, 'display_text': '0% - none', 'detail_lines': []}
+			for _ in range(len(candidates) - len(mark_results))
+		])
+
+	supports_row_errors = poll.config_number in (2, 3)
+	ballot_results = []
+	for idx, candidate in enumerate(candidates):
+		candidate_id_key = str(candidate.candidate_id)
+		default_state = REVIEW_STATE_AGREE if candidate.candidate_id in selections else REVIEW_STATE_DISAGREE
+		if supports_row_errors and idx < len(mark_results):
+			default_state = _normalize_review_state(
+				mark_results[idx].get('state'),
+				mark_results[idx].get('ai_voted', False)
+			)
+		state = saved_row_states.get(candidate_id_key, default_state)
+		if not supports_row_errors and state == REVIEW_STATE_ERROR:
+			state = REVIEW_STATE_DISAGREE
+		ballot_results.append({
+			'candidate_id': candidate.candidate_id,
+			'name': candidate.name,
+			'state': state,
+			'is_error': state == REVIEW_STATE_ERROR,
+			'voted': _review_state_to_voted(state)
+		})
 
 	context = {
 		'poll': poll,
@@ -543,6 +676,7 @@ def hau_kiem_ballot(request, ballot_id):
 		'detection_image': detection_image,
 		'horizontal_lines_json': json.dumps(horizontal_lines),
 		'mark_results_json': json.dumps(mark_results),
+		'supports_row_errors': supports_row_errors,
 		'MEDIA_URL': settings.MEDIA_URL,
 	}
 	
@@ -567,6 +701,7 @@ def save_hau_kiem(request, ballot_id):
 
 		data = json.loads(request.body)
 		votes = data.get('votes', [])
+		requested_is_valid = data.get('is_valid', None)
 		
 		# Sử dụng transaction để đảm bảo tính toàn vẹn dữ liệu
 		with transaction.atomic():
@@ -574,20 +709,32 @@ def save_hau_kiem(request, ballot_id):
 			BallotSelection.objects.filter(ballot=ballot).delete()
 			
 			# Tạo các lựa chọn mới dựa trên dữ liệu từ form
+			row_states = {}
 			for vote in votes:
 				candidate_id = vote.get('candidate_id')
-				voted = vote.get('voted', False)
+				state = _normalize_review_state(vote.get('state'), vote.get('voted', False))
 				
-				if voted and candidate_id:
+				if not candidate_id:
+					continue
+
+				row_states[str(candidate_id)] = state
+
+				if state == REVIEW_STATE_AGREE:
 					BallotSelection.objects.create(
 						ballot=ballot,
 						candidate_id=candidate_id
 					)
+
+			_set_saved_review_row_states(ballot, row_states)
 			
 			# Đánh dấu đã hậu kiểm
 			# is_post_checked is now a property - update checking_status instead
 			ballot.checking_status = 'DONE'
-			ballot.save(update_fields=['checking_status'])
+			if requested_is_valid is None:
+				ballot.is_valid = not any(state == REVIEW_STATE_ERROR for state in row_states.values())
+			else:
+				ballot.is_valid = _parse_bool(requested_is_valid)
+			ballot.save(update_fields=['checking_status', 'is_valid', 'metadata'])
 		
 		# Tìm phiếu tiếp theo để redirect
 		all_ballots = Ballot.objects.filter(poll=poll, counting_status='completed').order_by('ballot_id')

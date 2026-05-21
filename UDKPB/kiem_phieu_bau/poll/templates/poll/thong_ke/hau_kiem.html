@@ -129,6 +129,13 @@
     box-shadow: 0 2px 8px rgba(220, 53, 69, 0.4);
   }
 
+  .vote-btn.error {
+    background-color: #fd7e14;
+    border-color: #fd7e14;
+    color: #212529;
+    box-shadow: 0 2px 8px rgba(253, 126, 20, 0.35);
+  }
+
   .vote-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -162,6 +169,11 @@
   
   .confidence-badge.not-voted {
     background-color: #dc3545;
+  }
+
+  .confidence-badge.error {
+    background-color: #fd7e14;
+    color: #212529;
   }
   
   .confidence-badge.none {
@@ -246,12 +258,12 @@
       </div>
 
       <button
-        class="btn validity-btn {% if current_ballot.is_valid %}btn-success{% else %}btn-danger{% endif %}"
+        class="btn validity-btn {% if current_ballot.is_valid %}btn-success{% else %}btn-warning{% endif %}"
         id="validity-btn"
         onclick="toggleValidity()"
       >
-        <i class="bi {% if current_ballot.is_valid %}bi-shield-check{% else %}bi-shield-x{% endif %}"></i>
-        <span class="validity-text">{% if current_ballot.is_valid %}Hợp lệ{% else %}Không hợp lệ{% endif %}</span>
+        <i class="bi {% if current_ballot.is_valid %}bi-shield-check{% else %}bi-exclamation-triangle{% endif %}"></i>
+        <span class="validity-text">{% if current_ballot.is_valid %}Hợp lệ{% else %}Phiếu lỗi{% endif %}</span>
       </button>
       
       <button
@@ -312,12 +324,13 @@
           {% for result in ballot_results %}
           <div class="vote-button-row" id="button-row-{{ forloop.counter0 }}" data-row="{{ forloop.counter0 }}">
             <button
-              class="vote-btn {% if result.voted %}voted{% else %}not-voted{% endif %}"
+              class="vote-btn {% if result.state == 'error' %}error{% elif result.voted %}voted{% else %}not-voted{% endif %}"
               data-candidate-id="{{ result.candidate_id }}"
+              data-state="{{ result.state }}"
               data-voted="{{ result.voted|lower }}"
               onclick="toggleVote({{ result.candidate_id }})"
             >
-              <span class="btn-text">{% if result.voted %}Đồng ý{% else %}Không đồng ý{% endif %}</span>
+              <span class="btn-text">{% if result.state == 'error' %}Lỗi{% elif result.voted %}Đồng ý{% else %}Không đồng ý{% endif %}</span>
             </button>
             <div class="confidence-badge none" id="confidence-{{ forloop.counter0 }}">
               0% - none
@@ -344,16 +357,37 @@
   const horizontalLines = {{ horizontal_lines_json|safe }};
   const ballotResults = {{ ballot_results_json|safe }};
   const markResults = {{ mark_results_json|safe }};
+  const supportsRowErrors = {{ supports_row_errors|yesno:"true,false" }};
   
   let hasChanges = false;
   let voteStates = {};
   let ballotValidity = {{ current_ballot.is_valid|yesno:"true,false" }};
 
+  const stateConfig = {
+    agree: { className: 'voted', text: 'Đồng ý', voted: true },
+    disagree: { className: 'not-voted', text: 'Không đồng ý', voted: false },
+    error: { className: 'error', text: 'Lỗi', voted: false }
+  };
+
+  function normalizeState(state, voted) {
+    if (state === 'agree' || state === 'disagree' || (supportsRowErrors && state === 'error')) {
+      return state;
+    }
+    return voted ? 'agree' : 'disagree';
+  }
+
+  function getNextState(state) {
+    const sequence = supportsRowErrors ? ['agree', 'disagree', 'error'] : ['agree', 'disagree'];
+    const currentIndex = sequence.indexOf(state);
+    return sequence[(currentIndex + 1) % sequence.length];
+  }
+
   // Khởi tạo trạng thái ban đầu
   ballotResults.forEach((result, index) => {
+    const initialState = normalizeState(result.state, result.voted);
     voteStates[result.candidate_id] = {
-      original: result.voted,
-      current: result.voted
+      original: initialState,
+      current: initialState
     };
   });
 
@@ -387,11 +421,12 @@
       if (confidenceBadge && markResults[index]) {
         const conf = markResults[index].confidence;
         const aiVoted = markResults[index].ai_voted;
+        const aiState = normalizeState(markResults[index].state, aiVoted);
         const displayText = markResults[index].display_text;
         const detailLines = markResults[index].detail_lines || [];
-        const label = aiVoted ? 'Đồng ý' : 'Không đồng ý';
+        const label = stateConfig[aiState].text;
         
-        if (conf && conf > 0) {
+        if ((conf && conf > 0) || aiState === 'error') {
           confidenceBadge.textContent = '';
           const summary = document.createElement('span');
           summary.textContent = displayText || `${conf}% - ${label}`;
@@ -402,7 +437,7 @@
             detail.textContent = line;
             confidenceBadge.appendChild(detail);
           });
-          confidenceBadge.className = `confidence-badge ${aiVoted ? 'voted' : 'not-voted'}`;
+          confidenceBadge.className = `confidence-badge ${stateConfig[aiState].className}`;
           confidenceBadge.style.display = 'block';
         } else {
           confidenceBadge.textContent = '0% - none';
@@ -423,31 +458,38 @@
       return;
     }
     
-    const currentVoted = voteStates[candidateId].current;
-    const newVoted = !currentVoted;
-    voteStates[candidateId].current = newVoted;
-    
+    voteStates[candidateId].current = getNextState(voteStates[candidateId].current);
+    applyVoteButtonState(candidateId);
+    syncValidityFromRows();
+    checkForChanges();
+  }
+
+  function applyVoteButtonState(candidateId) {
     const btn = document.querySelector(`.vote-btn[data-candidate-id="${candidateId}"]`);
-    const btnText = btn.querySelector('.btn-text');
-    
-    if (!btn || !btnText) {
-      console.error(`Không tìm thấy nút cho candidate ${candidateId}`);
+    if (!btn) {
+      console.error(`Missing button for candidate ${candidateId}`);
       return;
     }
-    
-    if (newVoted) {
-      btn.classList.remove('not-voted');
-      btn.classList.add('voted');
-      btnText.textContent = 'Đồng ý';
-      btn.setAttribute('data-voted', 'true');
-    } else {
-      btn.classList.remove('voted');
-      btn.classList.add('not-voted');
-      btnText.textContent = 'Không đồng ý';
-      btn.setAttribute('data-voted', 'false');
+
+    const btnText = btn.querySelector('.btn-text');
+    const state = normalizeState(voteStates[candidateId].current, false);
+    const config = stateConfig[state];
+
+    btn.classList.remove('voted', 'not-voted', 'error');
+    btn.classList.add(config.className);
+    btn.setAttribute('data-state', state);
+    btn.setAttribute('data-voted', config.voted ? 'true' : 'false');
+    if (btnText) {
+      btnText.textContent = config.text;
     }
-    
-    checkForChanges();
+  }
+
+  function syncValidityFromRows() {
+    if (!supportsRowErrors) return;
+
+    const hasErrorRow = Object.values(voteStates).some((state) => state.current === 'error');
+    ballotValidity = !hasErrorRow;
+    updateValidityButton();
   }
 
   function checkForChanges() {
@@ -479,15 +521,15 @@
     const text = btn.querySelector('.validity-text');
 
     if (ballotValidity) {
-      btn.classList.remove('btn-danger');
+      btn.classList.remove('btn-danger', 'btn-warning');
       btn.classList.add('btn-success');
       if (icon) icon.className = 'bi bi-shield-check';
       if (text) text.textContent = 'Hợp lệ';
     } else {
       btn.classList.remove('btn-success');
-      btn.classList.add('btn-danger');
-      if (icon) icon.className = 'bi bi-shield-x';
-      if (text) text.textContent = 'Không hợp lệ';
+      btn.classList.add('btn-warning');
+      if (icon) icon.className = 'bi bi-exclamation-triangle';
+      if (text) text.textContent = 'Phiếu lỗi';
     }
   }
 
@@ -511,7 +553,7 @@
         ballotValidity = data.is_valid;
         updateValidityButton();
         showAlert(
-          ballotValidity ? 'Đã đánh dấu phiếu hợp lệ.' : 'Đã đánh dấu phiếu không hợp lệ.',
+          ballotValidity ? 'Đã đánh dấu phiếu hợp lệ.' : 'Đã đánh dấu phiếu lỗi.',
           'success'
         );
       } else {
@@ -526,19 +568,26 @@
       btn.disabled = false;
     });
   }
+
+  function buildVotesPayload() {
+    const votes = [];
+    for (let candidateId in voteStates) {
+      const state = normalizeState(voteStates[candidateId].current, false);
+      votes.push({
+        candidate_id: parseInt(candidateId),
+        state: state,
+        voted: stateConfig[state].voted
+      });
+    }
+    return votes;
+  }
   
   function saveAndApprove() {
     const saveAndApproveBtn = document.getElementById('save-and-approve-btn');
     saveAndApproveBtn.disabled = true;
     saveAndApproveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang xử lý...';
 
-    const votes = [];
-    for (let candidateId in voteStates) {
-      votes.push({
-        candidate_id: parseInt(candidateId),
-        voted: voteStates[candidateId].current
-      });
-    }
+    const votes = buildVotesPayload();
 
     fetch(`/ballot/hau-kiem/${ballotId}/save/`, {
       method: 'POST',
@@ -546,7 +595,7 @@
         'Content-Type': 'application/json',
         'X-CSRFToken': '{{ csrf_token }}'
       },
-      body: JSON.stringify({ votes: votes })
+      body: JSON.stringify({ votes: votes, is_valid: ballotValidity })
     })
     .then(response => response.json())
     .then(data => {
@@ -581,13 +630,7 @@
     approveBtn.disabled = true;
     approveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang xử lý...';
 
-    const votes = [];
-    for (let candidateId in voteStates) {
-      votes.push({
-        candidate_id: parseInt(candidateId),
-        voted: voteStates[candidateId].current
-      });
-    }
+    const votes = buildVotesPayload();
 
     fetch(`/ballot/hau-kiem/${ballotId}/save/`, {
       method: 'POST',
@@ -595,7 +638,7 @@
         'Content-Type': 'application/json',
         'X-CSRFToken': '{{ csrf_token }}'
       },
-      body: JSON.stringify({ votes: votes })
+      body: JSON.stringify({ votes: votes, is_valid: ballotValidity })
     })
     .then(response => response.json())
     .then(data => {
