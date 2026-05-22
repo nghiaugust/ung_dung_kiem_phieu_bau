@@ -23,6 +23,10 @@ from .models import APIToken
 from .authentication import require_api_token
 from .verify_file_signature import verify_file_signature
 from .checking_logic import CheckingDistributionService
+from evalue.danh_gia_gach_ten import (
+    save_crossed_approval_snapshot,
+    write_crossed_poll_log_safely,
+)
 from poll.models import Poll, Candidate, PollMember, Voter
 from ballot.models import Ballot, BallotSelection
 from ballot.doc_qr import read_qr_code_only
@@ -3828,20 +3832,8 @@ def api_submit_checking_result_web(request):
                     'message': 'Phiếu này không thuộc về bạn'
                 }, status=403)
             
-            # Xóa selections cũ và tạo mới theo votes
+            # Hoan tat duyet truoc, sau do cap nhat selections theo votes.
             with transaction.atomic():
-                BallotSelection.objects.filter(ballot=ballot).delete()
-                
-                for vote in votes:
-                    candidate_id = vote.get('candidate_id')
-                    voted = vote.get('voted', False)
-                    
-                    if voted and candidate_id:
-                        BallotSelection.objects.create(
-                            ballot=ballot,
-                            candidate_id=candidate_id
-                        )
-                
                 # Cập nhật trạng thái hậu kiểm
                 result_data = {
                     'is_post_checked': True,
@@ -3857,6 +3849,26 @@ def api_submit_checking_result_web(request):
                 )
                 
                 if is_success:
+                    should_write_crossed_log = save_crossed_approval_snapshot(ballot, votes)
+                    poll_id_for_log = ballot.poll_id
+
+                    BallotSelection.objects.filter(ballot=ballot).delete()
+
+                    for vote in votes:
+                        candidate_id = vote.get('candidate_id')
+                        voted = vote.get('voted', False)
+
+                        if voted and candidate_id:
+                            BallotSelection.objects.create(
+                                ballot=ballot,
+                                candidate_id=candidate_id
+                            )
+
+                    if should_write_crossed_log:
+                        transaction.on_commit(
+                            lambda poll_id=poll_id_for_log: write_crossed_poll_log_safely(poll_id)
+                        )
+
                     return JsonResponse({
                         'success': True,
                         'message': message,
