@@ -1,109 +1,86 @@
 """
-API Views - Endpoints cho TrOCR và YOLO
+API views for VietNameOCR and YOLO.
 """
+import gc
+import json
+
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-import json
-import gc
-from .model_services import TrOCRService, YOLOService
+
+from .model_services import VietNameOCRService, YOLOService
 
 
-# Khởi tạo services (singleton - chỉ tạo 1 lần)
 try:
-    trocr_service = TrOCRService()
-except Exception as e:
-    trocr_service = None
-    print(f"[TrOCR Service] ⚠️ Skip load (optional): {e}")
+    vietnameocr_service = VietNameOCRService()
+except Exception as exc:
+    vietnameocr_service = None
+    print(f"[VietNameOCR Service] Skip load (optional): {exc}")
 
 try:
     yolo_service = YOLOService()
-except Exception as e:
-    print(f"[YOLO Service] ❌ Error loading model: {e}")
+except Exception as exc:
+    print(f"[YOLO Service] Error loading model: {exc}")
     raise
+
+
+def _sort_results_by_filename_index(results):
+    def get_index_from_filename(result):
+        try:
+            filename = result.get("filename", "")
+            if "_" in filename:
+                return int(filename.split("_")[0])
+        except Exception:
+            pass
+        return 9999
+
+    return sorted(results, key=get_index_from_filename)
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def trocr_recognize(request):
+def vietnameocr_recognize(request):
     """
-    API nhận diện text bằng TrOCR
-    
-    POST /api/trocr/recognize/
+    Recognize text with VietNameOCR.
+
+    POST /api/vietnameocr/recognize/
     Content-Type: multipart/form-data
-    
     Form data:
-        - images: Multiple files
-    
-    Response:
-        {
-            "success": true,
-            "count": 2,
-            "results": [
-                {
-                    "filename": "image1.jpg",
-                    "text": "Nguyen Van A",
-                    "status": "success"
-                },
-                ...
-            ]
-        }
+        - images: multiple files
     """
     try:
-        if trocr_service is None:
+        if vietnameocr_service is None:
             return JsonResponse({
-                'success': False,
-                'error': 'TrOCR model chưa được nạp'
+                "success": False,
+                "error": "VietNameOCR model chua duoc nap",
             }, status=503)
-        # Lấy danh sách ảnh từ request
-        files = request.FILES.getlist('images')
-        
+
+        files = request.FILES.getlist("images")
         if not files:
             return JsonResponse({
-                'success': False,
-                'error': 'Không có ảnh nào được gửi lên'
+                "success": False,
+                "error": "Khong co anh nao duoc gui len",
             }, status=400)
-        
-        # Prepare batch
-        images = []
-        for file in files:
-            image_data = file.read()
-            filename = file.name
-            images.append((image_data, filename))
-        
-        # Process batch
-        print(f"[TrOCR Service] Processing {len(images)}")
-        results = trocr_service.recognize_batch(images)
-        
-        # QUAN TRỌNG: Sort lại results theo index từ filename (format: 0000_1_2.jpg)
-        def get_index_from_filename(result):
-            try:
-                filename = result.get('filename', '')
-                if '_' in filename:
-                    return int(filename.split('_')[0])
-                return 9999
-            except:
-                return 9999
-        
-        results = sorted(results, key=get_index_from_filename)
-        
-        # CLEANUP: Xóa images data sau khi xử lý xong
+
+        images = [(file.read(), file.name) for file in files]
+        print(f"[VietNameOCR Service] Processing {len(images)} images")
+
+        results = vietnameocr_service.recognize_batch(images)
+        results = _sort_results_by_filename_index(results)
+
         del images
         gc.collect()
-        
-        # Response
+
         return JsonResponse({
-            'success': True,
-            'count': len(results),
-            'results': results
+            "success": True,
+            "count": len(results),
+            "results": results,
         })
-        
-    except Exception as e:
-        # Cleanup on error
+    except Exception as exc:
         gc.collect()
         return JsonResponse({
-            'success': False,
-            'error': str(e)
+            "success": False,
+            "error": str(exc),
         }, status=500)
 
 
@@ -111,144 +88,97 @@ def trocr_recognize(request):
 @require_http_methods(["POST"])
 def yolo_detect(request):
     """
-    API detect dấu X bằng YOLO
-    
+    Detect vote marks with YOLO.
+
     POST /api/yolo/detect/
     Content-Type: multipart/form-data
-    
     Form data:
-        - images: Multiple files
-        - image_paths: JSON string chứa mapping {filename: path} (optional)
-    
-    Response:
-        {
-            "success": true,
-            "count": 2,
-            "results": [
-                {
-                    "filename": "image1.jpg",
-                    "label": "x_mark",
-                    "detections": [
-                        {
-                            "class": "x_mark",
-                            "confidence": 0.95,
-                            "bbox": [x1, y1, x2, y2]
-                        }
-                    ],
-                    "status": "success"
-                },
-                ...
-            ]
-        }
+        - images: multiple files
+        - image_paths: JSON mapping {filename: path} (optional)
     """
     try:
-        # Lấy danh sách ảnh từ request
-        files = request.FILES.getlist('images')
-        
+        files = request.FILES.getlist("images")
         if not files:
             return JsonResponse({
-                'success': False,
-                'error': 'Không có ảnh nào được gửi lên'
+                "success": False,
+                "error": "Khong co anh nao duoc gui len",
             }, status=400)
-        
-        # Lấy image_paths mapping (nếu có)
-        image_paths_json = request.POST.get('image_paths', '{}')
+
+        image_paths_json = request.POST.get("image_paths", "{}")
         try:
             image_paths_map = json.loads(image_paths_json)
-        except:
+        except Exception:
             image_paths_map = {}
-        
-        # Prepare batch
+
         images = []
         for file in files:
             image_data = file.read()
             filename = file.name
             image_path = image_paths_map.get(filename)
-            
             if image_path:
                 images.append((image_data, filename, image_path))
             else:
                 images.append((image_data, filename))
-        
-        # Process batch
+
         results = yolo_service.detect_batch(images)
-        
-        # QUAN TRỌNG: Sort lại results theo index từ filename (format: 0000_1_2.jpg)
-        # Để đảm bảo thứ tự trả về giống với thứ tự gửi đi
-        def get_index_from_filename(result):
-            try:
-                filename = result.get('filename', '')
-                # Parse index từ prefix (VD: "0000_1_2.jpg" -> 0)
-                if '_' in filename:
-                    return int(filename.split('_')[0])
-                return 9999  # Fallback nếu không parse được
-            except:
-                return 9999
-        
-        results = sorted(results, key=get_index_from_filename)
-        
-        # CLEANUP: Xóa images data sau khi xử lý xong
+        results = _sort_results_by_filename_index(results)
+
         del images
         gc.collect()
-        
-        # Response
+
         return JsonResponse({
-            'success': True,
-            'count': len(results),
-            'results': results
+            "success": True,
+            "count": len(results),
+            "results": results,
         })
-        
-    except Exception as e:
-        # Cleanup on error
+    except Exception as exc:
         gc.collect()
         return JsonResponse({
-            'success': False,
-            'error': str(e)
+            "success": False,
+            "error": str(exc),
         }, status=500)
 
 
 @require_http_methods(["GET", "HEAD"])
 def health_check(request):
-    """
-    Health check endpoint
-    
-    GET/HEAD /api/health/
-    """
-    trocr_loaded = trocr_service is not None and trocr_service._pipe is not None
+    vietnameocr_loaded = (
+        vietnameocr_service is not None
+        and vietnameocr_service._engine is not None
+    )
     yolo_loaded = yolo_service is not None and yolo_service._model is not None
+
     return JsonResponse({
-        'status': 'healthy',
-        'services': {
-            'trocr': trocr_loaded,
-            'yolo': yolo_loaded
-        }
+        "status": "healthy",
+        "services": {
+            "vietnameocr": vietnameocr_loaded,
+            "yolo": yolo_loaded,
+        },
     })
 
 
 @require_http_methods(["GET"])
 def model_info(request):
-    """
-    Thông tin về models
-    
-    GET /api/info/
-    """
     import torch
-    
-    trocr_loaded = trocr_service is not None and trocr_service._pipe is not None
+
+    vietnameocr_loaded = (
+        vietnameocr_service is not None
+        and vietnameocr_service._engine is not None
+    )
     yolo_loaded = yolo_service is not None and yolo_service._model is not None
+
     return JsonResponse({
-        'models': {
-            'trocr': {
-                'loaded': trocr_loaded,
-                'device': 'GPU' if torch.cuda.is_available() else 'CPU'
+        "models": {
+            "vietnameocr": {
+                "loaded": vietnameocr_loaded,
+                "device": "GPU" if torch.cuda.is_available() else "CPU",
             },
-            'yolo': {
-                'loaded': yolo_loaded,
-                'device': 'GPU' if torch.cuda.is_available() else 'CPU'
-            }
+            "yolo": {
+                "loaded": yolo_loaded,
+                "device": "GPU" if torch.cuda.is_available() else "CPU",
+            },
         },
-        'system': {
-            'cuda_available': torch.cuda.is_available(),
-            'cuda_device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0
-        }
+        "system": {
+            "cuda_available": torch.cuda.is_available(),
+            "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        },
     })

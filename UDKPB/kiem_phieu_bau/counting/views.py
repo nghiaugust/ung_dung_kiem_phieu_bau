@@ -17,9 +17,23 @@ from typing import List, Dict, Tuple
 import json
 
 
-AI_TROCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/trocr/recognize/"
+AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/vietnameocr/recognize/"
 AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
 AI_HEALTH_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/health/"
+
+
+def get_ai_service_status():
+	vietnameocr_status = False
+	yolo_status = False
+	try:
+		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
+		if health_response.status_code == 200:
+			health_data = health_response.json()
+			vietnameocr_status = health_data.get('services', {}).get('vietnameocr', False)
+			yolo_status = health_data.get('services', {}).get('yolo', False)
+	except:
+		pass
+	return vietnameocr_status, yolo_status
 
 
 @require_http_methods(["POST"])
@@ -89,10 +103,7 @@ def save_configuration(request, poll_id):
 					ai_result.save()
 				
 				# Áp dụng cấu hình tương ứng
-				if config_type == 1:
-					config_model.apply_config1(ai_result)
-				elif config_type == 2:
-					config_model.apply_config2(ai_result)
+				config_model.apply_config(ai_result, config_type)
 				
 				configured_count += 1
 				
@@ -205,9 +216,9 @@ def get_poll_cell_image_paths(poll_id: int, rows: List[int] = None, cols: List[i
 	return result
 
 
-def call_trocr_api(image_paths: List[str]) -> Dict:
+def call_vietnameocr_api(image_paths: List[str]) -> Dict:
 	"""
-	Gọi TrOCR API để nhận diện text
+	Gọi VietNameOCR API để nhận diện text
 	
 	Args:
 		image_paths: Danh sách đường dẫn ảnh
@@ -215,7 +226,7 @@ def call_trocr_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	api_url = AI_TROCR_API_URL
+	api_url = AI_VIETNAMEOCR_API_URL
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -336,17 +347,33 @@ def counting_form_view(request, poll_id):
 	).count()
 	
 	# Điều kiện 5: Check model AI
-	trocr_status = False
+	vietnameocr_status = False
 	yolo_status = False
 	try:
 		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
 		if health_response.status_code == 200:
 			health_data = health_response.json()
-			trocr_status = health_data.get('services', {}).get('trocr', False)
+			vietnameocr_status = health_data.get('services', {}).get('vietnameocr', False)
 			yolo_status = health_data.get('services', {}).get('yolo', False)
 	except:
 		pass  # Nếu lỗi thì để mặc định False
 	
+	config1_models_ready = config_model.is_config_ready(
+		1,
+		yolo_status=yolo_status,
+		vietnameocr_status=vietnameocr_status,
+	)
+	config2_models_ready = config_model.is_config_ready(
+		2,
+		yolo_status=yolo_status,
+		vietnameocr_status=vietnameocr_status,
+	)
+	selected_config_models_ready = config_model.is_config_ready(
+		poll.config_number,
+		yolo_status=yolo_status,
+		vietnameocr_status=vietnameocr_status,
+	)
+
 	context = {
 		'poll': poll,
 		# Thêm thông tin điều kiện
@@ -355,8 +382,11 @@ def counting_form_view(request, poll_id):
 		'ballots_with_image_count': ballots_with_image_count,
 		'ballots_with_image_total': ballots_with_image_total,
 		'preprocessed_count': preprocessed_count,
-		'trocr_status': trocr_status,
+		'vietnameocr_status': vietnameocr_status,
 		'yolo_status': yolo_status,
+		'config1_models_ready': config1_models_ready,
+		'config2_models_ready': config2_models_ready,
+		'selected_config_models_ready': selected_config_models_ready,
 		# Thêm config_number và status để kiểm tra
 		'config_number': poll.config_number,
 		'is_counted': poll.status in ['counted', 'Đã kiểm phiếu'],
@@ -429,10 +459,7 @@ def process_counting(request, poll_id):
 			)
 			
 			# 2. Áp dụng cấu hình (config1 hoặc config2)
-			if config_type == 'config1':
-				config_model.apply_config1(ai_result)
-			else:
-				config_model.apply_config2(ai_result)
+			config_model.apply_config(ai_result, config_number)
 			
 			# 3. Lấy cấu hình đã được khởi tạo
 			rows, cols = ai_result.get_table_dimensions()
@@ -466,19 +493,19 @@ def process_counting(request, poll_id):
 					continue
 				
 				# Gọi model tương ứng
-				if model_name == 'trocr':
-					# Gọi TrOCR API
-					trocr_result = call_trocr_api([cell_image_path])
+				if model_name == 'vietnameocr':
+					# Gọi VietNameOCR API
+					vietnameocr_result = call_vietnameocr_api([cell_image_path])
 					
-					if trocr_result.get('success') and trocr_result.get('results'):
-						recognized_text = trocr_result['results'][0].get('text', '')
-						confidence = trocr_result['results'][0].get('confidence', 0)
+					if vietnameocr_result.get('success') and vietnameocr_result.get('results'):
+						recognized_text = vietnameocr_result['results'][0].get('text', '')
+						confidence = vietnameocr_result['results'][0].get('confidence', 0)
 						
 						# Lưu kết quả vào result_model
 						ai_result.set_cell_result(row, col, recognized_text, confidence)
 						total_processed_cells += 1
 					else:
-						ai_result.set_cell_result(row, col, "[Lỗi TrOCR]", 0)
+						ai_result.set_cell_result(row, col, "[Loi VietNameOCR]", 0)
 				
 				elif model_name == 'yolo':
 					# Gọi YOLO API
@@ -549,28 +576,28 @@ def process_counting(request, poll_id):
 			# Lấy tất cả cells có YOLO
 			yolo_cells = ai_result.get_cells_by_model('yolo')
 			
-			# Lấy tất cả cells có TrOCR (nếu có)
-			trocr_cells = ai_result.get_cells_by_model('trocr')
+			# Lấy tất cả cells có VietNameOCR (nếu có)
+			vietnameocr_cells = ai_result.get_cells_by_model('vietnameocr')
 			
 			# Group theo row để xử lý từng dòng
 			rows_dict = {}
 			for cell_key, cell_data in yolo_cells.items():
 				row, col = map(int, cell_key.split('_'))
 				if row not in rows_dict:
-					rows_dict[row] = {'yolo': [], 'trocr': None}
+					rows_dict[row] = {'yolo': [], 'vietnameocr': None}
 				rows_dict[row]['yolo'].append((col, cell_data))
 			
-			# Thêm TrOCR vào rows_dict
-			for cell_key, cell_data in trocr_cells.items():
+			# Thêm VietNameOCR vào rows_dict
+			for cell_key, cell_data in vietnameocr_cells.items():
 				row, col = map(int, cell_key.split('_'))
 				if row not in rows_dict:
-					rows_dict[row] = {'yolo': [], 'trocr': None}
-				rows_dict[row]['trocr'] = cell_data
+					rows_dict[row] = {'yolo': [], 'vietnameocr': None}
+				rows_dict[row]['vietnameocr'] = cell_data
 			
 			# Xử lý từng dòng
 			for row, row_data in rows_dict.items():
 				yolo_results = row_data['yolo']
-				trocr_result = row_data['trocr']
+				vietnameocr_result = row_data['vietnameocr']
 				
 				# Sắp xếp yolo_results theo col để lấy đúng cột đồng ý (cột đầu tiên)
 				yolo_results.sort(key=lambda x: x[0])
@@ -594,35 +621,31 @@ def process_counting(request, poll_id):
 				# Xác định candidate dựa trên config_number từ database
 				candidate_to_select = None
 				
-				if config_number == 1 and trocr_result:
-					# Config1: Sử dụng TrOCR để matching tên
-					recognized_name = trocr_result.get('result', '').strip()
-					
-					if recognized_name and recognized_name != "[Lỗi TrOCR]":
-						# Tìm candidate giống nhất với recognized_name
-						best_match_id = None
-						best_match_ratio = 0.0
+				if config_number == 2:
+					if vietnameocr_result:
+						recognized_name = vietnameocr_result.get('result', '').strip()
 						
-						for candidate_id, candidate_name in candidate_names.items():
-							# Sử dụng difflib để so sánh tên
-							ratio = difflib.SequenceMatcher(
-								None, 
-								recognized_name.upper(), 
-								candidate_name.upper()
-							).ratio()
+						if recognized_name and recognized_name != "[Loi VietNameOCR]":
+							best_match_id = None
+							best_match_ratio = 0.0
 							
-							if ratio > best_match_ratio:
-								best_match_ratio = ratio
-								best_match_id = candidate_id
-						
-						# Chỉ chọn nếu tỉ lệ khớp >= 0.6 (60%)
-						if best_match_id and best_match_ratio >= 0.6:
-							candidate_to_select = next(
-								(c for c in candidate_list if c.candidate_id == best_match_id),
-								None
-							)
-				else:
-					# Config2: Sử dụng thứ tự dòng
+							for candidate_id, candidate_name in candidate_names.items():
+								ratio = difflib.SequenceMatcher(
+									None, 
+									recognized_name.upper(), 
+									candidate_name.upper()
+								).ratio()
+								
+								if ratio > best_match_ratio:
+									best_match_ratio = ratio
+									best_match_id = candidate_id
+							
+							if best_match_id and best_match_ratio >= 0.6:
+								candidate_to_select = next(
+									(c for c in candidate_list if c.candidate_id == best_match_id),
+									None
+								)
+				elif config_number == 1:
 					candidate_index = row - start_row
 					
 					if 0 <= candidate_index < len(candidate_list):
@@ -690,10 +713,19 @@ def auto_counting_view(request, poll_id):
 	
 	# Đếm tổng số ballot
 	total_ballots = Ballot.objects.filter(poll=poll).count()
-	
+	vietnameocr_status, yolo_status = get_ai_service_status()
+	selected_config_models_ready = config_model.is_config_ready(
+		poll.config_number,
+		yolo_status=yolo_status,
+		vietnameocr_status=vietnameocr_status,
+	)
+
 	context = {
 		'poll': poll,
 		'total_ballots': total_ballots,
+		'vietnameocr_status': vietnameocr_status,
+		'yolo_status': yolo_status,
+		'selected_config_models_ready': selected_config_models_ready,
 	}
 	
 	return render(request, 'counting/auto_counting.html', context)
@@ -711,6 +743,16 @@ def toggle_auto_counting(request, poll_id):
 		messages.error(request, 'Vui lòng lưu cấu hình trước khi bật kiểm tự động!')
 		return redirect('auto_counting', poll_id=poll_id)
 	
+	if not poll.is_counting_started:
+		vietnameocr_status, yolo_status = get_ai_service_status()
+		if not config_model.is_config_ready(
+			poll.config_number,
+			yolo_status=yolo_status,
+			vietnameocr_status=vietnameocr_status,
+		):
+			messages.error(request, 'Model AI chưa sẵn sàng cho cấu hình đã chọn!')
+			return redirect('auto_counting', poll_id=poll_id)
+
 	# Toggle trạng thái
 	poll.is_counting_started = not poll.is_counting_started
 	

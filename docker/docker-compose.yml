@@ -82,7 +82,7 @@ services:
       start_period: 40s
 
   # ================================
-  # AI Server (TrOCR + YOLO API)
+  # AI Server (VietNameOCR + YOLO API)
   # ================================
   ai-server:
     build:

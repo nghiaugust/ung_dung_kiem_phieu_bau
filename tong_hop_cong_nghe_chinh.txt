@@ -1,82 +1,28 @@
 1. Tổng quan công nghệ
-Hệ thống được phát triển theo kiến trúc backend web kết hợp xử lý AI chuyên biệt. Về tổng thể, dự án được chia thành hai khối chính:
-- Khối web application dùng để quản lý nghiệp vụ bỏ phiếu, tài khoản, phiếu bầu, hậu kiểm, thống kê.
-- Khối AI server dùng để nhận dạng nội dung phiếu bầu (OCR và nhận diện dấu X) qua các API chuyên dụng.
-Cách tổ chức này giúp hệ thống dễ mở rộng, dễ bảo trì và tách biệt rõ phần nghiệp vụ với phần xử lý trí tuệ nhân tạo.
+Hệ thống gồm web application Django và AI server riêng. Web app quản lý nghiệp vụ bỏ phiếu, phiếu bầu, kiểm phiếu, hậu kiểm và thống kê. AI server cung cấp API nhận diện nội dung phiếu.
 
-2. Nền tảng backend và quản lý nghiệp vụ
-- Ngôn ngữ lập trình: Python.
-- Framework backend chính: Django.
-- Kiến trúc ứng dụng: đa app Django (account, poll, ballot, counting, preprocessing, security, websocket, ...).
-- Cơ chế xử lý API: JSON endpoint phục vụ mobile app và web tương tác.
-- Cơ chế render giao diện: Django Template (SSR).
+2. Backend
+- Python, Django, Django ORM.
+- Celery + Redis cho xử lý nền.
+- MySQL cho dữ liệu nghiệp vụ.
+- Django Channels/WebSocket cho cập nhật thời gian thực.
 
-Django đóng vai trò trung tâm trong quản lý dữ liệu, xử lý luồng nghiệp vụ, xác thực, phân quyền và kết nối các module AI.
+3. AI và xử lý ảnh
+- VietNameOCR: nhận diện tên ứng viên từ ảnh ô họ tên.
+- YOLO Ultralytics: nhận diện dấu X hợp lệ hoặc dấu X bị hủy.
+- OpenCV + NumPy: tiền xử lý ảnh, cắt ô, tối ưu ảnh.
+- QReader/qrcode: đọc và tạo QR code.
+- PyTorch/TorchVision: nền tảng deep learning cho model OCR và YOLO.
 
-3. Công nghệ trí tuệ nhân tạo và thị giác máy tính
-Hệ thống sử dụng kết hợp nhiều thành phần AI để xử lý phiếu bầu:
-- PyTorch/TorchVision/Torchaudio: nền tảng deep learning.
-- Transformers (TrOCR): OCR nhận diện chữ viết tay/in trên phiếu bầu, đặc biệt cho tên ứng viên.
-- Ultralytics YOLO: nhận diện dấu X hợp lệ và dấu X bị gạch bỏ.
-- OpenCV + NumPy: tiền xử lý ảnh, cạnh biên, chỉnh phối cảnh, cắt ô, xử lý marker.
-- QReader: đọc QR code trên phiếu bầu.
-- qrcode: tạo QR code khi sinh mẫu phiếu.
-- pdf2image: chuyển PDF sang ảnh để phục vụ quy trình đo marker/kiểm tra bố cục.
-- SciPy, Matplotlib: hỗ trợ một số bước phân tích tín hiệu hình ảnh và debug tiền xử lý.
+Luồng xử lý chính: tiền xử lý phiếu -> cắt ô -> VietNameOCR đọc tên -> YOLO nhận diện lựa chọn -> tổng hợp kết quả theo từng dòng.
 
-Mô hình xử lý tổng quát là kết hợp TrOCR + YOLO: TrOCR phục vụ OCR tên, YOLO phục vụ nhận diện lựa chọn, sau đó hệ thống tổng hợp kết quả theo từng dòng phiếu bầu.
+4. Triển khai
+- Waitress cho môi trường Windows.
+- Gunicorn/Nginx/Docker cho môi trường Linux/container.
+- Redis và Celery worker xử lý upload/kiểm phiếu bất đồng bộ.
 
-4. Xử lý bất đồng bộ và hàng đợi tác vụ
-Để đảm bảo hiệu năng khi upload nhiều phiếu và xử lý AI tốn tài nguyên, hệ thống sử dụng:
-- Celery: task queue cho các tiến trình nền.
-- Redis: broker và result backend cho Celery.
-- Flower: giao diện theo dõi worker/task.
-- gevent/eventlet: tối ưu worker pool cho tải trọng bất đồng bộ.
-
-Hàng đợi được tách theo mục đích (upload_queue, counting_queue, default) để tăng khả năng scale và phân bổ tải hợp lý.
-
-5. Giao tiếp thời gian thực
-- Django Channels + ASGI (Daphne): hỗ trợ WebSocket.
-- Ứng dụng websocket riêng cho notification real-time.
-
-Thành phần này cho phép đẩy thông báo tức thời đến client (mobile/web), giảm độ trễ trong các tình huống cần cập nhật trạng thái xử lý.
-
-6. Cơ sở dữ liệu và lưu trữ
-- Cơ sở dữ liệu quan hệ chính: MySQL.
-- ORM: Django ORM.
-- Lưu trữ media và static theo cấu trúc Django, kết hợp volume khi triển khai Docker.
-
-Hệ thống sử dụng MySQL cho dữ liệu nghiệp vụ, Redis cho queue/cache, giúp tối ưu từng vai trò dữ liệu theo đúng đặc tính tải trọng.
-
-7. Bảo mật và xác thực dữ liệu
-Hệ thống sử dụng nhiều lớp bảo mật:
-- cryptography:
-  + RSA Digital Signature (2048-bit) để ký/xác thực phiếu bầu qua QR.
-  + AES-256-GCM để mã hóa dữ liệu nhạy cảm trong cơ sở dữ liệu.
-- HMAC-SHA256: xác thực mã phiếu và chống giả mạo.
-- Blind index SHA-256 cho token để tìm kiếm an toàn trong DB.
-- Middleware rate limiting để hạn chế tấn công flood/DDoS mức ứng dụng.
-
-Cơ chế trên giúp đảm bảo tính toàn vẹn, tính xác thực và tính bảo mật dữ liệu phiếu bầu.
-
-8. Triển khai và vận hành hệ thống
-- Docker, Docker Compose: đóng gói và triển khai đồng nhất môi trường.
-- Nginx: reverse proxy, phục vụ static/media, hỗ trợ WebSocket upgrade.
-- Gunicorn: web server cho môi trường Linux/container.
-- Waitress: web server phù hợp cho môi trường Windows.
-
-Kiến trúc triển khai chuẩn gồm: Nginx + Django Web + Celery Worker + Redis + MySQL (+ Flower tùy chọn).
-
-9. Công nghệ frontend
-- HTML/CSS/JavaScript.
-- Bootstrap 5 + Bootstrap Icons.
-
-Giao diện được tổ chức theo hướng quản trị nghiệp vụ, tập trung vào tính dễ sử dụng, tốc độ thao tác và khả năng theo dõi kết quả kiểm phiếu.
-
-10. Kết luận
-Tập công nghệ của đề tài được lựa chọn theo hướng thực tiễn và dễ mở rộng:
-- Django + MySQL cho nền tảng nghiệp vụ ổn định.
-- Celery + Redis cho xử lý nền tải lớn.
-- TrOCR + YOLO + OpenCV cho bài toán kiểm phiếu bằng AI.
-- Docker + Nginx cho triển khai linh hoạt.
-- Cryptography + HMAC cho bảo mật và xác thực.
+5. Bảo mật
+- RSA/HMAC cho xác thực phiếu qua QR.
+- AES-256-GCM cho dữ liệu nhạy cảm.
+- Blind index SHA-256 hỗ trợ tìm kiếm an toàn.
+- Rate limiting ở middleware.

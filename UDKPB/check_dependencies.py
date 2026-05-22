@@ -92,7 +92,7 @@ def scan_project(root_dir):
             dirs[:] = [d for d in dirs if d not in {
                 '__pycache__', 'migrations', 'venv', 'env', 
                 '.git', 'static', 'media', 'staticfiles',
-                'models--microsoft--trocr-base-printed',
+                'model_vietnameocr',
             }]
             
             for file in files:

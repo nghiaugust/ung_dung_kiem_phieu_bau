@@ -18,7 +18,7 @@ from counting.models import AIModelResult
 from counting import config_model
 
 
-AI_TROCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/trocr/recognize/"
+AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/vietnameocr/recognize/"
 AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
 
 
@@ -32,11 +32,11 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
         all_cell_models: Dict mapping cell_key -> model_name
         
     Returns:
-        Tuple[Dict, Dict]: (trocr_batch, yolo_batch)
-            - trocr_batch: {'image_paths': [...], 'cell_mapping': {idx: (row, col)}}
+        Tuple[Dict, Dict]: (vietnameocr_batch, yolo_batch)
+            - vietnameocr_batch: {'image_paths': [...], 'cell_mapping': {idx: (row, col)}}
             - yolo_batch: {'image_paths': [...], 'cell_mapping': {idx: (row, col)}}
     """
-    trocr_batch = {'image_paths': [], 'cell_mapping': {}}
+    vietnameocr_batch = {'image_paths': [], 'cell_mapping': {}}
     yolo_batch = {'image_paths': [], 'cell_mapping': {}}
     
     # QUAN TRỌNG: Sort cells theo thứ tự (row, col) để đảm bảo thứ tự ổn định
@@ -64,27 +64,27 @@ def prepare_batch_requests(ballot, ai_result, all_cell_models):
             continue
         
         # Gom vào batch tương ứng
-        if model_name == 'trocr':
-            idx = len(trocr_batch['image_paths'])
-            trocr_batch['image_paths'].append(cell_image_path)
-            trocr_batch['cell_mapping'][idx] = (row, col)
+        if model_name == 'vietnameocr':
+            idx = len(vietnameocr_batch['image_paths'])
+            vietnameocr_batch['image_paths'].append(cell_image_path)
+            vietnameocr_batch['cell_mapping'][idx] = (row, col)
         elif model_name == 'yolo':
             idx = len(yolo_batch['image_paths'])
             yolo_batch['image_paths'].append(cell_image_path)
             yolo_batch['cell_mapping'][idx] = (row, col)
     
-    return trocr_batch, yolo_batch
+    return vietnameocr_batch, yolo_batch
 
 
-def process_batch_responses(ai_result, trocr_batch, yolo_batch, trocr_response, yolo_response):
+def process_batch_responses(ai_result, vietnameocr_batch, yolo_batch, vietnameocr_response, yolo_response):
     """
     Xử lý kết quả trả về từ API và lưu vào database
     
     Args:
         ai_result: AIModelResult object
-        trocr_batch: Dict chứa thông tin batch TrOCR
+        vietnameocr_batch: Dict chứa thông tin batch VietNameOCR
         yolo_batch: Dict chứa thông tin batch YOLO
-        trocr_response: Response từ TrOCR API
+        vietnameocr_response: Response từ VietNameOCR API
         yolo_response: Response từ YOLO API
         
     Returns:
@@ -92,12 +92,12 @@ def process_batch_responses(ai_result, trocr_batch, yolo_batch, trocr_response, 
     """
     total_processed_cells = 0
     
-    # Xử lý TrOCR response
-    if trocr_response and trocr_response.get('success') and trocr_response.get('results'):
-        results = trocr_response['results']
+    # Xử lý VietNameOCR response
+    if vietnameocr_response and vietnameocr_response.get('success') and vietnameocr_response.get('results'):
+        results = vietnameocr_response['results']
         for idx, result in enumerate(results):
-            if idx in trocr_batch['cell_mapping']:
-                row, col = trocr_batch['cell_mapping'][idx]
+            if idx in vietnameocr_batch['cell_mapping']:
+                row, col = vietnameocr_batch['cell_mapping'][idx]
                 recognized_text = result.get('text', '')
                 confidence = result.get('confidence', 0)
                 
@@ -220,28 +220,28 @@ def create_ballot_selections(ballot, poll, ai_result, config_number):
     # Lấy tất cả cells có YOLO
     yolo_cells = ai_result.get_cells_by_model('yolo')
     
-    # Lấy tất cả cells có TrOCR (nếu có)
-    trocr_cells = ai_result.get_cells_by_model('trocr')
+    # Lấy tất cả cells có VietNameOCR (nếu có)
+    vietnameocr_cells = ai_result.get_cells_by_model('vietnameocr')
     
     # Group theo row để xử lý từng dòng
     rows_dict = {}
     for cell_key, cell_data in yolo_cells.items():
         row, col = map(int, cell_key.split('_'))
         if row not in rows_dict:
-            rows_dict[row] = {'yolo': [], 'trocr': None}
+            rows_dict[row] = {'yolo': [], 'vietnameocr': None}
         rows_dict[row]['yolo'].append((col, cell_data))
     
-    # Thêm TrOCR vào rows_dict
-    for cell_key, cell_data in trocr_cells.items():
+    # Thêm VietNameOCR vào rows_dict
+    for cell_key, cell_data in vietnameocr_cells.items():
         row, col = map(int, cell_key.split('_'))
         if row not in rows_dict:
-            rows_dict[row] = {'yolo': [], 'trocr': None}
-        rows_dict[row]['trocr'] = cell_data
+            rows_dict[row] = {'yolo': [], 'vietnameocr': None}
+        rows_dict[row]['vietnameocr'] = cell_data
     
     # Xử lý từng dòng
     for row, row_data in rows_dict.items():
         yolo_results = row_data['yolo']
-        trocr_result = row_data['trocr']
+        vietnameocr_result = row_data['vietnameocr']
         
         # Sắp xếp yolo_results theo col để lấy đúng cột đồng ý (cột đầu tiên)
         yolo_results.sort(key=lambda x: x[0])
@@ -265,35 +265,31 @@ def create_ballot_selections(ballot, poll, ai_result, config_number):
         # Xác định candidate dựa trên config_number
         candidate_to_select = None
         
-        if config_number == 1 and trocr_result:
-            # Config1: Sử dụng TrOCR để matching tên
-            recognized_name = trocr_result.get('result', '').strip()
-            
-            if recognized_name and recognized_name != "[Lỗi TrOCR]":
-                # Tìm candidate giống nhất với recognized_name
-                best_match_id = None
-                best_match_ratio = 0.0
+        if config_number == 2:
+            if vietnameocr_result:
+                recognized_name = vietnameocr_result.get('result', '').strip()
                 
-                for candidate_id, candidate_name in candidate_names.items():
-                    # Sử dụng difflib để so sánh tên
-                    ratio = difflib.SequenceMatcher(
-                        None, 
-                        recognized_name.upper(), 
-                        candidate_name.upper()
-                    ).ratio()
+                if recognized_name and recognized_name != "[Loi VietNameOCR]":
+                    best_match_id = None
+                    best_match_ratio = 0.0
                     
-                    if ratio > best_match_ratio:
-                        best_match_ratio = ratio
-                        best_match_id = candidate_id
-                
-                # Chỉ chọn nếu tỉ lệ khớp >= 0.6 (60%)
-                if best_match_id and best_match_ratio >= 0.6:
-                    candidate_to_select = next(
-                        (c for c in candidate_list if c.candidate_id == best_match_id),
-                        None
-                    )
-        else:
-            # Config2: Sử dụng thứ tự dòng
+                    for candidate_id, candidate_name in candidate_names.items():
+                        ratio = difflib.SequenceMatcher(
+                            None, 
+                            recognized_name.upper(), 
+                            candidate_name.upper()
+                        ).ratio()
+                        
+                        if ratio > best_match_ratio:
+                            best_match_ratio = ratio
+                            best_match_id = candidate_id
+                    
+                    if best_match_id and best_match_ratio >= 0.6:
+                        candidate_to_select = next(
+                            (c for c in candidate_list if c.candidate_id == best_match_id),
+                            None
+                        )
+        elif config_number == 1:
             candidate_index = row - start_row
             
             if 0 <= candidate_index < len(candidate_list):
@@ -439,11 +435,7 @@ def counting_queue(self, ballot_id):
         # Áp dụng cấu hình
         config_number = poll.config_number
         
-        if config_number == 1:
-            config_model.apply_config1(ai_result)
-        elif config_number == 2:
-            config_model.apply_config2(ai_result)
-        else:
+        if config_number not in [1, 2]:
             ai_result.status = 'failed'
             ai_result.error_message = f'Cấu hình không hợp lệ: {config_number}'
             ai_result.save()
@@ -451,6 +443,7 @@ def counting_queue(self, ballot_id):
                 'success': False,
                 'error': ai_result.error_message
             }
+        config_model.apply_config(ai_result, config_number)
         
         # Lấy cấu hình
         rows, cols = ai_result.get_table_dimensions()
@@ -469,28 +462,28 @@ def counting_queue(self, ballot_id):
         
         # BƯỚC 1: Chuẩn bị batch requests (gom ảnh theo model)
         print(f"[COUNTING QUEUE] Chuẩn bị batch requests cho ballot {ballot_id}")
-        trocr_batch, yolo_batch = prepare_batch_requests(ballot, ai_result, all_cell_models)
+        vietnameocr_batch, yolo_batch = prepare_batch_requests(ballot, ai_result, all_cell_models)
         
-        print(f"[COUNTING QUEUE] TrOCR batch: {len(trocr_batch['image_paths'])} ảnh, YOLO batch: {len(yolo_batch['image_paths'])} ảnh")
+        print(f"[COUNTING QUEUE] VietNameOCR batch: {len(vietnameocr_batch['image_paths'])} ảnh, YOLO batch: {len(yolo_batch['image_paths'])} ảnh")
         
         # BƯỚC 2: Gửi batch requests tới AI server
-        trocr_response = None
+        vietnameocr_response = None
         yolo_response = None
         
         try:
-            # Gửi TrOCR batch nếu có
-            if trocr_batch['image_paths']:
-                print(f"[COUNTING QUEUE] Gửi TrOCR batch với {len(trocr_batch['image_paths'])} ảnh")
-                trocr_response = send_batch_request(
-                    api_url=AI_TROCR_API_URL,
-                    image_paths=trocr_batch['image_paths'],
+            # Gửi VietNameOCR batch nếu có
+            if vietnameocr_batch['image_paths']:
+                print(f"[COUNTING QUEUE] Gửi VietNameOCR batch với {len(vietnameocr_batch['image_paths'])} ảnh")
+                vietnameocr_response = send_batch_request(
+                    api_url=AI_VIETNAMEOCR_API_URL,
+                    image_paths=vietnameocr_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
                 
                 # Kiểm tra response
-                if not trocr_response.get('success'):
-                    error_msg = trocr_response.get('error', 'TrOCR API trả về lỗi')
-                    raise requests.exceptions.RequestException(f"TrOCR error: {error_msg}")
+                if not vietnameocr_response.get('success'):
+                    error_msg = vietnameocr_response.get('error', 'VietNameOCR API trả về lỗi')
+                    raise requests.exceptions.RequestException(f"VietNameOCR error: {error_msg}")
             
             # Gửi YOLO batch nếu có
             if yolo_batch['image_paths']:
@@ -558,9 +551,9 @@ def counting_queue(self, ballot_id):
         print(f"[COUNTING QUEUE] Xử lý responses cho ballot {ballot_id}")
         total_processed_cells = process_batch_responses(
             ai_result, 
-            trocr_batch, 
+            vietnameocr_batch, 
             yolo_batch, 
-            trocr_response, 
+            vietnameocr_response, 
             yolo_response
         )
 

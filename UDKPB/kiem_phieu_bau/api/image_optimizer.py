@@ -9,7 +9,7 @@ from PIL import Image
 
 def optimize_ballot_image(uploaded_file, max_size_kb=500, quality=85):
     """
-    Tối ưu ảnh phiếu bầu để giảm dung lượng nhưng vẫn đảm bảo TrOCR và YOLO nhận diện tốt
+    Tối ưu ảnh phiếu bầu để giảm dung lượng nhưng vẫn đảm bảo VietNameOCR và YOLO nhận diện tốt
     
     Args:
         uploaded_file: Django UploadedFile object
@@ -45,7 +45,7 @@ def optimize_ballot_image(uploaded_file, max_size_kb=500, quality=85):
         # Sử dụng bilateral filter để giữ cạnh sắc nét (quan trọng cho YOLO)
         denoised = cv2.bilateralFilter(img, d=5, sigmaColor=50, sigmaSpace=50)
         
-        # 3. Tăng độ tương phản nhẹ để chữ rõ hơn (tốt cho TrOCR)
+        # 3. Tăng độ tương phản nhẹ để chữ rõ hơn (tốt cho VietNameOCR)
         # Convert to LAB color space
         lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)

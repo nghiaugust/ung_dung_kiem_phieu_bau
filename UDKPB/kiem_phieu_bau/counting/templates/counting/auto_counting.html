@@ -28,7 +28,7 @@
             value="{{ poll.total_ballots_count|default:total_ballots }}"
             min="0"
             max="{{ total_ballots }}"
-            {% if not poll.config_number %}disabled{% endif %}
+            {% if not poll.config_number or not selected_config_models_ready %}disabled{% endif %}
           >
         </div>
         {% endif %}
@@ -55,7 +55,7 @@
           <i class="bi bi-stop-circle-fill"></i> Tắt
         </button>
         {% else %}
-        <button type="submit" class="btn btn-success" {% if not poll.config_number %}disabled{% endif %}>
+        <button type="submit" class="btn btn-success" {% if not poll.config_number or not selected_config_models_ready %}disabled{% endif %}>
           <i class="bi bi-play-circle-fill"></i> Bật
         </button>
         {% endif %}
@@ -242,9 +242,9 @@
             <i class="bi bi-check-circle-fill"></i>
             <strong>Cấu hình {{ poll.config_number }}:</strong>
             {% if poll.config_number == 1 %}
-            TrOCR nhận diện tên + YOLO detect dấu X
+            Chỉ dùng YOLO detect dấu X
             {% else %}
-            Tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
+            VietNameOCR nhận diện tên + YOLO detect dấu X
             {% endif %}
           </div>
           {% else %}
@@ -260,6 +260,11 @@
         <div class="alert alert-warning text-center">
           <i class="bi bi-exclamation-triangle-fill"></i>
           <small>Vui lòng lưu cấu hình trước khi bật kiểm tự động</small>
+        </div>
+        {% elif not selected_config_models_ready %}
+        <div class="alert alert-warning text-center">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <small>Model AI chưa sẵn sàng cho cấu hình đã chọn</small>
         </div>
         {% endif %}
       </div>

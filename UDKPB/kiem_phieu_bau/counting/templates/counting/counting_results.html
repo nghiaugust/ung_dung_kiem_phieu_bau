@@ -22,15 +22,15 @@
     <div class="col-md-12 mb-4">
       <div class="card">
         <div
-          class="card-header {% if result.model_id == 'vote_table_combined' %}bg-info{% elif result.model_id == 'trocr' %}bg-primary{% else %}bg-success{% endif %} text-white"
+          class="card-header {% if result.model_id == 'vote_table_combined' %}bg-info{% elif result.model_id == 'vietnameocr' %}bg-primary{% else %}bg-success{% endif %} text-white"
         >
           <div class="row align-items-center">
             <div class="col">
               <h5 class="mb-0">
                 {% if result.model_id == 'vote_table_combined' %}
-                <i class="bi bi-table"></i> Bảng Biểu Quyết (TrOCR + YOLO) 
-                {% elif result.model_id == 'trocr' %}
-                <i class="bi bi-fonts"></i> TrOCR {% else %}
+                <i class="bi bi-table"></i> Bảng Biểu Quyết (VietNameOCR + YOLO) 
+                {% elif result.model_id == 'vietnameocr' %}
+                <i class="bi bi-fonts"></i> VietNameOCR {% else %}
                 <i class="bi bi-box"></i> YOLO {% endif %}
               </h5>
             </div>
@@ -97,7 +97,7 @@
                     <strong>Cấu hình:</strong>
                     <ul class="mb-0 mt-2">
                       <li>
-                        TrOCR: Cột {{ result.result_model.config.trocr_col_ui }}
+                        VietNameOCR: Cột {{ result.result_model.config.vietnameocr_col_ui }}
                         (Tên)
                       </li>
                       <li>
@@ -129,7 +129,7 @@
                           <th>Kết Quả</th>
                           {% else %}
                           <th>Filename</th>
-                          {% if result.model_id == 'trocr' %}
+                          {% if result.model_id == 'vietnameocr' %}
                           <th>Text</th>
                           {% else %}
                           <th>Label</th>
@@ -169,7 +169,7 @@
                           </td>
                           {% else %}
                           <td><code>{{ item.filename }}</code></td>
-                          {% if result.model_id == 'trocr' %}
+                          {% if result.model_id == 'vietnameocr' %}
                           <td>
                             <strong>{{ item.text|default:"(Trống)" }}</strong>
                           </td>

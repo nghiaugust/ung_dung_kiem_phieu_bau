@@ -5,8 +5,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # TrOCR endpoints
-    path('trocr/recognize/', views.trocr_recognize, name='trocr_recognize'),
+    # VietNameOCR endpoints
+    path('vietnameocr/recognize/', views.vietnameocr_recognize, name='vietnameocr_recognize'),
     
     # YOLO endpoints
     path('yolo/detect/', views.yolo_detect, name='yolo_detect'),

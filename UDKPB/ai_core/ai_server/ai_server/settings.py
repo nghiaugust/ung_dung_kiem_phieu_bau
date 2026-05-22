@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'api',  # API app cho TrOCR và YOLO
+    'api',  # API app cho VietNameOCR và YOLO
 ]
 
 MIDDLEWARE = [

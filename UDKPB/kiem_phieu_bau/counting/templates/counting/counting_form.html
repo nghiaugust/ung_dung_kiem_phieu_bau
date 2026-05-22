@@ -2,7 +2,7 @@
 <div class="row align-items-center mb-3">
   <div class="col-md-6">
     <h2 class="mb-1">Kiểm Phiếu Bầu: {{ poll.poll_name }}</h2>
-    <p class="text-muted mb-0">Chọn cấu hình để xử lý với TrOCR và YOLO</p>
+    <p class="text-muted mb-0">Chọn cấu hình để xử lý với VietNameOCR và YOLO</p>
   </div>
   <div class="col-md-6 text-end">
     <a
@@ -13,7 +13,7 @@
     </a>
     
     <!-- Nút Kiểm Phiếu Bầu -->
-    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and trocr_status and yolo_status and not poll.is_counting_started and config_number %}
+    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and selected_config_models_ready and not poll.is_counting_started and config_number %}
     <button
       type="submit"
       form="counting-form"
@@ -121,7 +121,7 @@
           </div>
         </div>
         <div class="card-body">
-          <!-- Cấu hình 1: TrOCR + YOLO -->
+          <!-- Cấu hình 1: Chỉ YOLO -->
           <div id="config1-container" {% if config_number == 2 and is_counted %}style="display: none;"{% endif %}>
             <div class="form-check mb-3">
               <input
@@ -134,7 +134,7 @@
                 {% if is_counted %}disabled{% endif %}
               />
               <label class="form-check-label fw-bold" for="config1">
-                Cấu hình 1: TrOCR nhận diện tên + YOLO detect dấu X
+                Cấu hình 1: Chỉ dùng YOLO detect dấu X
                 {% if config_number == 1 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
               </label>
             </div>
@@ -161,7 +161,7 @@
                       <strong>Cấu hình:</strong>
                       <ul class="mb-0 mt-2">
                         <li>
-                          <strong>TrOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
+                          Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng VietNameOCR)
                         </li>
                         <li>
                           <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
@@ -174,7 +174,7 @@
             </div>
           </div>
 
-          <!-- Cấu hình 2: Tên theo thứ tự + YOLO -->
+          <!-- Cấu hình 2: VietNameOCR + YOLO -->
           <div id="config2-container" {% if config_number == 1 and is_counted %}style="display: none;"{% endif %}>
             <div class="form-check mb-3">
               <input
@@ -187,7 +187,7 @@
                 {% if is_counted %}disabled{% endif %}
               />
               <label class="form-check-label fw-bold" for="config2">
-                Cấu hình 2: Tên theo thứ tự danh sách ứng viên + YOLO detect dấu X
+                Cấu hình 2: VietNameOCR nhận diện tên + YOLO detect dấu X
                 {% if config_number == 2 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
               </label>
             </div>
@@ -214,7 +214,7 @@
                       <strong>Cấu hình:</strong>
                       <ul class="mb-0 mt-2">
                         <li>
-                          Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng TrOCR)
+                          <strong>VietNameOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
                         </li>
                         <li>
                           <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
@@ -311,13 +311,18 @@
           <!-- Điều kiện 5: Check model AI -->
           <p class="mb-2">
             <strong>Check model:</strong>
-            {% if trocr_status and yolo_status %}
-            <span class="text-success">TrOCR on, YOLO on</span>
+            {% if config_number and selected_config_models_ready %}
+            <span class="text-success">Cấu hình {{ config_number }} sẵn sàng</span>
+            {% elif config_number %}
+            <span class="text-danger">Cấu hình {{ config_number }} chưa sẵn sàng</span>
             {% else %}
-            <span class="text-danger">
-              TrOCR {% if trocr_status %}on{% else %}off{% endif %}, YOLO {% if yolo_status %}on{% else %}off{% endif %}
-            </span>
+            <span class="text-muted">Chưa lưu cấu hình</span>
             {% endif %}
+            <br />
+            <small class="text-muted">
+              YOLO {% if yolo_status %}on{% else %}off{% endif %},
+              VietNameOCR {% if vietnameocr_status %}on{% else %}off{% endif %}
+            </small>
           </p>
 
           <input type="hidden" name="start_row" value="2" />
@@ -325,10 +330,10 @@
           <input type="hidden" name="yolo_confidence" value="20" />
 
           <!-- Cấu hình cho config1 -->
-          <input type="hidden" name="config1_trocr_col" value="2" />
           <input type="hidden" name="config1_yolo_cols" value="3,4" />
           
           <!-- Cấu hình cho config2 -->
+          <input type="hidden" name="config2_vietnameocr_col" value="2" />
           <input type="hidden" name="config2_yolo_cols" value="3,4" />
         </div>
       </div>
