@@ -123,6 +123,8 @@
 
 <script>
 const pollId = {{ poll.poll_id }};
+const pollConfigNumber = Number('{{ poll.config_number|default_if_none:"" }}') || null;
+const CROSSED_BALLOT_CONFIG = 1;
 let currentBallot = null;
 let voteStates = {};
 let hasChanges = false;
@@ -317,6 +319,10 @@ function startCountdown(lockedAt) {
   countdownInterval = setInterval(updateCountdown, 1000);
 }
 
+function getCandidateRowStartIndex() {
+  return pollConfigNumber === CROSSED_BALLOT_CONFIG ? 0 : 1;
+}
+
 function positionButtons() {
   if (!currentBallot || !currentBallot.horizontal_lines) return;
   
@@ -332,14 +338,17 @@ function positionButtons() {
   
   const horizontalLines = currentBallot.horizontal_lines;
   const candidates = currentBallot.candidates;
+  const candidateRowStartIndex = getCandidateRowStartIndex();
   
   let firstButtonY = null;
   
   candidates.forEach((candidate, index) => {
-    if (index + 2 >= horizontalLines.length) return;
+    const lineTopIndex = index + candidateRowStartIndex;
+    const lineBottomIndex = lineTopIndex + 1;
+    if (lineBottomIndex >= horizontalLines.length) return;
     
-    const lineTop = horizontalLines[index + 1];
-    const lineBottom = horizontalLines[index + 2];
+    const lineTop = horizontalLines[lineTopIndex];
+    const lineBottom = horizontalLines[lineBottomIndex];
     const yTop = lineTop.y * scale;
     const yBottom = lineBottom.y * scale;
     const yCenter = (yTop + yBottom) / 2;
@@ -363,7 +372,7 @@ function positionButtons() {
     overlay.appendChild(buttonRow);
     
     // Confidence info
-    const confidenceInfo = getConfidenceInfo(index + 1);
+    const confidenceInfo = getConfidenceInfo(lineTopIndex);
     if (confidenceInfo) {
       const confidenceRow = document.createElement('div');
       confidenceRow.className = 'confidence-info-row';

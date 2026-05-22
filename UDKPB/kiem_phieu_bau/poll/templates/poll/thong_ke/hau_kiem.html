@@ -354,6 +354,8 @@
 <script>
   const ballotId = {{ current_ballot.ballot_id }};
   const pollId = {{ poll.poll_id }};
+  const pollConfigNumber = Number('{{ poll.config_number|default_if_none:"" }}') || null;
+  const CROSSED_BALLOT_CONFIG = 1;
   const horizontalLines = {{ horizontal_lines_json|safe }};
   const ballotResults = {{ ballot_results_json|safe }};
   const markResults = {{ mark_results_json|safe }};
@@ -391,6 +393,10 @@
     };
   });
 
+  function getCandidateRowStartIndex() {
+    return pollConfigNumber === CROSSED_BALLOT_CONFIG ? 0 : 1;
+  }
+
   function positionButtons() {
     const img = document.getElementById('ballot-image');
     if (!img || horizontalLines.length === 0) return;
@@ -398,14 +404,17 @@
     const imgHeight = img.offsetHeight;
     const imgNaturalHeight = img.naturalHeight;
     const scale = imgHeight / imgNaturalHeight;
+    const candidateRowStartIndex = getCandidateRowStartIndex();
 
     ballotResults.forEach((result, index) => {
-      if (index + 2 >= horizontalLines.length) {
+      const lineTopIndex = index + candidateRowStartIndex;
+      const lineBottomIndex = lineTopIndex + 1;
+      if (lineBottomIndex >= horizontalLines.length) {
         return;
       }
       
-      const lineTop = horizontalLines[index + 1];
-      const lineBottom = horizontalLines[index + 2];
+      const lineTop = horizontalLines[lineTopIndex];
+      const lineBottom = horizontalLines[lineBottomIndex];
       
       const yTop = lineTop.y * scale;
       const yBottom = lineBottom.y * scale;
