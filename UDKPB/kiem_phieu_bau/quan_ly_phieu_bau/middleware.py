@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.conf import settings
 from django.contrib import messages
@@ -28,6 +29,15 @@ class LoginRequiredMessageMiddleware(MiddlewareMixin):
             return None
         # Nếu chưa đăng nhập
         if not request.user.is_authenticated:
+            if (
+                request.headers.get('x-requested-with') == 'XMLHttpRequest'
+                or 'application/json' in request.headers.get('accept', '')
+            ):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Unauthorized',
+                    'message': 'Vui long dang nhap lai.'
+                }, status=401)
             messages.warning(request, 'Bạn cần đăng nhập để truy cập chức năng này!')
             from django.shortcuts import redirect
             return redirect(f"{login_url}?next={request.path}")

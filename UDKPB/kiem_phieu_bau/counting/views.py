@@ -24,6 +24,30 @@ from typing import List, Dict, Tuple
 import json
 
 
+def _wants_json_response(request):
+	return (
+		request.headers.get('x-requested-with') == 'XMLHttpRequest'
+		or 'application/json' in request.headers.get('accept', '')
+		or request.headers.get('content-type', '').startswith('application/json')
+	)
+
+
+def _toggle_auto_response(request, poll, message, message_level='success', status=200, success=True):
+	if _wants_json_response(request):
+		return JsonResponse({
+			'success': success,
+			'message': message,
+			'poll_id': poll.poll_id,
+			'is_counting_started': poll.is_counting_started,
+			'is_checking_started': poll.is_checking_started,
+			'is_counting_active': poll.is_counting_started,
+			'is_checking_cleanup_active': poll.is_checking_started,
+		}, status=status)
+
+	getattr(messages, message_level)(request, message)
+	return redirect('counting_form', poll_id=poll.poll_id)
+
+
 def _get_counting_poll_queryset(request):
 	if request.user.is_authenticated and request.user.is_superuser and request.user.is_active:
 		polls_queryset = Poll.objects.all()
@@ -473,7 +497,8 @@ def counting_form_view(request, poll_id):
 		'total_ballots': ballots_count,
 		'total_ballots_count': total_ballots_count,
 		'can_start_counting': can_start_counting,
-		'is_counting_active': poll.is_counting_started or poll.is_checking_started,
+		'is_counting_active': poll.is_counting_started,
+		'is_checking_cleanup_active': poll.is_checking_started,
 		'is_counted': poll.status in ['counted', 'Đã kiểm phiếu'],
 	}
 	
@@ -739,9 +764,19 @@ def toggle_auto_counting(request, poll_id):
 	Bật/tắt kiểm phiếu: kiểm tự động và cleanup hậu kiểm cùng trạng thái.
 	"""
 	poll = get_object_or_404(Poll, poll_id=poll_id)
-	is_turning_on = not (poll.is_counting_started or poll.is_checking_started)
+	is_turning_on = not poll.is_counting_started
 	
 	if is_turning_on and not poll.config_number:
+		if _wants_json_response(request):
+			message = 'Vui long luu cau hinh truoc khi bat kiem phieu.'
+			return _toggle_auto_response(
+				request,
+				poll,
+				message,
+				message_level='error',
+				status=400,
+				success=False,
+			)
 		messages.error(request, 'Vui lòng lưu cấu hình trước khi bật kiểm phiếu!')
 		return redirect('counting_form', poll_id=poll_id)
 	
@@ -764,6 +799,10 @@ def toggle_auto_counting(request, poll_id):
 	
 	poll.save()
 	
+	if not is_turning_on and _wants_json_response(request):
+		message = 'Da tat kiem phieu va tu dong thu hoi phieu hau kiem.'
+		return _toggle_auto_response(request, poll, message, message_level='info')
+	
 	if is_turning_on:
 		from counting.tasks import counting_queue
 		
@@ -777,6 +816,13 @@ def toggle_auto_counting(request, poll_id):
 		for ballot_id in pending_ballots:
 			counting_queue.delay(ballot_id)
 			queued_count += 1
+		
+		if _wants_json_response(request):
+			if queued_count > 0:
+				message = f'Da bat kiem phieu. Dang xu ly {queued_count} phieu da upload truoc do.'
+			else:
+				message = 'Da bat kiem phieu.'
+			return _toggle_auto_response(request, poll, message)
 		
 		if queued_count > 0:
 			messages.success(request, f'Đã bật kiểm phiếu. Đang xử lý {queued_count} phiếu đã upload trước đó.')
@@ -886,7 +932,8 @@ def get_counting_stats(request, poll_id):
 		
 		'is_counting_started': poll.is_counting_started,
 		'is_checking_started': poll.is_checking_started,
-		'is_counting_active': poll.is_counting_started or poll.is_checking_started,
+		'is_counting_active': poll.is_counting_started,
+		'is_checking_cleanup_active': poll.is_checking_started,
 	})
 
 

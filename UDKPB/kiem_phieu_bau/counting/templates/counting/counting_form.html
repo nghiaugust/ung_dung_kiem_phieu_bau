@@ -634,6 +634,39 @@
     config3Container.style.display = "block";
   }
 
+  function submitToggleFormAjax() {
+    if (!toggleForm) return Promise.resolve(false);
+
+    const submitButton = toggleForm.querySelector('button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+
+    return fetch(toggleForm.action, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json"
+      },
+      credentials: "same-origin",
+      body: new FormData(toggleForm)
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data || !data.success) {
+          throw new Error((data && (data.message || data.error)) || "Khong the cap nhat trang thai kiem phieu.");
+        }
+        showAlert(data.message || "Da cap nhat trang thai kiem phieu.");
+        setTimeout(() => window.location.reload(), 700);
+        return true;
+      })
+      .catch((error) => {
+        console.error("Loi toggle kiem phieu:", error);
+        showAlert(error.message || "Loi ket noi den server.");
+        bypassToggleConfirm = false;
+        if (submitButton) submitButton.disabled = false;
+        return false;
+      });
+  }
+
   if (toggleForm) {
     toggleForm.addEventListener("submit", function(event) {
       if (bypassToggleConfirm) return;
@@ -642,7 +675,7 @@
       const action = isCountingActive ? "tắt" : "bật";
       if (confirm(`Bạn có chắc muốn ${action} kiểm phiếu?`)) {
         bypassToggleConfirm = true;
-        toggleForm.submit();
+        submitToggleFormAjax();
       }
     });
   }
@@ -739,7 +772,7 @@
         setText("counting-processing", data.counting.processing);
         setText("counting-success", data.counting.success);
         setText("counting-failed", data.counting.failed);
-        const processActive = data.is_counting_active || data.is_counting_started;
+        const processActive = data.is_counting_started;
 
         if (
           processActive &&
@@ -754,7 +787,7 @@
           alert(`Đã hoàn thành kiểm ${data.total_ballots_count} phiếu. Hệ thống sẽ tự động tắt kiểm phiếu.`);
           if (toggleForm) {
             bypassToggleConfirm = true;
-            toggleForm.submit();
+            submitToggleFormAjax();
           }
           return;
         }

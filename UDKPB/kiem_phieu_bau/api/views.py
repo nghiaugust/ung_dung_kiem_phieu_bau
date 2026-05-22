@@ -3595,6 +3595,80 @@ def api_release_checking_lock(request):
         }, status=500)
 
 
+def _get_session_or_token_user(request):
+    user = None
+
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token_str = auth_header.split(' ')[1]
+        token = APIToken.get_by_token(token_str)
+        if token and (not token.expires_at or token.expires_at > timezone.now()):
+            user = token.user
+
+    if not user and request.user.is_authenticated:
+        user = request.user
+
+    return user
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_release_checking_lock_web(request):
+    """
+    Release a checking lock from the web UI. Supports session auth and API token auth.
+    """
+    try:
+        user = _get_session_or_token_user(request)
+        if not user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Unauthorized',
+                'message': 'Vui long dang nhap'
+            }, status=401)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON',
+                'message': 'Du lieu JSON khong hop le'
+            }, status=400)
+
+        ballot_id = data.get('ballot_id')
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Thieu ballot_id'
+            }, status=400)
+
+        is_success, message = CheckingDistributionService.release_checking_lock(
+            user=user,
+            ballot_id=ballot_id
+        )
+
+        if is_success:
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'ballot_id': ballot_id
+            })
+
+        return JsonResponse({
+            'success': False,
+            'error': message,
+            'ballot_id': ballot_id
+        }, status=400)
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
 @require_http_methods(["GET"])
 def api_get_checking_tasks_web(request):
     """
