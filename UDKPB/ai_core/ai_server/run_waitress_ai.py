@@ -33,17 +33,21 @@ if __name__ == '__main__':
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     
+    # Initialize YOLO (required)
     try:
-        # Initialize services (singleton - chỉ load 1 lần)
-        trocr_service = TrOCRService()
-        print("✅ TrOCR Model loaded successfully")
-        
         yolo_service = YOLOService()
         print("✅ YOLO Model loaded successfully")
-        
     except Exception as e:
-        print(f"❌ Error loading models: {e}")
+        print(f"❌ Error loading YOLO (required): {e}")
         sys.exit(1)
+    
+    # Initialize TrOCR (optional - skip if error)
+    try:
+        trocr_service = TrOCRService()
+        print("✅ TrOCR Model loaded successfully")
+    except Exception as e:
+        print(f"⚠️ TrOCR Model failed (optional): {e}")
+        print("   Continuing with YOLO only...")
     
     print("-" * 70)
     print("Process: 1 Threads: 4 ")

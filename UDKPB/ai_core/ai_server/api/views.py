@@ -10,8 +10,17 @@ from .model_services import TrOCRService, YOLOService
 
 
 # Khởi tạo services (singleton - chỉ tạo 1 lần)
-trocr_service = TrOCRService()
-yolo_service = YOLOService()
+try:
+    trocr_service = TrOCRService()
+except Exception as e:
+    trocr_service = None
+    print(f"[TrOCR Service] ⚠️ Skip load (optional): {e}")
+
+try:
+    yolo_service = YOLOService()
+except Exception as e:
+    print(f"[YOLO Service] ❌ Error loading model: {e}")
+    raise
 
 
 @csrf_exempt
@@ -41,6 +50,11 @@ def trocr_recognize(request):
         }
     """
     try:
+        if trocr_service is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'TrOCR model chưa được nạp'
+            }, status=503)
         # Lấy danh sách ảnh từ request
         files = request.FILES.getlist('images')
         
@@ -200,11 +214,13 @@ def health_check(request):
     
     GET/HEAD /api/health/
     """
+    trocr_loaded = trocr_service is not None and trocr_service._pipe is not None
+    yolo_loaded = yolo_service is not None and yolo_service._model is not None
     return JsonResponse({
         'status': 'healthy',
         'services': {
-            'trocr': trocr_service._pipe is not None,
-            'yolo': yolo_service._model is not None
+            'trocr': trocr_loaded,
+            'yolo': yolo_loaded
         }
     })
 
@@ -218,14 +234,16 @@ def model_info(request):
     """
     import torch
     
+    trocr_loaded = trocr_service is not None and trocr_service._pipe is not None
+    yolo_loaded = yolo_service is not None and yolo_service._model is not None
     return JsonResponse({
         'models': {
             'trocr': {
-                'loaded': trocr_service._pipe is not None,
+                'loaded': trocr_loaded,
                 'device': 'GPU' if torch.cuda.is_available() else 'CPU'
             },
             'yolo': {
-                'loaded': yolo_service._model is not None,
+                'loaded': yolo_loaded,
                 'device': 'GPU' if torch.cuda.is_available() else 'CPU'
             }
         },
