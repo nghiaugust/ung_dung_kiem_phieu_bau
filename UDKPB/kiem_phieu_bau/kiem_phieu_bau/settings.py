@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 
 from pathlib import Path
+from urllib.parse import quote
 from dotenv import load_dotenv
 import os
 
@@ -318,12 +319,28 @@ AI_SERVER_HEALTH_TIMEOUT = float(os.getenv('AI_SERVER_HEALTH_TIMEOUT', '0.5'))
 # CELERY CONFIGURATION (Async Task Queue)
 # =====================================================
 
+def _build_redis_url(db_index: int) -> str:
+    host = os.getenv('REDIS_HOST', 'localhost')
+    port = os.getenv('REDIS_PORT', '6379')
+    username = os.getenv('REDIS_USERNAME', '')
+    password = os.getenv('REDIS_PASSWORD', 'cntt902')
+
+    auth = ''
+    if username and password:
+        auth = f"{quote(username)}:{quote(password)}@"
+    elif password:
+        auth = f":{quote(password)}@"
+    elif username:
+        auth = f"{quote(username)}@"
+
+    return f"redis://{auth}{host}:{port}/{db_index}"
+
 # Redis broker URL cho Celery (sử dụng để lưu trữ task queue - database 0)
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL') or _build_redis_url(0)
 
 # Redis backend URL cho Celery (sử dụng để lưu trữ kết quả task - database 1)
 # Tách riêng database để dễ quản lý, monitor và tối ưu hóa
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND') or _build_redis_url(1)
 
 # Task serialization (định dạng dữ liệu khi truyền task)
 CELERY_ACCEPT_CONTENT = ['json']  # Chỉ chấp nhận JSON format
