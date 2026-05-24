@@ -63,6 +63,8 @@ urlpatterns = [
     # Checking (Hậu kiểm) - Web-friendly API endpoints (support session auth)
     path('checking/get-tasks-web/', views.api_get_checking_tasks_web, name='get_checking_tasks_web'),
     path('checking/submit-web/', views.api_submit_checking_result_web, name='submit_checking_result_web'),
+    path('checking/validity-web/', views.api_update_checking_validity_web, name='update_checking_validity_web'),
+    path('checking/skip-web/', views.api_skip_checking_task_web, name='skip_checking_task_web'),
     path('checking/statistics-web/', views.api_checking_statistics_web, name='checking_statistics_web'),
     
     # Checking (Hậu kiểm) - Web views

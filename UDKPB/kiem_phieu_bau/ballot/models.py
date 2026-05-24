@@ -77,6 +77,7 @@ class Ballot(models.Model): # phiếu bầu
 		('NEW', 'Mới - Chưa ai làm'),
         ('PROCESSING', 'Đang xử lý - Đang bị khóa bởi User'),
         ('DONE', 'Hoàn thành'),
+		('SKIP', 'Bỏ qua phiếu này')
 	)
 	checking_status = models.CharField(max_length=20, choices=CHECKING_STATUS, default='NEW')
 	checking_locked_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='checking_locked_ballots')  # Ai đang khóa để hậu kiểm

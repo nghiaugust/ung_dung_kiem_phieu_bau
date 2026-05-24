@@ -37,6 +37,10 @@
             <small class="text-muted">Đã hoàn thành:</small>
             <strong id="total-done" class="text-success">-</strong>
           </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Bỏ qua:</small>
+            <strong id="total-skipped" class="text-secondary">-</strong>
+          </div>
         </div>
 
         <!-- Thống kê cá nhân -->
@@ -53,6 +57,10 @@
           <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
             <small class="text-muted">Đã hoàn thành:</small>
             <strong id="user-completed" class="text-success">-</strong>
+          </div>
+          <div class="stats-item mb-1 d-flex justify-content-between align-items-center">
+            <small class="text-muted">Bỏ qua:</small>
+            <strong id="user-skipped" class="text-secondary">-</strong>
           </div>
         </div>
         
@@ -82,6 +90,12 @@
           <div class="badge bg-light text-dark fs-6" id="ballot-counter">
             <span id="current-ballot-index">0</span> / <span id="total-ballot-count">0</span>
           </div>
+          <button class="btn btn-success btn-sm" id="validity-btn" onclick="toggleValidity()" style="display: none;">
+            <i class="bi bi-shield-check"></i> <span class="validity-text">Hợp lệ</span>
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" id="skip-btn" onclick="skipBallot()" style="display: none;">
+            <i class="bi bi-skip-forward"></i> Bỏ qua
+          </button>
           <button class="btn btn-success btn-sm" id="approve-btn" onclick="approveBallot()" style="display: none;">
             <i class="bi bi-check-circle"></i> Duyệt
           </button>
@@ -126,6 +140,7 @@ const pollId = {{ poll.poll_id }};
 let currentBallot = null;
 let voteStates = {};
 let hasChanges = false;
+let ballotValidity = true;
 let countdownInterval = null;
 const CHECKING_TIMEOUT_MINUTES = 5;
 
@@ -166,6 +181,7 @@ async function loadTotalStatistics() {
         document.getElementById('total-new').textContent = data.statistics.new || 0;
         document.getElementById('total-processing').textContent = data.statistics.processing || 0;
         document.getElementById('total-done').textContent = data.statistics.done || 0;
+        document.getElementById('total-skipped').textContent = data.statistics.skipped || 0;
       }
     }
   } catch (error) {
@@ -190,6 +206,7 @@ async function loadUserStatistics() {
         document.getElementById('user-assigned').textContent = data.statistics.total_assigned || 0;
         document.getElementById('user-processing').textContent = data.statistics.processing || 0;
         document.getElementById('user-completed').textContent = data.statistics.completed || 0;
+        document.getElementById('user-skipped').textContent = data.statistics.skipped || 0;
       }
     }
   } catch (error) {
@@ -235,6 +252,8 @@ function showNoBallotMessage() {
   document.getElementById('loading-message').style.display = 'none';
   document.getElementById('no-ballot-message').style.display = 'block';
   document.getElementById('ballot-display-area').style.display = 'none';
+  document.getElementById('validity-btn').style.display = 'none';
+  document.getElementById('skip-btn').style.display = 'none';
   document.getElementById('approve-btn').style.display = 'none';
   document.getElementById('save-approve-btn').style.display = 'none';
   document.getElementById('countdown-timer').style.display = 'none';
@@ -250,11 +269,16 @@ function displayBallot(ballot) {
   document.getElementById('loading-message').style.display = 'none';
   document.getElementById('no-ballot-message').style.display = 'none';
   document.getElementById('ballot-display-area').style.display = 'block';
+  document.getElementById('validity-btn').style.display = 'inline-block';
+  document.getElementById('skip-btn').style.display = 'inline-block';
   document.getElementById('approve-btn').style.display = 'inline-block';
   
   // Set image
   const imgUrl = ballot.detection_image_url || ballot.ballot_image_url;
   document.getElementById('ballot-image').src = imgUrl;
+  ballotValidity = ballot.is_valid !== false;
+  updateValidityButton();
+  setActionButtonsDisabled(false);
   
   // Initialize vote states
   voteStates = {};
@@ -458,6 +482,130 @@ function checkForChanges() {
   }
 }
 
+function updateValidityButton() {
+  const btn = document.getElementById('validity-btn');
+  if (!btn) return;
+
+  const icon = btn.querySelector('i');
+  const text = btn.querySelector('.validity-text');
+
+  if (ballotValidity) {
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-success');
+    if (icon) icon.className = 'bi bi-shield-check';
+    if (text) text.textContent = 'Hợp lệ';
+  } else {
+    btn.classList.remove('btn-success');
+    btn.classList.add('btn-danger');
+    if (icon) icon.className = 'bi bi-shield-x';
+    if (text) text.textContent = 'Không hợp lệ';
+  }
+}
+
+async function toggleValidity() {
+  if (!currentBallot) return;
+
+  const btn = document.getElementById('validity-btn');
+  const nextValidity = !ballotValidity;
+  if (btn) btn.disabled = true;
+
+  try {
+    const token = getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch('/api/checking/validity-web/', {
+      method: 'POST',
+      headers: headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        ballot_id: currentBallot.ballot_id,
+        is_valid: nextValidity
+      })
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      ballotValidity = data.is_valid;
+      currentBallot.is_valid = data.is_valid;
+      updateValidityButton();
+      showAlert(ballotValidity ? 'Đã đánh dấu phiếu hợp lệ.' : 'Đã đánh dấu phiếu không hợp lệ.', 'success');
+    } else {
+      const errorMessage = data.message || data.error || 'Không cập nhật được trạng thái hợp lệ';
+      showAlert(errorMessage, 'danger');
+    }
+  } catch (error) {
+    console.error('Error updating validity:', error);
+    showAlert('Có lỗi xảy ra khi cập nhật trạng thái hợp lệ!', 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function setActionButtonsDisabled(disabled) {
+  ['approve-btn', 'save-approve-btn', 'skip-btn', 'validity-btn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = disabled;
+  });
+}
+
+async function skipBallot() {
+  if (!currentBallot) return;
+
+  const confirmMessage = hasChanges
+    ? 'Phiếu có thay đổi chưa lưu. Bạn có chắc muốn bỏ qua phiếu này?'
+    : 'Bạn có chắc muốn bỏ qua phiếu này?';
+
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  try {
+    setActionButtonsDisabled(true);
+
+    const token = getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch('/api/checking/skip-web/', {
+      method: 'POST',
+      headers: headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        ballot_id: currentBallot.ballot_id
+      })
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      showAlert('Đã bỏ qua phiếu.', 'success');
+      currentBallot = null;
+      hasChanges = false;
+
+      await loadUserStatistics();
+      await loadTotalStatistics();
+
+      setTimeout(() => {
+        loadBallot();
+      }, 500);
+    } else {
+      const errorMessage = data.message || data.error || 'Không thể bỏ qua phiếu này';
+      showAlert(errorMessage, 'danger');
+      setActionButtonsDisabled(false);
+    }
+  } catch (error) {
+    console.error('Error skipping ballot:', error);
+    showAlert('Có lỗi xảy ra khi bỏ qua phiếu!', 'danger');
+    setActionButtonsDisabled(false);
+  }
+}
+
 async function saveAndApprove() {
   await submitBallot();
 }
@@ -492,7 +640,7 @@ async function submitBallot() {
       body: JSON.stringify({
         ballot_id: currentBallot.ballot_id,
         votes: votes,
-        is_valid: true
+        is_valid: ballotValidity
       })
     });
     

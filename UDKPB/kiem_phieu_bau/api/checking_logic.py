@@ -193,6 +193,27 @@ class CheckingDistributionService:
             return False, "Không thể mở khóa phiếu này"
     
     @staticmethod
+    def skip_checking_task(user, ballot_id):
+        """
+        Mark the current checking task as skipped.
+        """
+        try:
+            with transaction.atomic():
+                ballot = Ballot.objects.select_for_update().get(
+                    ballot_id=ballot_id,
+                    checking_locked_by=user,
+                    checking_status='PROCESSING'
+                )
+
+                ballot.checking_status = 'SKIP'
+                ballot.save(update_fields=['checking_status'])
+
+                return True, "Da bo qua phieu thanh cong"
+
+        except Ballot.DoesNotExist:
+            return False, "Khong the bo qua phieu nay"
+
+    @staticmethod
     def get_checking_statistics(user=None, poll_id=None):
         """
         Lấy thống kê hậu kiểm.
@@ -215,6 +236,7 @@ class CheckingDistributionService:
                 'total_assigned': query.filter(checking_locked_by=user).count(),
                 'processing': query.filter(checking_locked_by=user, checking_status='PROCESSING').count(),
                 'completed': query.filter(checking_locked_by=user, checking_status='DONE').count(),
+                'skipped': query.filter(checking_locked_by=user, checking_status='SKIP').count(),
             }
         else:
             # Thống kê tổng quát
@@ -223,6 +245,7 @@ class CheckingDistributionService:
                 'new': query.filter(checking_status='NEW').count(),
                 'processing': query.filter(checking_status='PROCESSING').count(),
                 'done': query.filter(checking_status='DONE').count(),
+                'skipped': query.filter(checking_status='SKIP').count(),
             }
         
         return stats

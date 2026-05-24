@@ -3649,6 +3649,27 @@ def api_release_checking_lock(request):
         }, status=500)
 
 
+def _get_checking_web_user(request):
+    user = None
+
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token_str = auth_header.split(' ')[1]
+        try:
+            token = APIToken.objects.select_related('user').get(
+                token=token_str,
+                expires_at__gt=timezone.now()
+            )
+            user = token.user
+        except APIToken.DoesNotExist:
+            pass
+
+    if not user and request.user.is_authenticated:
+        user = request.user
+
+    return user
+
+
 @require_http_methods(["GET"])
 def api_get_checking_tasks_web(request):
     """
@@ -3943,6 +3964,139 @@ def api_submit_checking_result_web(request):
             'message': str(e)
         }, status=500)
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_update_checking_validity_web(request):
+    """
+    Update is_valid for the current checking task.
+    """
+    try:
+        user = _get_checking_web_user(request)
+        if not user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Unauthorized',
+                'message': 'Vui long dang nhap'
+            }, status=401)
+
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON',
+                'message': 'Du lieu JSON khong hop le'
+            }, status=400)
+
+        ballot_id = data.get('ballot_id')
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Thieu thong tin ballot_id'
+            }, status=400)
+
+        new_is_valid = data.get('is_valid', None)
+        if isinstance(new_is_valid, str):
+            new_is_valid = new_is_valid.strip().lower() in ('true', '1', 'yes', 'on')
+        elif new_is_valid is not None:
+            new_is_valid = bool(new_is_valid)
+
+        try:
+            with transaction.atomic():
+                ballot = Ballot.objects.select_for_update().get(
+                    ballot_id=ballot_id,
+                    checking_locked_by=user,
+                    checking_status='PROCESSING'
+                )
+
+                ballot.is_valid = not ballot.is_valid if new_is_valid is None else new_is_valid
+                ballot.save(update_fields=['is_valid'])
+
+            return JsonResponse({
+                'success': True,
+                'ballot_id': ballot_id,
+                'is_valid': ballot.is_valid
+            })
+
+        except Ballot.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied',
+                'message': 'Phieu nay khong thuoc ve ban hoac khong con dang xu ly'
+            }, status=403)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_skip_checking_task_web(request):
+    """
+    Mark the current checking task as SKIP.
+    """
+    try:
+        user = _get_checking_web_user(request)
+        if not user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Unauthorized',
+                'message': 'Vui long dang nhap'
+            }, status=401)
+
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON',
+                'message': 'Du lieu JSON khong hop le'
+            }, status=400)
+
+        ballot_id = data.get('ballot_id')
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Thieu thong tin ballot_id'
+            }, status=400)
+
+        is_success, message = CheckingDistributionService.skip_checking_task(
+            user=user,
+            ballot_id=ballot_id
+        )
+
+        if is_success:
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'ballot_id': ballot_id,
+                'checking_status': 'SKIP'
+            })
+
+        return JsonResponse({
+            'success': False,
+            'error': message,
+            'ballot_id': ballot_id
+        }, status=400)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
 @require_http_methods(["GET"])
 def api_checking_statistics_web(request):
     """
@@ -4179,6 +4333,7 @@ def checking_detail(request, poll_id):
             ).count(),
             'processing': Ballot.objects.filter(poll=poll, checking_status='PROCESSING').count(),
             'checked': Ballot.objects.filter(poll=poll, checking_status='DONE').count(),
+            'skipped': Ballot.objects.filter(poll=poll, checking_status='SKIP').count(),
         }
         
         return render(request, 'api/checking_detail.html', {
