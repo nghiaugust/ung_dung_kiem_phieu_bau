@@ -37,6 +37,7 @@ REDIS_PORT=6379
 CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/1
 AI_SERVER_BASE_URL=http://ai-server:8081
+AI_SERVER_HEALTH_TIMEOUT=2
 
 WEB_PORT=8000
 AI_PORT_HOST=8081
@@ -49,6 +50,8 @@ NGINX_HTTPS_PORT=443
 FLOWER_USER=admin
 FLOWER_PASSWORD=admin
 
+COLLECTSTATIC_CLEAR=0
+
 # Tuy chon: mirror PyPI neu mang bi chan/chap chon
 PIP_INDEX_URL=https://pypi.org/simple
 ```
@@ -57,8 +60,17 @@ PIP_INDEX_URL=https://pypi.org/simple
 
 Chay tu thu muc goc du an (`ung_dung_kiem_phieu_bau`):
 
+Build lan dau hoac sau khi doi requirements/Dockerfile:
+
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose -f docker/docker-compose.yml --profile ai build
+docker compose -f docker/docker-compose.yml --profile ai up -d
+```
+
+Neu chi khoi dong lai sau khi code/config khong doi dependencies:
+
+```bash
+docker compose -f docker/docker-compose.yml --profile ai up -d
 ```
 
 ## 5. Kiem tra container
@@ -75,10 +87,12 @@ docker compose -f docker/docker-compose.yml logs -f celery-worker
 docker compose -f docker/docker-compose.yml logs -f ai-server
 ```
 
+Trong Docker, trang "Cau hinh he thong" tren web chi hien thi trang thai. Viec bat/tat worker va AI server nen lam bang Docker Compose de tranh tao process con ben trong container web.
+
 Neu chi muon khoi dong rieng AI server:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --build ai-server
+docker compose -f docker/docker-compose.yml up -d ai-server
 ```
 
 ## 6. Truy cap web
@@ -96,7 +110,7 @@ docker compose -f docker/docker-compose.yml down
 ## 8. Tuy chon: Chay DEV compose
 
 ```bash
-docker compose -f docker/docker-compose.dev.yml up -d --build
+docker compose -f docker/docker-compose.dev.yml up -d
 docker compose -f docker/docker-compose.dev.yml ps
 docker compose -f docker/docker-compose.dev.yml down
 ```

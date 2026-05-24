@@ -28,8 +28,11 @@ UDKPB/kiem_phieu_bau/image_output/
 
 # Optional large model assets (mounted via volume at runtime)
 UDKPB/ai_core/model_trocr/
-UDKPB/ai_core/model_viet_name_ocr/
+UDKPB/ai_core/model_vietnameocr/VietNameOCR/weights/
+UDKPB/ai_core/model_vietnameocr/**/__pycache__/
 UDKPB/ai_core/model_yolo_x/
+UDKPB/ai_core/**/runs/
+UDKPB/ai_core/**/outputs/
 
 # Temporary files
 **/*.log

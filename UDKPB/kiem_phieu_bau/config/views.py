@@ -25,6 +25,8 @@ def dashboard(request):
         "selected_log": selected_log,
         "selected_log_label": service_manager.COMPONENTS[selected_log]["label"],
         "log_text": service_manager.tail_log(selected_log),
+        "subprocess_control_enabled": service_manager.subprocess_control_enabled(),
+        "is_docker_mode": service_manager.is_docker_mode(),
     }
     return render(request, "config/dashboard.html", context)
 
@@ -62,4 +64,3 @@ def restart_component(request, component_id):
     success, message = service_manager.restart_component(component_id, concurrency)
     (messages.success if success else messages.error)(request, message)
     return redirect("config:dashboard")
-

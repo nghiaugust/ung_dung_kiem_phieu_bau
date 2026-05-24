@@ -100,6 +100,22 @@ def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_docker_mode() -> bool:
+    return env_bool("RUNNING_IN_DOCKER", False) or Path("/.dockerenv").exists()
+
+
+def subprocess_control_enabled() -> bool:
+    default = not is_docker_mode()
+    return env_bool("SYSTEM_CONFIG_SUBPROCESS_CONTROL", default)
+
+
 def load_state() -> dict:
     ensure_runtime_dirs()
     path = state_file()
@@ -232,25 +248,81 @@ def _creation_kwargs() -> dict:
     return kwargs
 
 
+def _external_model_running(model_key: str) -> bool:
+    import requests
+
+    try:
+        response = requests.get(
+            f"{_settings_model_base_url(model_key)}/api/health/",
+            timeout=settings.AI_SERVER_HEALTH_TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return bool(data.get("services", {}).get(model_key))
+    except Exception:
+        return False
+
+
+def _external_celery_queue_running(queue_name: str) -> bool:
+    try:
+        from kiem_phieu_bau.celery import app
+
+        replies = app.control.inspect(timeout=0.7).active_queues() or {}
+    except Exception:
+        return False
+
+    for queues in replies.values():
+        for queue in queues or []:
+            if queue.get("name") == queue_name:
+                return True
+    return False
+
+
+def get_external_component_running(component: dict) -> bool:
+    if component["kind"] == "ai_model":
+        return _external_model_running(component["model_key"])
+    if component["kind"] == "celery":
+        return _external_celery_queue_running(component["queue"])
+    return False
+
+
 def get_component_status(component_id: str) -> dict:
     if component_id not in COMPONENTS:
         raise ValueError("Unknown component")
 
-    state = load_state()
-    component_state = state.get("components", {}).get(component_id, {})
-    pid = component_state.get("pid")
-    running = pid_is_running(pid)
     component = COMPONENTS[component_id]
+    controllable = subprocess_control_enabled()
+
+    if controllable:
+        state = load_state()
+        component_state = state.get("components", {}).get(component_id, {})
+        pid = component_state.get("pid")
+        running = pid_is_running(pid)
+        started_at = component_state.get("started_at")
+        stopped_at = component_state.get("stopped_at")
+        concurrency = component_state.get("concurrency", component["default_concurrency"])
+        command = component_state.get("command", "")
+        status_note = ""
+    else:
+        pid = None
+        running = get_external_component_running(component)
+        started_at = None
+        stopped_at = None
+        concurrency = component["default_concurrency"]
+        command = ""
+        status_note = "Quan ly bang Docker Compose"
 
     return {
         **component,
         "pid": pid,
         "running": running,
-        "started_at": component_state.get("started_at"),
-        "stopped_at": component_state.get("stopped_at"),
-        "concurrency": component_state.get("concurrency", component["default_concurrency"]),
-        "command": component_state.get("command", ""),
+        "started_at": started_at,
+        "stopped_at": stopped_at,
+        "concurrency": concurrency,
+        "command": command,
         "log_file": str(component_log_path(component_id)),
+        "controllable": controllable,
+        "status_note": status_note,
         "base_url": get_model_base_url(component["model_key"]) if component["kind"] == "ai_model" else "",
     }
 
@@ -262,6 +334,9 @@ def get_all_component_statuses() -> list[dict]:
 def start_component(component_id: str, concurrency=None) -> tuple[bool, str]:
     if component_id not in COMPONENTS:
         return False, "Thanh phan khong hop le."
+
+    if not subprocess_control_enabled():
+        return False, "Dang chay Docker mode: hay bat/tat thanh phan bang docker compose, khong spawn process trong web container."
 
     status = get_component_status(component_id)
     if status["running"]:
@@ -337,6 +412,9 @@ def stop_component(component_id: str) -> tuple[bool, str]:
     if component_id not in COMPONENTS:
         return False, "Thanh phan khong hop le."
 
+    if not subprocess_control_enabled():
+        return False, "Dang chay Docker mode: hay bat/tat thanh phan bang docker compose, khong kill process trong web container."
+
     state = load_state()
     component_state = state.setdefault("components", {}).setdefault(component_id, {})
     pid = component_state.get("pid")
@@ -356,11 +434,26 @@ def stop_component(component_id: str) -> tuple[bool, str]:
 
 
 def restart_component(component_id: str, concurrency=None) -> tuple[bool, str]:
+    if not subprocess_control_enabled():
+        return False, "Dang chay Docker mode: hay khoi dong lai service bang docker compose."
+
     stop_component(component_id)
     return start_component(component_id, concurrency)
 
 
 def tail_log(component_id: str, max_lines: int = 200, max_bytes: int = 200_000) -> str:
+    if not subprocess_control_enabled():
+        service_name = {
+            "upload_worker": "celery-worker",
+            "counting_worker": "celery-worker",
+            MODEL_VIETNAMEOCR: "ai-server",
+            MODEL_YOLO_X: "ai-server",
+        }.get(component_id, component_id)
+        return (
+            "Docker mode: component duoc quan ly bang Docker Compose.\n"
+            f"Xem log bang: docker compose -f docker/docker-compose.yml logs -f {service_name}"
+        )
+
     log_path = component_log_path(component_id)
     if not log_path.exists():
         return "Chua co log."
@@ -383,6 +476,9 @@ def _settings_model_base_url(model_key: str) -> str:
 
 
 def get_managed_model_base_url(model_key: str) -> str | None:
+    if not subprocess_control_enabled():
+        return None
+
     component_id = MODEL_COMPONENT_IDS.get(model_key)
     if not component_id:
         return None
@@ -423,4 +519,3 @@ def get_ai_model_health_statuses(timeout=None) -> dict:
         except Exception:
             statuses[model_key] = False
     return statuses
-

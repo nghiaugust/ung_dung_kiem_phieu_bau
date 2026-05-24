@@ -66,8 +66,12 @@ temp/
 *.tmp
 
 # Model files (nếu quá lớn, sẽ download trong Dockerfile)
-# UDKPB/ai_core/model_trocr/models--microsoft--trocr-base-printed/
-# UDKPB/ai_core/model_yolo_x/best.pt
+UDKPB/ai_core/model_trocr/
+UDKPB/ai_core/model_vietnameocr/VietNameOCR/weights/
+UDKPB/ai_core/model_vietnameocr/**/__pycache__/
+UDKPB/ai_core/model_yolo_x/
+UDKPB/ai_core/**/runs/
+UDKPB/ai_core/**/outputs/
 
 # Backups
 *.bak

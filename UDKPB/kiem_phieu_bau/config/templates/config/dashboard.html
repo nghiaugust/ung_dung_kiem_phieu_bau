@@ -59,7 +59,13 @@
 <div class="config-toolbar">
   <div>
     <h2 class="mb-1">Cau hinh he thong</h2>
-    <div class="muted-small">Chi tai khoan superuser duoc bat/tat worker va model.</div>
+    <div class="muted-small">
+      {% if subprocess_control_enabled %}
+        Chi tai khoan superuser duoc bat/tat worker va model.
+      {% else %}
+        Docker mode: trang nay chi hien thi trang thai, bat/tat bang Docker Compose.
+      {% endif %}
+    </div>
   </div>
   <a href="{% url 'account:tai_khoan' %}" class="btn btn-outline-secondary">Quay lai tai khoan</a>
 </div>
@@ -73,6 +79,14 @@
       {{ message }}
     </div>
   {% endfor %}
+{% endif %}
+
+{% if not subprocess_control_enabled %}
+<div class="alert alert-info" role="alert">
+  He thong dang chay trong Docker. Cac nut bat/tat process noi bo bi vo hieu hoa de tranh tao worker/model nam trong container web.
+  Dung lenh <code>docker compose -f docker/docker-compose.yml up -d ai-server celery-worker</code>
+  hoac <code>docker compose -f docker/docker-compose.yml stop ai-server celery-worker</code>.
+</div>
 {% endif %}
 
 <div class="table-responsive">
@@ -100,6 +114,9 @@
           {% else %}
             <span class="badge text-bg-secondary">Da tat</span>
           {% endif %}
+          {% if component.status_note %}
+            <div class="muted-small">{{ component.status_note }}</div>
+          {% endif %}
         </td>
         <td>{{ component.pid|default:"-" }}</td>
         <td>
@@ -114,6 +131,7 @@
               min="1"
               max="32"
               value="{{ component.concurrency }}"
+              {% if not component.controllable %}disabled{% endif %}
             />
             <span class="muted-small">{{ component.concurrency_label }}</span>
           </div>
@@ -129,15 +147,19 @@
         </td>
         <td>
           <div class="config-actions">
-            <form id="control-{{ component.id }}" method="post" action="{% url 'config:start_component' component.id %}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-success" formaction="{% url 'config:start_component' component.id %}">Bat</button>
-              <button type="submit" class="btn btn-sm btn-warning" formaction="{% url 'config:restart_component' component.id %}">Khoi dong lai</button>
-            </form>
-            <form method="post" action="{% url 'config:stop_component' component.id %}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-danger">Tat</button>
-            </form>
+            {% if component.controllable %}
+              <form id="control-{{ component.id }}" method="post" action="{% url 'config:start_component' component.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-success" formaction="{% url 'config:start_component' component.id %}">Bat</button>
+                <button type="submit" class="btn btn-sm btn-warning" formaction="{% url 'config:restart_component' component.id %}">Khoi dong lai</button>
+              </form>
+              <form method="post" action="{% url 'config:stop_component' component.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-danger">Tat</button>
+              </form>
+            {% else %}
+              <span class="badge text-bg-info">Docker Compose</span>
+            {% endif %}
             <a href="{% url 'config:dashboard' %}?log={{ component.id }}" class="btn btn-sm btn-outline-primary">Xem log</a>
           </div>
         </td>

@@ -28,6 +28,7 @@ services:
 
   # Django Web (Development mode)
   web:
+    image: udkpb_web:dev
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -49,7 +50,12 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8081}
+      AI_SERVER_HEALTH_TIMEOUT: "${DEV_AI_SERVER_HEALTH_TIMEOUT:-2}"
       ALLOWED_HOSTS: "*"
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
+      COLLECTSTATIC_ON_START: "0"
+      CREATE_DEFAULT_SUPERUSER: "0"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - ../UDKPB/ai_core:/app/ai_core
@@ -63,6 +69,7 @@ services:
 
   # AI Server
   ai-server:
+    image: udkpb_ai_runtime:dev
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -70,6 +77,9 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: udkpb_ai_server_dev
     restart: unless-stopped
+    environment:
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     volumes:
       - ../UDKPB/ai_core:/app/ai_core
       - media_dev_files:/app/kiem_phieu_bau/media
@@ -89,6 +99,7 @@ services:
 
   # Celery Worker
   celery-worker:
+    image: udkpb_ai_runtime:dev
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -109,6 +120,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       AI_SERVER_BASE_URL: ${DEV_AI_SERVER_BASE_URL:-http://ai-server:8081}
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - ../UDKPB/ai_core:/app/ai_core
@@ -116,7 +129,7 @@ services:
     depends_on:
       - mysql
       - redis
-    command: celery -A kiem_phieu_bau worker --pool=solo -l info
+    command: celery -A kiem_phieu_bau worker -Q upload_queue,counting_queue,default --pool=solo -l info
 
 volumes:
   mysql_dev_data:

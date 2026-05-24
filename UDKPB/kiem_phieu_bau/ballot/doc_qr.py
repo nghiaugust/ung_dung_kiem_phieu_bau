@@ -4,18 +4,45 @@ Module đọc QR code và ArUco markers từ ảnh phiếu bầu
 import cv2
 import numpy as np
 import json
+import os
 import sys
 
-try:
-    from qreader import QReader
-    # Khởi tạo 1 lần duy nhất khi chạy server. 
-    # model_size='s' cân bằng giữa tốc độ và độ chính xác.
-    GLOBAL_QREADER = QReader(model_size='s', min_confidence=0.5)
-except Exception as e:
-    print(f"⚠️ Không thể tải QReader: {e}")
-    GLOBAL_QREADER = None
+GLOBAL_QREADER = None
+QREADER_LOAD_ATTEMPTED = False
 
 SHARED_ARUCO_ID = 17
+
+
+def _env_bool(name, default=True):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_qreader():
+    """
+    Lazy-load QReader only when server-side QR fallback is actually needed.
+    Loading it at Django import time slows down container startup significantly.
+    """
+    global GLOBAL_QREADER, QREADER_LOAD_ATTEMPTED
+
+    if not _env_bool("ENABLE_QREADER", True):
+        return None
+
+    if QREADER_LOAD_ATTEMPTED:
+        return GLOBAL_QREADER
+
+    QREADER_LOAD_ATTEMPTED = True
+    try:
+        from qreader import QReader
+
+        GLOBAL_QREADER = QReader(model_size='s', min_confidence=0.5)
+    except Exception as e:
+        print(f"⚠️ Không thể tải QReader: {e}")
+        GLOBAL_QREADER = None
+
+    return GLOBAL_QREADER
 
 
 def _normalize_quad_points(points):
@@ -259,7 +286,8 @@ def detect_qr_codes(image):
         return []
 
     try:
-        if GLOBAL_QREADER:
+        qreader = get_qreader()
+        if qreader:
             # 2. Chuẩn hóa ảnh cho QReader (Fix lỗi QReader crash)
             # Chuyển sang RGB
             if len(image.shape) == 3 and image.shape[2] == 3:
@@ -271,7 +299,7 @@ def detect_qr_codes(image):
             rgb_image = np.ascontiguousarray(rgb_image, dtype=np.uint8)
 
             # 3. Detect
-            decoded_data = GLOBAL_QREADER.detect_and_decode(image=rgb_image, return_detections=True)
+            decoded_data = qreader.detect_and_decode(image=rgb_image, return_detections=True)
             
             # 4. Parse kết quả
             if decoded_data and len(decoded_data) == 2:

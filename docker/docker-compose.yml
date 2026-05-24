@@ -49,6 +49,7 @@ services:
   # Django Web Application
   # ================================
   web:
+    image: udkpb_web:local
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -60,6 +61,10 @@ services:
       - .env.docker
     environment:
       AI_SERVER_BASE_URL: ${AI_SERVER_BASE_URL:-http://ai-server:8081}
+      AI_SERVER_HEALTH_TIMEOUT: "${AI_SERVER_HEALTH_TIMEOUT:-2}"
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
+      COLLECTSTATIC_CLEAR: "${COLLECTSTATIC_CLEAR:-0}"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - media_files:/app/kiem_phieu_bau/media
@@ -85,6 +90,7 @@ services:
   # AI Server (VietNameOCR + YOLO API)
   # ================================
   ai-server:
+    image: udkpb_ai_runtime:local
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -94,6 +100,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     volumes:
       - ../UDKPB/ai_core:/app/ai_core
       - media_files:/app/kiem_phieu_bau/media
@@ -115,6 +124,7 @@ services:
   # Celery Worker (AI Processing)
   # ================================
   celery-worker:
+    image: udkpb_ai_runtime:local
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -126,6 +136,8 @@ services:
       - .env.docker
     environment:
       AI_SERVER_BASE_URL: ${AI_SERVER_BASE_URL:-http://ai-server:8081}
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - media_files:/app/kiem_phieu_bau/media
@@ -139,6 +151,7 @@ services:
         condition: service_healthy
     command: >
       celery -A kiem_phieu_bau worker
+      -Q upload_queue,counting_queue,default
       --pool=gevent
       --concurrency=1
       --loglevel=info
@@ -151,6 +164,7 @@ services:
   # Celery Worker 2 (Scale thêm nếu cần)
   # ================================
   celery-worker-2:
+    image: udkpb_ai_runtime:local
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -162,6 +176,8 @@ services:
       - .env.docker
     environment:
       AI_SERVER_BASE_URL: ${AI_SERVER_BASE_URL:-http://ai-server:8081}
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - media_files:/app/kiem_phieu_bau/media
@@ -175,6 +191,7 @@ services:
         condition: service_healthy
     command: >
       celery -A kiem_phieu_bau worker
+      -Q upload_queue,counting_queue,default
       --pool=gevent
       --concurrency=1
       --loglevel=info
@@ -189,6 +206,7 @@ services:
   # Celery Beat (Scheduler - Optional)
   # ================================
   celery-beat:
+    image: udkpb_ai_runtime:local
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -198,6 +216,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     volumes:
       - ../UDKPB/kiem_phieu_bau:/app/kiem_phieu_bau
       - celerybeat_data:/app/kiem_phieu_bau/celerybeat-schedule
@@ -219,6 +240,7 @@ services:
   # Flower (Celery Monitoring)
   # ================================
   flower:
+    image: udkpb_ai_runtime:local
     build:
       context: ..
       dockerfile: docker/Dockerfile.celery
@@ -228,6 +250,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env.docker
+    environment:
+      RUNNING_IN_DOCKER: "1"
+      SYSTEM_CONFIG_SUBPROCESS_CONTROL: "False"
     ports:
       - "${FLOWER_PORT:-5555}:5555"
     networks:

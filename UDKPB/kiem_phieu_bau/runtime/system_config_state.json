@@ -1,33 +1,33 @@
 {
   "components": {
     "upload_worker": {
-      "pid": 10452,
-      "started_at": "2026-05-24 20:19:45",
+      "pid": 13092,
+      "started_at": "2026-05-24 20:36:35",
       "stopped_at": null,
       "concurrency": 1,
       "command": "C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python312\\python.exe -m celery -A kiem_phieu_bau worker -Q upload_queue --pool=gevent --concurrency=1 --hostname=upload_worker@%h -l info",
       "port": null
     },
     "counting_worker": {
-      "pid": 7052,
-      "started_at": "2026-05-24 20:19:47",
-      "stopped_at": null,
+      "pid": 4676,
+      "started_at": "2026-05-24 20:36:37",
+      "stopped_at": "2026-05-24 20:51:49",
       "concurrency": 1,
       "command": "C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python312\\python.exe -m celery -A kiem_phieu_bau worker -Q counting_queue --pool=gevent --concurrency=1 --hostname=counting_worker1@%h -l info",
       "port": null
     },
     "model_vietnameocr": {
-      "pid": 16424,
-      "started_at": "2026-05-24 18:49:33",
-      "stopped_at": null,
+      "pid": 8836,
+      "started_at": "2026-05-24 20:27:16",
+      "stopped_at": "2026-05-24 20:27:44",
       "concurrency": 4,
       "command": "C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python312\\python.exe run_waitress_ai.py --models model_vietnameocr --port 8081 --threads 4",
       "port": 8081
     },
     "model_yolo_x": {
-      "pid": 13760,
-      "started_at": "2026-05-24 20:14:00",
-      "stopped_at": null,
+      "pid": 3112,
+      "started_at": "2026-05-24 20:36:39",
+      "stopped_at": "2026-05-24 20:51:51",
       "concurrency": 4,
       "command": "C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python312\\python.exe run_waitress_ai.py --models model_yolo_x --port 8082 --threads 4",
       "port": 8082

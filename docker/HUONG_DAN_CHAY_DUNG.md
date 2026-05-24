@@ -2,28 +2,34 @@
 
 ## DEV
 
+Build lai chi khi doi Dockerfile/requirements:
+docker compose -f docker/docker-compose.dev.yml --profile ai build
+
 Chay mac dinh (khong AI server):
-docker compose -f docker/docker-compose.dev.yml up -d --build
+docker compose -f docker/docker-compose.dev.yml up -d
 
 Chay kem AI server:
-docker compose -f docker/docker-compose.dev.yml --profile ai up -d --build
+docker compose -f docker/docker-compose.dev.yml --profile ai up -d
 
 Chi chay AI server (DEV):
-docker compose -f docker/docker-compose.dev.yml up -d --build ai-server
+docker compose -f docker/docker-compose.dev.yml up -d ai-server
 
 Dung:
 docker compose -f docker/docker-compose.dev.yml down
 
 ## PROD
 
+Build lai chi khi doi Dockerfile/requirements:
+docker compose -f docker/docker-compose.yml --profile ai build
+
 Chay mac dinh (khong AI server):
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose -f docker/docker-compose.yml up -d
 
 Chay kem AI server:
-docker compose -f docker/docker-compose.yml --profile ai up -d --build
+docker compose -f docker/docker-compose.yml --profile ai up -d
 
 Chi chay AI server (PROD):
-docker compose -f docker/docker-compose.yml up -d --build ai-server
+docker compose -f docker/docker-compose.yml up -d ai-server
 
 Tao tai khoản:
 docker compose -f docker/docker-compose.yml exec web python manage.py shell -c "from account.models import Account; Account.objects.create_superuser('admin1', email='admin1@example.com', password='1')"
