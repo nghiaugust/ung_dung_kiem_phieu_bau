@@ -30,7 +30,7 @@ from django.db import transaction
 
 # Sửa ID poll cần cleanup tại đây nếu không muốn truyền tham số --poll-id.
 # Đặt None nếu muốn script tự chọn poll hiện tại như logic cũ.
-POLL_ID_TO_CLEANUP = 103
+POLL_ID_TO_CLEANUP = 109
 
 
 def get_current_poll_id():
@@ -120,6 +120,7 @@ def cleanup_poll(poll_id):
                 ballot.counting_status = 'pending'  # is_checked sẽ tự động = False
                 ballot.checking_status = 'NEW'      # is_post_checked sẽ tự động = False
                 ballot.input_by = None
+                ballot.is_valid = True  # Reset về hợp lệ (nếu có trường hợp nào bị đánh dấu không hợp lệ trước
                 ballot.process_status = 'no_upload'
                 ballot.checking_locked_by = None
                 ballot.checking_locked_at = None
@@ -127,6 +128,7 @@ def cleanup_poll(poll_id):
                     'counting_status',
                     'checking_status',
                     'input_by',
+                    'is_valid',
                     'process_status',
                     'checking_locked_by',
                     'checking_locked_at',

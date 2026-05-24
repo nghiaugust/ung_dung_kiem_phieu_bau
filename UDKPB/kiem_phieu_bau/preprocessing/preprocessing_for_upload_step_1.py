@@ -115,6 +115,20 @@ def _polygon_area(points):
 	return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
 
 
+def _signed_polygon_area(points):
+	points = np.array(points, dtype=np.float32)
+	x = points[:, 0]
+	y = points[:, 1]
+	return float(0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _portrait_output_dimensions(chieu_ngang_cm, chieu_doc_cm, dpi):
+	pixels_per_cm = dpi / 2.54
+	first = int(chieu_ngang_cm * pixels_per_cm)
+	second = int(chieu_doc_cm * pixels_per_cm)
+	return min(first, second), max(first, second)
+
+
 def _validate_warp_points(src_pts, rotation_label):
 	"""Reject clearly crossed or degenerate marker geometry before perspective warp."""
 	if src_pts.shape != (4, 2):
@@ -167,6 +181,24 @@ def _extract_client_src_points(client_detection):
 	return np.array([_coerce_client_point(point) for point in src_points], dtype="float32")
 
 
+def _normalize_client_src_points_for_portrait(src_pts):
+	"""
+	App sends points by ballot role, but with rotated captures the role order can have
+	opposite winding in image coordinates. Standardize the winding before warp so the
+	homography cannot mirror the final ballot image.
+	"""
+	signed_area = _signed_polygon_area(src_pts)
+	if signed_area < 0:
+		print("[STEP1] Doi thu tu diem app gui de tranh anh bi lat/mirror")
+		return np.array([
+			src_pts[0],  # QR / top-left
+			src_pts[3],  # bottom-left becomes portrait top-right axis
+			src_pts[2],  # bottom-right
+			src_pts[1],  # top-right becomes portrait bottom-left axis
+		], dtype="float32")
+	return src_pts
+
+
 def lam_phang_anh_phieu_bau_tu_diem_moc(
 	duong_dan_anh_dau_vao,
 	duong_dan_anh_dau_ra,
@@ -180,9 +212,7 @@ def lam_phang_anh_phieu_bau_tu_diem_moc(
 	top-left QR, top-right marker, bottom-right marker, bottom-left marker.
 	Neu metadata sai, ham se raise ValueError de caller fallback sang detect tren server.
 	"""
-	pixels_per_cm = dpi / 2.54
-	chieu_rong_pixel = int(chieu_ngang_cm * pixels_per_cm)
-	chieu_dai_pixel = int(chieu_doc_cm * pixels_per_cm)
+	chieu_rong_pixel, chieu_dai_pixel = _portrait_output_dimensions(chieu_ngang_cm, chieu_doc_cm, dpi)
 
 	img = cv2.imread(duong_dan_anh_dau_vao)
 	if img is None:
@@ -194,6 +224,8 @@ def lam_phang_anh_phieu_bau_tu_diem_moc(
 
 		if np.any(src_pts[:, 0] < 0) or np.any(src_pts[:, 0] >= w) or np.any(src_pts[:, 1] < 0) or np.any(src_pts[:, 1] >= h):
 			raise ValueError("Diem moc tu app nam ngoai kich thuoc anh upload")
+
+		src_pts = _normalize_client_src_points_for_portrait(src_pts)
 
 		if not _validate_warp_points(src_pts, "client_metadata"):
 			raise ValueError("Diem moc tu app khong tao duoc polygon hop le")
@@ -389,9 +421,7 @@ def lam_phang_anh_phieu_bau(duong_dan_anh_dau_vao, duong_dan_anh_dau_ra, chieu_n
 	"""
 	# Chuyển đổi cm sang pixel
 	# 1 inch = 2.54 cm, 1 inch = dpi pixels => 1 cm = dpi / 2.54 pixels
-	pixels_per_cm = dpi / 2.54
-	chieu_rong_pixel = int(chieu_ngang_cm * pixels_per_cm)
-	chieu_dai_pixel = int(chieu_doc_cm * pixels_per_cm)
+	chieu_rong_pixel, chieu_dai_pixel = _portrait_output_dimensions(chieu_ngang_cm, chieu_doc_cm, dpi)
 	
 	# print(f"[STEP1] Chuyển đổi kích thước: {chieu_ngang_cm}cm x {chieu_doc_cm}cm -> {chieu_rong_pixel}px x {chieu_dai_pixel}px (DPI: {dpi})")
 	

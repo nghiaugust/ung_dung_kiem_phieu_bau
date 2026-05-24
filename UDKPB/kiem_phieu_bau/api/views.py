@@ -4031,6 +4031,82 @@ def api_submit_checking_result_web(request):
             'message': str(e)
         }, status=500)
 
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_toggle_checking_validity_web(request):
+    """
+    Toggle is_valid for the ballot currently locked by this user in the Web UI.
+    """
+    try:
+        user = _get_session_or_token_user(request)
+        if not user:
+            return JsonResponse({
+                'success': False,
+                'error': 'Unauthorized',
+                'message': 'Vui long dang nhap'
+            }, status=401)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON',
+                'message': 'Du lieu JSON khong hop le'
+            }, status=400)
+
+        ballot_id = data.get('ballot_id')
+        if not ballot_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing ballot_id',
+                'message': 'Thieu thong tin ballot_id'
+            }, status=400)
+
+        with transaction.atomic():
+            ballot = Ballot.objects.select_for_update().get(ballot_id=ballot_id)
+
+            if ballot.checking_locked_by != user or ballot.checking_status != 'PROCESSING':
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Permission denied',
+                    'message': 'Phieu nay khong thuoc ve ban'
+                }, status=403)
+
+            new_is_valid = data.get('is_valid', None)
+            if isinstance(new_is_valid, str):
+                new_is_valid = new_is_valid.strip().lower() in ('true', '1', 'yes')
+
+            if new_is_valid is None:
+                ballot.is_valid = not ballot.is_valid
+            else:
+                ballot.is_valid = bool(new_is_valid)
+
+            ballot.save(update_fields=['is_valid'])
+
+        return JsonResponse({
+            'success': True,
+            'ballot_id': ballot.ballot_id,
+            'is_valid': ballot.is_valid
+        })
+
+    except Ballot.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Ballot not found',
+            'message': 'Khong tim thay phieu bau'
+        }, status=404)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': 'Server error',
+            'message': str(e)
+        }, status=500)
+
+
 @require_http_methods(["GET"])
 def api_checking_statistics_web(request):
     """
