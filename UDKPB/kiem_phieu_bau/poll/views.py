@@ -546,13 +546,27 @@ def delete_poll_member(request, member_id):
 
 @login_required
 def thong_ke(request):
+	from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+	
 	# Lấy các cuộc bỏ phiếu dựa trên role
 	if request.user.is_superuser and request.user.is_active:
 		# Admin xem được tất cả các cuộc bỏ phiếu
-		polls = Poll.objects.all()
+		polls_queryset = Poll.objects.all()
 	else:
 		# User khác chỉ xem được các cuộc bỏ phiếu mà họ là thành viên
-		polls = Poll.objects.filter(members__account=request.user)
+		polls_queryset = Poll.objects.filter(members__account=request.user)
+	
+	polls_queryset = polls_queryset.order_by('-poll_id')
+	
+	paginator = Paginator(polls_queryset, 10)
+	page = request.GET.get('page', 1)
+	
+	try:
+		polls = paginator.page(page)
+	except PageNotAnInteger:
+		polls = paginator.page(1)
+	except EmptyPage:
+		polls = paginator.page(paginator.num_pages)
 	
 	thong_ke_data = []
 	for poll in polls:
@@ -569,19 +583,17 @@ def thong_ke(request):
 		# Tìm ứng viên được chọn nhiều nhất
 		top_candidate = candidates.order_by('-num_selected', 'name').first()
 		
-		# Lấy ID của ballot đầu tiên trong poll này để dùng cho nút Hậu kiểm
-		first_ballot = Ballot.objects.filter(poll=poll).order_by('ballot_id').first()
-		first_ballot_id = first_ballot.ballot_id if first_ballot else None
-		
 		thong_ke_data.append({
 			'poll_id': poll.poll_id,
 			'poll_title': poll.title,
 			'top_candidate': top_candidate.name if top_candidate else '-',
 			'top_count': top_candidate.num_selected if top_candidate else 0,
 			'status': poll.status or '-',
-			'first_ballot_id': first_ballot_id,
 		})
-	return render(request, 'poll/thong_ke/thong_ke.html', {'thong_ke_data': thong_ke_data})
+	return render(request, 'poll/thong_ke/thong_ke.html', {
+		'thong_ke_data': thong_ke_data,
+		'polls': polls,
+	})
 
 # Thống kê chi tiết cho 1 cuộc bỏ phiếu
 @login_required
