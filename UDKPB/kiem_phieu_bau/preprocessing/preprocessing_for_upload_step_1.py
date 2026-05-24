@@ -114,6 +114,18 @@ def _polygon_area(points):
 	y = points[:, 1]
 	return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
 
+def _signed_polygon_area(points):
+	points = np.array(points, dtype=np.float32)
+	x = points[:, 0]
+	y = points[:, 1]
+	return float(0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _portrait_output_dimensions(chieu_ngang_cm, chieu_doc_cm, dpi):
+	pixels_per_cm = dpi / 2.54
+	first = int(chieu_ngang_cm * pixels_per_cm)
+	second = int(chieu_doc_cm * pixels_per_cm)
+	return min(first, second), max(first, second)
 
 def _validate_warp_points(src_pts, rotation_label):
 	"""Reject clearly crossed or degenerate marker geometry before perspective warp."""
