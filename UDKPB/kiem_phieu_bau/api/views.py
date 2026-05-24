@@ -31,6 +31,34 @@ from security.hmac_utils import verify_ballot_from_qr
 User = get_user_model()
 from kiem_phieu_bau.rate_limiting_decorator import rate_limit
 
+def _parse_detection_metadata_part(raw_value):
+    if not raw_value:
+        return {}
+    try:
+        parsed = json.loads(raw_value)
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
+def _get_detection_for_file(detection_metadata, filename):
+    if not isinstance(detection_metadata, dict):
+        return None
+    value = detection_metadata.get(filename)
+    return value if isinstance(value, dict) else None
+
+
+def _parse_qr_payload(qr_code_raw):
+    if not qr_code_raw:
+        return None, None
+    try:
+        parts = str(qr_code_raw).split(':')
+        ballot_id = int(parts[1]) if len(parts) >= 2 else None
+        qr_hmac = parts[2] if len(parts) >= 3 else None
+        return ballot_id, qr_hmac
+    except (ValueError, IndexError, TypeError):
+        return None, None
+
 # =====================================================
 # AUTHENTICATION APIs
 # =====================================================
@@ -872,6 +900,14 @@ def api_upload_ballot(request, poll_id):
         qr_ballot_id = None
         qr_code_raw = None
         qr_data = None
+        qr_hmac = None
+        qr_source = None
+        client_detection = _parse_detection_metadata_part(request.POST.get('detection_metadata', '{}'))
+        if client_detection:
+            qr_code_raw = client_detection.get('qr_raw') or client_detection.get('qr_code_raw')
+            qr_ballot_id, qr_hmac = _parse_qr_payload(qr_code_raw)
+            if qr_ballot_id:
+                qr_source = 'client_detection'
         
         try:
             # Lưu file tạm từ uploaded_file gốc để đọc QR
@@ -885,7 +921,7 @@ def api_upload_ballot(request, poll_id):
             uploaded_file.seek(0)
             
             # Đọc chỉ QR code từ ảnh
-            qr_result = read_qr_code_only(temp_file_path)
+            qr_result = read_qr_code_only(temp_file_path) if not qr_ballot_id else {}
             
             # Lấy thông tin QR code nếu có
             if qr_result.get('success') and qr_result.get('qr_count', 0) > 0:
@@ -903,6 +939,7 @@ def api_upload_ballot(request, poll_id):
                         parts = qr_code_raw.split(':')
                         if len(parts) >= 2:
                             qr_ballot_id = int(parts[1])
+                            qr_source = 'server_detection'
                         if len(parts) >= 3:
                             qr_hmac = parts[2]  # HMAC signature
                     except (ValueError, IndexError):
@@ -965,14 +1002,18 @@ def api_upload_ballot(request, poll_id):
                     'last_update_method': 'mobile_api',
                     'last_updated_filename': uploaded_file.name,
                     'last_updated_at': timezone.now().isoformat(),
-                    'qr_code_raw': qr_code_raw
+                    'qr_code_raw': qr_code_raw,
+                    'qr_source': qr_source or 'unknown',
+                    'client_detection': client_detection if client_detection else None
                 })
             else:
                 ballot.metadata = {
                     'uploaded_by': user.username,
                     'upload_method': 'mobile_api',
                     'original_filename': uploaded_file.name,
-                    'qr_code_raw': qr_code_raw
+                    'qr_code_raw': qr_code_raw,
+                    'qr_source': qr_source or 'unknown',
+                    'client_detection': client_detection if client_detection else None
                 }
             
             ballot.save()
@@ -1129,6 +1170,10 @@ def api_upload_ballots_batch(request, poll_id):
             }, status=400)
         
         # Lấy public key từ token của user
+        detection_metadata = _parse_detection_metadata_part(
+            request.POST.get('detection_metadata', '{}')
+        )
+
         try:
             token = APIToken.objects.get(user=user)
             public_key_pem = token.public_key
@@ -1238,9 +1283,18 @@ def api_upload_ballots_batch(request, poll_id):
                 # Đọc QR code từ file gốc (không cần làm phẳng)
                 qr_ballot_id = None
                 qr_code_raw = None
+                qr_source = None
+                client_detection = _get_detection_for_file(detection_metadata, uploaded_file.name)
+                if client_detection:
+                    qr_code_raw = client_detection.get('qr_raw') or client_detection.get('qr_code_raw')
+                    qr_ballot_id, _ = _parse_qr_payload(qr_code_raw)
+                    if qr_ballot_id:
+                        qr_source = 'client_detection'
+                        result['qr_ballot_id'] = qr_ballot_id
+                        result['qr_source'] = 'client_detection'
                 
                 try:
-                    qr_data = read_qr_code_only(temp_file_path)
+                    qr_data = read_qr_code_only(temp_file_path) if not qr_ballot_id else None
                     if qr_data and qr_data.get('qr_codes'):
                         qr_code_raw = qr_data['qr_codes'][0].get('data', '')
                         
@@ -1249,7 +1303,9 @@ def api_upload_ballots_batch(request, poll_id):
                             parts = qr_code_raw.split(':')
                             if len(parts) >= 2:
                                 qr_ballot_id = int(parts[1])
+                                qr_source = 'server_detection'
                                 result['qr_ballot_id'] = qr_ballot_id
+                                result['qr_source'] = 'server_detection'
                                 print(f"[API] Đọc được ballot_id={qr_ballot_id} từ QR code")
                 except Exception as qr_error:
                     print(f"[API WARNING] Không đọc được QR code từ {uploaded_file.name}: {qr_error}")
@@ -1297,8 +1353,11 @@ def api_upload_ballots_batch(request, poll_id):
                     'upload_method': 'mobile_api_batch_async',
                     'original_filename': uploaded_file.name,
                     'qr_code_raw': qr_code_raw,
-                    'uploaded_at': timezone.now().isoformat()
+                    'uploaded_at': timezone.now().isoformat(),
+                    'qr_source': qr_source or 'unknown'
                 }
+                if client_detection:
+                    metadata['client_detection'] = client_detection
                 
                 if ballot.metadata:
                     ballot.metadata.update(metadata)
@@ -1367,7 +1426,6 @@ def api_upload_ballots_batch(request, poll_id):
             'error': 'Server error',
             'message': str(e)
         }, status=500)
-
 
 @require_api_token
 @require_http_methods(["GET"])
