@@ -16,10 +16,7 @@ from poll.models import Poll, Candidate
 from preprocessing.models import BallotCell
 from counting.models import AIModelResult
 from counting import config_model
-
-
-AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/vietnameocr/recognize/"
-AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
+from config.service_manager import MODEL_VIETNAMEOCR, MODEL_YOLO_X, get_model_api_url
 
 
 def prepare_batch_requests(ballot, ai_result, all_cell_models):
@@ -475,7 +472,7 @@ def counting_queue(self, ballot_id):
             if vietnameocr_batch['image_paths']:
                 print(f"[COUNTING QUEUE] Gửi VietNameOCR batch với {len(vietnameocr_batch['image_paths'])} ảnh")
                 vietnameocr_response = send_batch_request(
-                    api_url=AI_VIETNAMEOCR_API_URL,
+                    api_url=get_model_api_url(MODEL_VIETNAMEOCR),
                     image_paths=vietnameocr_batch['image_paths'],
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT
                 )
@@ -496,7 +493,7 @@ def counting_queue(self, ballot_id):
                     image_paths_map[filename] = path
                 
                 yolo_response = send_batch_request(
-                    api_url=AI_YOLO_API_URL,
+                    api_url=get_model_api_url(MODEL_YOLO_X),
                     image_paths=yolo_batch['image_paths'],
                     extra_data={'image_paths': json.dumps(image_paths_map)},
                     timeout=settings.AI_SERVER_REQUEST_TIMEOUT

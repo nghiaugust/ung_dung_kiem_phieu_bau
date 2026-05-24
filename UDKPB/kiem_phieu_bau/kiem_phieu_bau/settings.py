@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'form',  # Ballot form editor
     'preprocessing',  # Image preprocessing for AI
     'counting',  # AI model counting (VietNameOCR, YOLO)
+    'config.apps.ConfigConfig',  # System process configuration
 ]
 
 MIDDLEWARE = [
@@ -302,6 +303,8 @@ CACHES = {
 
 # Base URL của AI server (local: http://localhost:8081, docker: http://ai-server:8081)
 AI_SERVER_BASE_URL = os.getenv('AI_SERVER_BASE_URL', 'http://localhost:8081').rstrip('/')
+AI_VIETNAMEOCR_BASE_URL = os.getenv('AI_VIETNAMEOCR_BASE_URL', AI_SERVER_BASE_URL).rstrip('/')
+AI_YOLO_X_BASE_URL = os.getenv('AI_YOLO_X_BASE_URL', AI_SERVER_BASE_URL).rstrip('/')
 
 # Timeout mặc định khi gọi AI server
 AI_SERVER_REQUEST_TIMEOUT = int(os.getenv('AI_SERVER_REQUEST_TIMEOUT', '300'))

@@ -5,10 +5,13 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # VietNameOCR endpoints
+    path('model_vietnameocr/recognize/', views.vietnameocr_recognize, name='model_vietnameocr_recognize'),
+    path('model_yolo_x/detect/', views.yolo_detect, name='model_yolo_x_detect'),
+
+    # Legacy VietNameOCR endpoints
     path('vietnameocr/recognize/', views.vietnameocr_recognize, name='vietnameocr_recognize'),
     
-    # YOLO endpoints
+    # Legacy YOLO endpoints
     path('yolo/detect/', views.yolo_detect, name='yolo_detect'),
     
     # Health check

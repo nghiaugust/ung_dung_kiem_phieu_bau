@@ -1,0 +1,163 @@
+{% extends 'quan_ly_phieu_bau/base.html' %}
+
+{% block title %}Cau hinh he thong{% endblock %}
+
+{% block extra_head %}
+<style>
+  .config-toolbar {
+    align-items: center;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .config-table th,
+  .config-table td {
+    vertical-align: middle;
+  }
+
+  .config-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .config-actions input[type="number"] {
+    width: 96px;
+  }
+
+  .log-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 22px 0 12px;
+  }
+
+  .log-view {
+    background: #111827;
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-size: 13px;
+    line-height: 1.45;
+    max-height: 520px;
+    min-height: 320px;
+    overflow: auto;
+    padding: 14px;
+    white-space: pre-wrap;
+  }
+
+  .muted-small {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="config-toolbar">
+  <div>
+    <h2 class="mb-1">Cau hinh he thong</h2>
+    <div class="muted-small">Chi tai khoan superuser duoc bat/tat worker va model.</div>
+  </div>
+  <a href="{% url 'account:tai_khoan' %}" class="btn btn-outline-secondary">Quay lai tai khoan</a>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div
+      class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} mb-3"
+      role="alert"
+    >
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover config-table">
+    <thead class="table-light">
+      <tr>
+        <th>Thanh phan</th>
+        <th>Trang thai</th>
+        <th>PID</th>
+        <th>Concurrency / Threads</th>
+        <th>Thong tin</th>
+        <th>Thao tac</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for component in components %}
+      <tr>
+        <td>
+          <strong>{{ component.label }}</strong>
+          <div class="muted-small">{{ component.description }}</div>
+        </td>
+        <td>
+          {% if component.running %}
+            <span class="badge text-bg-success">Dang chay</span>
+          {% else %}
+            <span class="badge text-bg-secondary">Da tat</span>
+          {% endif %}
+        </td>
+        <td>{{ component.pid|default:"-" }}</td>
+        <td>
+          <div class="config-actions">
+            <label class="visually-hidden" for="concurrency-{{ component.id }}">{{ component.concurrency_label }}</label>
+            <input
+              id="concurrency-{{ component.id }}"
+              form="control-{{ component.id }}"
+              class="form-control form-control-sm"
+              type="number"
+              name="concurrency"
+              min="1"
+              max="32"
+              value="{{ component.concurrency }}"
+            />
+            <span class="muted-small">{{ component.concurrency_label }}</span>
+          </div>
+        </td>
+        <td>
+          {% if component.kind == 'ai_model' %}
+            <div>URL: <code>{{ component.base_url }}</code></div>
+            <div>Port: <code>{{ component.port }}</code></div>
+          {% else %}
+            <div>Queue: <code>{{ component.queue }}</code></div>
+            <div>Hostname: <code>{{ component.hostname }}</code></div>
+          {% endif %}
+        </td>
+        <td>
+          <div class="config-actions">
+            <form id="control-{{ component.id }}" method="post" action="{% url 'config:start_component' component.id %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-success" formaction="{% url 'config:start_component' component.id %}">Bat</button>
+              <button type="submit" class="btn btn-sm btn-warning" formaction="{% url 'config:restart_component' component.id %}">Khoi dong lai</button>
+            </form>
+            <form method="post" action="{% url 'config:stop_component' component.id %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-danger">Tat</button>
+            </form>
+            <a href="{% url 'config:dashboard' %}?log={{ component.id }}" class="btn btn-sm btn-outline-primary">Xem log</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="log-tabs">
+  {% for component in components %}
+    <a
+      href="{% url 'config:dashboard' %}?log={{ component.id }}"
+      class="btn btn-sm {% if selected_log == component.id %}btn-primary{% else %}btn-outline-primary{% endif %}"
+    >
+      {{ component.label }}
+    </a>
+  {% endfor %}
+</div>
+
+<h3 class="h5 mb-2">Log: {{ selected_log_label }}</h3>
+<pre class="log-view">{{ log_text }}</pre>
+{% endblock %}

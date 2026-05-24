@@ -1,27 +1,57 @@
 """
-API views for VietNameOCR and YOLO.
+API views for VietNameOCR and YOLO-X.
 """
 import gc
 import json
 
+import torch
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .model_services import VietNameOCRService, YOLOService
+from .model_services import (
+    MODEL_SERVICE_CLASSES,
+    MODEL_VIETNAMEOCR,
+    MODEL_YOLO_X,
+    get_enabled_model_keys,
+)
 
 
-try:
-    vietnameocr_service = VietNameOCRService()
-except Exception as exc:
-    vietnameocr_service = None
-    print(f"[VietNameOCR Service] Skip load (optional): {exc}")
+_services = {}
 
-try:
-    yolo_service = YOLOService()
-except Exception as exc:
-    print(f"[YOLO Service] Error loading model: {exc}")
-    raise
+
+def _get_service(model_key):
+    if model_key not in get_enabled_model_keys():
+        return None
+
+    if model_key not in _services:
+        _services[model_key] = MODEL_SERVICE_CLASSES[model_key]()
+    return _services[model_key]
+
+
+def _service_loaded(model_key):
+    try:
+        service = _get_service(model_key)
+    except Exception:
+        return False
+
+    if service is None:
+        return False
+    if model_key == MODEL_VIETNAMEOCR:
+        return service._engine is not None
+    if model_key == MODEL_YOLO_X:
+        return service._model is not None
+    return False
+
+
+def _disabled_model_response(model_key):
+    return JsonResponse(
+        {
+            "success": False,
+            "error": f"{model_key} is not enabled in this AI server process",
+        },
+        status=503,
+    )
 
 
 def _sort_results_by_filename_index(results):
@@ -41,19 +71,13 @@ def _sort_results_by_filename_index(results):
 @require_http_methods(["POST"])
 def vietnameocr_recognize(request):
     """
-    Recognize text with VietNameOCR.
-
-    POST /api/vietnameocr/recognize/
-    Content-Type: multipart/form-data
-    Form data:
-        - images: multiple files
+    POST /api/model_vietnameocr/recognize/
+    POST /api/vietnameocr/recognize/ also remains supported.
     """
     try:
-        if vietnameocr_service is None:
-            return JsonResponse({
-                "success": False,
-                "error": "VietNameOCR model chua duoc nap",
-            }, status=503)
+        service = _get_service(MODEL_VIETNAMEOCR)
+        if service is None:
+            return _disabled_model_response(MODEL_VIETNAMEOCR)
 
         files = request.FILES.getlist("images")
         if not files:
@@ -65,7 +89,7 @@ def vietnameocr_recognize(request):
         images = [(file.read(), file.name) for file in files]
         print(f"[VietNameOCR Service] Processing {len(images)} images")
 
-        results = vietnameocr_service.recognize_batch(images)
+        results = service.recognize_batch(images)
         results = _sort_results_by_filename_index(results)
 
         del images
@@ -88,15 +112,14 @@ def vietnameocr_recognize(request):
 @require_http_methods(["POST"])
 def yolo_detect(request):
     """
-    Detect vote marks with YOLO.
-
-    POST /api/yolo/detect/
-    Content-Type: multipart/form-data
-    Form data:
-        - images: multiple files
-        - image_paths: JSON mapping {filename: path} (optional)
+    POST /api/model_yolo_x/detect/
+    POST /api/yolo/detect/ also remains supported.
     """
     try:
+        service = _get_service(MODEL_YOLO_X)
+        if service is None:
+            return _disabled_model_response(MODEL_YOLO_X)
+
         files = request.FILES.getlist("images")
         if not files:
             return JsonResponse({
@@ -120,7 +143,7 @@ def yolo_detect(request):
             else:
                 images.append((image_data, filename))
 
-        results = yolo_service.detect_batch(images)
+        results = service.detect_batch(images)
         results = _sort_results_by_filename_index(results)
 
         del images
@@ -141,15 +164,15 @@ def yolo_detect(request):
 
 @require_http_methods(["GET", "HEAD"])
 def health_check(request):
-    vietnameocr_loaded = (
-        vietnameocr_service is not None
-        and vietnameocr_service._engine is not None
-    )
-    yolo_loaded = yolo_service is not None and yolo_service._model is not None
+    vietnameocr_loaded = _service_loaded(MODEL_VIETNAMEOCR)
+    yolo_loaded = _service_loaded(MODEL_YOLO_X)
 
     return JsonResponse({
         "status": "healthy",
+        "enabled_models": get_enabled_model_keys(),
         "services": {
+            MODEL_VIETNAMEOCR: vietnameocr_loaded,
+            MODEL_YOLO_X: yolo_loaded,
             "vietnameocr": vietnameocr_loaded,
             "yolo": yolo_loaded,
         },
@@ -158,23 +181,28 @@ def health_check(request):
 
 @require_http_methods(["GET"])
 def model_info(request):
-    import torch
-
-    vietnameocr_loaded = (
-        vietnameocr_service is not None
-        and vietnameocr_service._engine is not None
-    )
-    yolo_loaded = yolo_service is not None and yolo_service._model is not None
+    vietnameocr_loaded = _service_loaded(MODEL_VIETNAMEOCR)
+    yolo_loaded = _service_loaded(MODEL_YOLO_X)
+    device = "GPU" if torch.cuda.is_available() else "CPU"
 
     return JsonResponse({
+        "enabled_models": get_enabled_model_keys(),
         "models": {
+            MODEL_VIETNAMEOCR: {
+                "loaded": vietnameocr_loaded,
+                "device": device,
+            },
+            MODEL_YOLO_X: {
+                "loaded": yolo_loaded,
+                "device": device,
+            },
             "vietnameocr": {
                 "loaded": vietnameocr_loaded,
-                "device": "GPU" if torch.cuda.is_available() else "CPU",
+                "device": device,
             },
             "yolo": {
                 "loaded": yolo_loaded,
-                "device": "GPU" if torch.cuda.is_available() else "CPU",
+                "device": device,
             },
         },
         "system": {

@@ -9,6 +9,12 @@ from ballot.models import Ballot, BallotSelection
 from preprocessing.models import BallotCell, PreprocessedBallot
 from .models import AIModelResult
 from . import config_model
+from config.service_manager import (
+	MODEL_VIETNAMEOCR,
+	MODEL_YOLO_X,
+	get_ai_model_health_statuses,
+	get_model_api_url,
+)
 import requests
 import os
 import time
@@ -17,23 +23,12 @@ from typing import List, Dict, Tuple
 import json
 
 
-AI_VIETNAMEOCR_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/vietnameocr/recognize/"
-AI_YOLO_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/yolo/detect/"
-AI_HEALTH_API_URL = f"{settings.AI_SERVER_BASE_URL}/api/health/"
-
-
 def get_ai_service_status():
-	vietnameocr_status = False
-	yolo_status = False
-	try:
-		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
-		if health_response.status_code == 200:
-			health_data = health_response.json()
-			vietnameocr_status = health_data.get('services', {}).get('vietnameocr', False)
-			yolo_status = health_data.get('services', {}).get('yolo', False)
-	except:
-		pass
-	return vietnameocr_status, yolo_status
+	statuses = get_ai_model_health_statuses()
+	return (
+		statuses.get(MODEL_VIETNAMEOCR, False),
+		statuses.get(MODEL_YOLO_X, False),
+	)
 
 
 @require_http_methods(["POST"])
@@ -226,7 +221,7 @@ def call_vietnameocr_api(image_paths: List[str]) -> Dict:
 	Returns:
 		Dict chứa kết quả từ API
 	"""
-	api_url = AI_VIETNAMEOCR_API_URL
+	api_url = get_model_api_url(MODEL_VIETNAMEOCR)
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -274,7 +269,7 @@ def call_yolo_api(image_paths: List[str]) -> Dict:
 		Dict chứa kết quả từ API
 	"""
 	import json
-	api_url = AI_YOLO_API_URL
+	api_url = get_model_api_url(MODEL_YOLO_X)
 	
 	# Mở file trong context manager để tự động đóng (tránh file handle leak)
 	file_handles = []
@@ -347,16 +342,7 @@ def counting_form_view(request, poll_id):
 	).count()
 	
 	# Điều kiện 5: Check model AI
-	vietnameocr_status = False
-	yolo_status = False
-	try:
-		health_response = requests.get(AI_HEALTH_API_URL, timeout=settings.AI_SERVER_HEALTH_TIMEOUT)
-		if health_response.status_code == 200:
-			health_data = health_response.json()
-			vietnameocr_status = health_data.get('services', {}).get('vietnameocr', False)
-			yolo_status = health_data.get('services', {}).get('yolo', False)
-	except:
-		pass  # Nếu lỗi thì để mặc định False
+	vietnameocr_status, yolo_status = get_ai_service_status()
 	
 	config1_models_ready = config_model.is_config_ready(
 		1,

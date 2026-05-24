@@ -376,3 +376,33 @@ class YOLOService:
             del draw, font
             if pil_img is not None:
                 pil_img.close()
+
+
+MODEL_VIETNAMEOCR = "model_vietnameocr"
+MODEL_YOLO_X = "model_yolo_x"
+
+MODEL_SERVICE_CLASSES = {
+    MODEL_VIETNAMEOCR: VietNameOCRService,
+    MODEL_YOLO_X: YOLOService,
+}
+
+MODEL_ALIASES = {
+    "vietnameocr": MODEL_VIETNAMEOCR,
+    MODEL_VIETNAMEOCR: MODEL_VIETNAMEOCR,
+    "yolo": MODEL_YOLO_X,
+    "yolo_x": MODEL_YOLO_X,
+    MODEL_YOLO_X: MODEL_YOLO_X,
+}
+
+
+def get_enabled_model_keys() -> List[str]:
+    raw_value = os.getenv("AI_ENABLED_MODELS", "all").strip()
+    if not raw_value or raw_value.lower() in {"all", "*"}:
+        return list(MODEL_SERVICE_CLASSES.keys())
+
+    requested = []
+    for item in raw_value.split(","):
+        model_key = MODEL_ALIASES.get(item.strip().lower())
+        if model_key and model_key not in requested:
+            requested.append(model_key)
+    return requested
