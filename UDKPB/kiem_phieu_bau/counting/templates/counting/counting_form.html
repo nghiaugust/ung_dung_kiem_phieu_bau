@@ -1,572 +1,834 @@
-{% extends 'quan_ly_phieu_bau/base.html' %} {% load static %} {% block title%}Kiểm Phiếu Bầu - {{ poll.poll_name }}{% endblock %} {% block content %}
-<div class="row align-items-center mb-3">
-  <div class="col-md-6">
-    <h2 class="mb-1">Kiểm Phiếu Bầu: {{ poll.poll_name }}</h2>
-    <p class="text-muted mb-0">Chọn cấu hình để xử lý với VietNameOCR và YOLO</p>
-  </div>
-  <div class="col-md-6 text-end">
-    <a
-      href="{% url 'poll:poll_detail' poll.poll_id %}"
-      class="btn btn-lg btn-secondary me-2"
-    >
-      <i class="bi bi-arrow-left"></i> Back
-    </a>
-    
-    <!-- Nút Kiểm Phiếu Bầu -->
-    {% if candidates_count > 0 and ballots_count > 0 and ballots_with_image_count > 0 and preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 and selected_config_models_ready and not poll.is_counting_started and config_number %}
-    <button
-      type="submit"
-      form="counting-form"
-      class="btn btn-lg btn-primary me-2"
-    >
-      <i class="bi bi-check2-circle"></i> Kiểm Phiếu Bầu
-    </button>
-    {% else %}
-    <button
-      type="button"
-      class="btn btn-lg btn-secondary me-2"
-      disabled
-      {% if poll.is_counting_started %}
-      title="Không thể kiểm thủ công khi kiểm tự động đang bật"
-      {% elif not config_number %}
-      title="Vui lòng lưu cấu hình trước khi kiểm phiếu"
-      {% else %}
-      title="Vui lòng hoàn thành tất cả các điều kiện"
-      {% endif %}
-    >
-      <i class="bi bi-check2-circle"></i> Kiểm Phiếu Bầu
-    </button>
-    {% endif %}
-    
-    <!-- Nút Kiểm tự động -->
-    {% if config_number %}
-    <a
-      href="{% url 'auto_counting' poll.poll_id %}"
-      class="btn btn-lg btn-warning me-2"
-    >
-      <i class="bi bi-lightning-charge-fill"></i> Kiểm tự động
-    </a>
-    {% else %}
-    <button
-      type="button"
-      class="btn btn-lg btn-secondary me-2"
-      disabled
-      title="Vui lòng lưu cấu hình trước khi bật kiểm tự động"
-    >
-      <i class="bi bi-lightning-charge-fill"></i> Kiểm tự động
-    </button>
-    {% endif %}
-    
-    <!-- Nút Kiểm tra hậu kiểm -->
-    <button
-      type="button"
-      id="toggle-checking-cleanup-btn"
-      class="btn btn-lg {% if poll.is_checking_started %}btn-success{% else %}btn-info{% endif %} me-2"
-      title="Bật/tắt tự động thu hồi phiếu hậu kiểm bị treo (chạy mỗi 3 phút ở backend)"
-    >
-      <i class="bi bi-clock-history"></i> <span id="cleanup-status-text">{% if poll.is_checking_started %}Đang kiểm tra hậu kiểm{% else %}Bật kiểm tra hậu kiểm{% endif %}</span>
-    </button>
-    
-    <a
-      href="{% url 'counting_results' poll.poll_id %}"
-      class="btn btn-lg btn-secondary"
-    >
-      <i class="bi bi-eye"></i> Xem Kết Quả
-    </a>
-  </div>
-</div>
+{% extends 'quan_ly_phieu_bau/base.html' %}
+{% load static %}
 
-{% if messages %}
-<div class="row">
-  <div class="col-md-12">
+{% block title %}Cấu hình kiểm phiếu - {{ poll.title }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+<style>
+  .counting-page {
+    color: #172033;
+  }
+
+  .counting-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+
+  .counting-actions,
+  .counting-toggle-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .counting-toggle-form {
+    align-items: end;
+  }
+
+  .counting-panel {
+    border: 1px solid #dde5f1;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 20px rgba(25, 46, 90, 0.06);
+    height: 100%;
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    border-bottom: 1px solid #e8edf5;
+    padding: 16px 18px;
+  }
+
+  .panel-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .panel-body {
+    padding: 18px;
+  }
+
+  .config-option {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: #fbfdff;
+  }
+
+  .config-option:last-child {
+    margin-bottom: 0;
+  }
+
+  .config-option table {
+    margin-bottom: 0;
+  }
+
+  .condition-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .condition-row {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #eef2f7;
+    padding-bottom: 12px;
+  }
+
+  .condition-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .condition-label {
+    font-weight: 700;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .status-ok {
+    background: #e8f7ef;
+    color: #137347;
+  }
+
+  .status-bad {
+    background: #fdecec;
+    color: #b42318;
+  }
+
+  .status-warn {
+    background: #fff6df;
+    color: #93640c;
+  }
+
+  .stats-section {
+    margin-top: 24px;
+  }
+
+  .flow-panel {
+    border: 1px solid #dde5f1;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fff;
+    height: 100%;
+  }
+
+  .flow-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .stat-tile {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px;
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #fbfdff;
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .stat-label {
+    color: #5f6b7a;
+    font-size: 0.92rem;
+  }
+
+  .stat-danger {
+    border-color: #f4b8b8;
+  }
+
+  .stat-success {
+    border-color: #a8ddb8;
+  }
+
+  .stat-warning {
+    border-color: #f4d18a;
+  }
+
+  .stat-info {
+    border-color: #9bd4f0;
+  }
+
+  @media (max-width: 992px) {
+    .counting-header {
+      flex-direction: column;
+    }
+
+    .counting-actions,
+    .counting-toggle-form {
+      justify-content: flex-start;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 576px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="counting-page">
+  <div class="counting-header">
+    <div>
+      <h2 class="mb-1">Cấu hình kiểm phiếu: {{ poll.title }}</h2>
+      <p class="text-muted mb-2">Chọn 1 trong 2 cấu hình AI, kiểm tra điều kiện và theo dõi tiến trình xử lý.</p>
+      <div class="d-flex flex-wrap gap-2">
+        {% if is_counting_active %}
+        <span class="status-pill status-ok"><i class="bi bi-play-circle-fill"></i> Đang kiểm phiếu</span>
+        {% else %}
+        <span class="status-pill status-warn"><i class="bi bi-stop-circle"></i> Kiểm phiếu đang tắt</span>
+        {% endif %}
+
+        {% if config_number == 1 %}
+        <span class="status-pill status-ok"><i class="bi bi-check-circle-fill"></i> Cấu hình 1: Chỉ YOLO</span>
+        {% elif config_number == 2 %}
+        <span class="status-pill status-ok"><i class="bi bi-check-circle-fill"></i> Cấu hình 2: VietNameOCR + YOLO</span>
+        {% else %}
+        <span class="status-pill status-bad"><i class="bi bi-exclamation-circle-fill"></i> Chưa lưu cấu hình</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="counting-actions">
+      <form method="POST" action="{% url 'toggle_auto_counting' poll.poll_id %}" id="toggle-form" class="counting-toggle-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="counting_form">
+
+        {% if not is_counting_active %}
+        <div>
+          <label for="total_ballots_count" class="form-label mb-1 small">Số phiếu cần kiểm</label>
+          <input
+            type="number"
+            name="total_ballots_count"
+            id="total_ballots_count"
+            class="form-control form-control-sm"
+            style="width: 130px;"
+            value="{{ total_ballots_count|default:total_ballots }}"
+            min="0"
+            max="{{ total_ballots }}"
+            {% if not can_start_counting %}disabled{% endif %}
+          >
+        </div>
+        {% endif %}
+
+        {% if is_counting_active %}
+        <button type="submit" class="btn btn-danger">
+          <i class="bi bi-stop-circle-fill"></i> Tắt kiểm phiếu
+        </button>
+        {% else %}
+        <button
+          type="submit"
+          class="btn btn-success"
+          {% if not can_start_counting %}disabled title="Vui lòng lưu cấu hình và hoàn thành các điều kiện trước khi bật kiểm phiếu"{% endif %}
+        >
+          <i class="bi bi-play-circle-fill"></i> Bật kiểm phiếu
+        </button>
+        {% endif %}
+      </form>
+
+      <button
+        type="submit"
+        form="counting-form"
+        class="btn btn-primary"
+        {% if not can_start_counting or is_counting_active %}disabled{% endif %}
+        {% if is_counting_active %}title="Không thể kiểm thủ công khi kiểm tự động đang bật"{% endif %}
+      >
+        <i class="bi bi-check2-circle"></i> Kiểm thủ công
+      </button>
+
+      <button
+        type="button"
+        id="toggle-checking-cleanup-btn"
+        class="btn {% if poll.is_checking_started %}btn-success{% else %}btn-outline-info{% endif %}"
+        title="Bật/tắt tự động thu hồi phiếu hậu kiểm bị treo"
+      >
+        <i class="bi bi-clock-history"></i>
+        <span id="cleanup-status-text">{% if poll.is_checking_started %}Đang hậu kiểm{% else %}Bật hậu kiểm{% endif %}</span>
+      </button>
+
+      <a href="{% url 'counting_config_list' %}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Danh sách
+      </a>
+    </div>
+  </div>
+
+  {% if messages %}
+  <div class="mb-3">
     {% for message in messages %}
-    <div
-      class="alert alert-{{ message.tags }} alert-dismissible fade show"
-      role="alert"
-    >
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
       {{ message }}
       <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endfor %}
   </div>
+  {% endif %}
+
+  <form method="POST" action="{% url 'process_counting' poll.poll_id %}" id="counting-form">
+    {% csrf_token %}
+    <div class="row g-4">
+      <div class="col-xl-7">
+        <section class="counting-panel">
+          <div class="panel-header">
+            <h3 class="panel-title"><i class="bi bi-sliders"></i> Cấu hình kiểm phiếu</h3>
+            <div>
+              {% if not is_counted %}
+              <button type="button" id="save-config-btn" class="btn btn-sm btn-primary" {% if config_number %}style="display: none;"{% endif %}>
+                <i class="bi bi-save"></i> Lưu cấu hình
+              </button>
+              <button type="button" id="edit-config-btn" class="btn btn-sm btn-outline-primary" {% if not config_number %}style="display: none;"{% endif %}>
+                <i class="bi bi-pencil"></i> Sửa cấu hình
+              </button>
+              {% else %}
+              <span class="badge bg-success"><i class="bi bi-lock-fill"></i> Đã khóa cấu hình {{ config_number }}</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="panel-body">
+            <div id="config1-container" class="config-option" {% if config_number and config_number != 1 %}style="display: none;"{% endif %}>
+              <div class="form-check mb-3">
+                <input
+                  class="form-check-input"
+                  type="radio"
+                  name="config_type"
+                  id="config1"
+                  value="1"
+                  {% if config_number == 1 or not config_number %}checked{% endif %}
+                  {% if is_counted or config_number %}disabled{% endif %}
+                >
+                <label class="form-check-label fw-bold" for="config1">
+                  Cấu hình 1: Chỉ dùng YOLO detect dấu X
+                  {% if config_number == 1 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
+                </label>
+              </div>
+              <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>STT</th>
+                    <th>Họ và tên</th>
+                    <th>Đồng ý</th>
+                    <th>Không đồng ý</th>
+                  </tr>
+                  <tr>
+                    <th class="text-center">Cột 1</th>
+                    <th class="text-center">Cột 2</th>
+                    <th class="text-center">Cột 3</th>
+                    <th class="text-center">Cột 4</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="4" class="text-muted small">
+                      Tên ứng viên lấy theo thứ tự trong danh sách. <strong>YOLO</strong> nhận diện dấu X tại cột 3 và 4, từ dòng 2 trở đi.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="config2-container" class="config-option" {% if config_number and config_number != 2 %}style="display: none;"{% endif %}>
+              <div class="form-check mb-3">
+                <input
+                  class="form-check-input"
+                  type="radio"
+                  name="config_type"
+                  id="config2"
+                  value="2"
+                  {% if config_number == 2 %}checked{% endif %}
+                  {% if is_counted or config_number %}disabled{% endif %}
+                >
+                <label class="form-check-label fw-bold" for="config2">
+                  Cấu hình 2: VietNameOCR nhận diện tên + YOLO detect dấu X
+                  {% if config_number == 2 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
+                </label>
+              </div>
+              <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>STT</th>
+                    <th>Họ và tên</th>
+                    <th>Đồng ý</th>
+                    <th>Không đồng ý</th>
+                  </tr>
+                  <tr>
+                    <th class="text-center">Cột 1</th>
+                    <th class="text-center">Cột 2</th>
+                    <th class="text-center">Cột 3</th>
+                    <th class="text-center">Cột 4</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="4" class="text-muted small">
+                      <strong>VietNameOCR</strong> nhận diện tên ở cột 2. <strong>YOLO</strong> nhận diện dấu X tại cột 3 và 4, từ dòng 2 trở đi.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <input type="hidden" name="start_row" value="2">
+            <input type="hidden" name="end_row" value="">
+            <input type="hidden" name="yolo_confidence" value="20">
+            <input type="hidden" name="config1_yolo_cols" value="3,4">
+            <input type="hidden" name="config2_vietnameocr_col" value="2">
+            <input type="hidden" name="config2_yolo_cols" value="3,4">
+          </div>
+        </section>
+      </div>
+
+      <div class="col-xl-5">
+        <section class="counting-panel">
+          <div class="panel-header">
+            <h3 class="panel-title"><i class="bi bi-clipboard-check"></i> Thông tin điều kiện</h3>
+          </div>
+          <div class="panel-body">
+            {% if not config_number %}
+            <div class="alert alert-warning mb-3">
+              <i class="bi bi-exclamation-triangle-fill"></i> Cần lưu cấu hình trước khi bật kiểm phiếu.
+            </div>
+            {% endif %}
+
+            <div class="condition-list">
+              <div class="condition-row">
+                <div>
+                  <div class="condition-label">Ứng viên</div>
+                  <div class="text-muted small">Danh sách ứng viên hoặc phương án bầu.</div>
+                </div>
+                {% if candidates_count > 0 %}
+                <span class="status-pill status-ok">{{ candidates_count }} ứng viên</span>
+                {% else %}
+                <span class="status-pill status-bad">Chưa có</span>
+                {% endif %}
+              </div>
+
+              <div class="condition-row">
+                <div>
+                  <div class="condition-label">Phiếu bầu</div>
+                  <div class="text-muted small">Số phiếu thuộc cuộc bỏ phiếu.</div>
+                </div>
+                {% if ballots_count > 0 %}
+                <span class="status-pill status-ok">{{ ballots_count }} phiếu</span>
+                {% else %}
+                <span class="status-pill status-bad">Chưa có</span>
+                {% endif %}
+              </div>
+
+              <div class="condition-row">
+                <div>
+                  <div class="condition-label">Ảnh phiếu</div>
+                  <div class="text-muted small">Phiếu đã có ảnh upload.</div>
+                </div>
+                {% if ballots_with_image_count > 0 %}
+                <span class="status-pill status-ok">{{ ballots_with_image_count }}/{{ ballots_count }}</span>
+                {% else %}
+                <span class="status-pill status-bad">Chưa upload</span>
+                {% endif %}
+              </div>
+
+              <div class="condition-row">
+                <div>
+                  <div class="condition-label">Tiền xử lý</div>
+                  <div class="text-muted small">Ảnh phiếu đã được tách bảng và ô dữ liệu.</div>
+                  {% if ballots_with_image_total > 0 and preprocessed_count != ballots_with_image_total %}
+                  <button id="tien-xu-ly-btn" class="btn btn-primary btn-sm mt-2">
+                    <i class="bi bi-gear-fill"></i> Tiền xử lý ngay
+                  </button>
+                  {% endif %}
+                </div>
+                {% if preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 %}
+                <span class="status-pill status-ok">{{ preprocessed_count }}/{{ ballots_with_image_total }}</span>
+                {% elif ballots_with_image_total > 0 %}
+                <span class="status-pill status-bad">{{ preprocessed_count }}/{{ ballots_with_image_total }}</span>
+                {% else %}
+                <span class="status-pill status-bad">Chưa có ảnh</span>
+                {% endif %}
+              </div>
+
+              <div class="condition-row">
+                <div>
+                  <div class="condition-label">Model AI</div>
+                  <div class="text-muted small">
+                    YOLO {% if yolo_status %}on{% else %}off{% endif %},
+                    VietNameOCR {% if vietnameocr_status %}on{% else %}off{% endif %}
+                  </div>
+                </div>
+                {% if config_number and selected_config_models_ready %}
+                <span class="status-pill status-ok">Sẵn sàng</span>
+                {% elif config_number %}
+                <span class="status-pill status-bad">Chưa sẵn sàng</span>
+                {% else %}
+                <span class="status-pill status-warn">Chưa chọn</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </form>
+
+  <section class="stats-section">
+    <div class="counting-panel">
+      <div class="panel-header">
+        <h3 class="panel-title"><i class="bi bi-graph-up"></i> Thống kê xử lý</h3>
+        <small class="text-muted">
+          Tổng số phiếu: <strong id="total-ballots">0</strong> |
+          <span id="refresh-status">Đang tải thống kê...</span>
+        </small>
+      </div>
+
+      <div class="panel-body">
+        <div class="row g-4">
+          <div class="col-xl-6">
+            <div class="flow-panel">
+              <div class="flow-heading"><i class="bi bi-cloud-upload text-primary"></i> Luồng upload phiếu</div>
+              <div class="stats-grid">
+                <div class="stat-tile">
+                  <div class="stat-value" id="upload-no-upload">0</div>
+                  <div class="stat-label">Chưa tải lên</div>
+                </div>
+                <div class="stat-tile stat-info">
+                  <div class="stat-value" id="upload-pending">0</div>
+                  <div class="stat-label">Chờ xử lý</div>
+                </div>
+                <div class="stat-tile stat-warning">
+                  <div class="stat-value" id="upload-processing">0</div>
+                  <div class="stat-label">Đang xử lý</div>
+                </div>
+                <div class="stat-tile stat-success">
+                  <div class="stat-value"><span id="upload-success">0</span>/<span id="total-ballots-count-1">0</span></div>
+                  <div class="stat-label">Upload thành công</div>
+                </div>
+                <div class="stat-tile stat-danger">
+                  <div class="stat-value" id="upload-failed">0</div>
+                  <div class="stat-label">Upload thất bại</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-xl-6">
+            <div class="flow-panel">
+              <div class="flow-heading"><i class="bi bi-calculator text-success"></i> Luồng kiểm phiếu</div>
+              <div class="stats-grid">
+                <div class="stat-tile stat-info">
+                  <div class="stat-value" id="counting-pending">0</div>
+                  <div class="stat-label">Chờ kiểm</div>
+                </div>
+                <div class="stat-tile stat-warning">
+                  <div class="stat-value" id="counting-processing">0</div>
+                  <div class="stat-label">Đang kiểm</div>
+                </div>
+                <div class="stat-tile stat-success">
+                  <div class="stat-value"><span id="counting-success">0</span>/<span id="total-ballots-count-2">0</span></div>
+                  <div class="stat-label">Kiểm thành công</div>
+                </div>
+                <div class="stat-tile stat-danger">
+                  <div class="stat-value" id="counting-failed">0</div>
+                  <div class="stat-label">Kiểm thất bại</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
-{% endif %}
 
-<form
-  method="POST"
-  action="{% url 'process_counting' poll.poll_id %}"
-  id="counting-form"
->
-  {% csrf_token %}
-
-  <div class="row d-flex align-items-stretch gx-4">
-    <!-- Danh sách cấu hình (Bên trái) -->
-    <div class="col-md-6">
-      <div class="card mb-4 h-100 shadow-lg">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-          <h5 class="mb-0"><i class="bi bi-gear"></i> Danh sách cấu hình</h5>
-          <div>
-            {% if not is_counted %}
-            <button type="button" id="save-config-btn" class="btn btn-sm btn-light">
-              <i class="bi bi-save"></i> Lưu cấu hình
-            </button>
-            <button type="button" id="edit-config-btn" class="btn btn-sm btn-light" style="display: none;">
-              <i class="bi bi-pencil"></i> Sửa
-            </button>
-            {% else %}
-            <span class="badge bg-success">
-              <i class="bi bi-lock-fill"></i> Đã lưu cấu hình {{ config_number }}
-            </span>
-            {% endif %}
-          </div>
-        </div>
-        <div class="card-body">
-          <!-- Cấu hình 1: Chỉ YOLO -->
-          <div id="config1-container" {% if config_number == 2 and is_counted %}style="display: none;"{% endif %}>
-            <div class="form-check mb-3">
-              <input
-                class="form-check-input"
-                type="radio"
-                name="config_type"
-                id="config1"
-                value="1"
-                {% if config_number == 1 or not config_number %}checked{% endif %}
-                {% if is_counted %}disabled{% endif %}
-              />
-              <label class="form-check-label fw-bold" for="config1">
-                Cấu hình 1: Chỉ dùng YOLO detect dấu X
-                {% if config_number == 1 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
-              </label>
-            </div>
-
-            <div class="ms-4 mb-3">
-              <table class="table table-bordered table-sm">
-                <thead class="table-light">
-                  <tr>
-                    <th>STT</th>
-                    <th>Họ và Tên</th>
-                    <th>Đồng ý</th>
-                    <th>Không đồng ý</th>
-                  </tr>
-                  <tr>
-                    <th class="text-center">Cột 1</th>
-                    <th class="text-center">Cột 2</th>
-                    <th class="text-center">Cột 3</th>
-                    <th class="text-center">Cột 4</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td colspan="4" class="text-muted small">
-                      <strong>Cấu hình:</strong>
-                      <ul class="mb-0 mt-2">
-                        <li>
-                          Tên lấy theo <strong>thứ tự</strong> danh sách ứng viên (không dùng VietNameOCR)
-                        </li>
-                        <li>
-                          <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
-                        </li>
-                      </ul>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Cấu hình 2: VietNameOCR + YOLO -->
-          <div id="config2-container" {% if config_number == 1 and is_counted %}style="display: none;"{% endif %}>
-            <div class="form-check mb-3">
-              <input
-                class="form-check-input"
-                type="radio"
-                name="config_type"
-                id="config2"
-                value="2"
-                {% if config_number == 2 %}checked{% endif %}
-                {% if is_counted %}disabled{% endif %}
-              />
-              <label class="form-check-label fw-bold" for="config2">
-                Cấu hình 2: VietNameOCR nhận diện tên + YOLO detect dấu X
-                {% if config_number == 2 %}<span class="badge bg-success ms-2">Đang sử dụng</span>{% endif %}
-              </label>
-            </div>
-
-            <div class="ms-4 mb-3">
-              <table class="table table-bordered table-sm">
-                <thead class="table-light">
-                  <tr>
-                    <th>STT</th>
-                    <th>Họ và Tên</th>
-                    <th>Đồng ý</th>
-                    <th>Không đồng ý</th>
-                  </tr>
-                  <tr>
-                    <th class="text-center">Cột 1</th>
-                    <th class="text-center">Cột 2</th>
-                    <th class="text-center">Cột 3</th>
-                    <th class="text-center">Cột 4</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td colspan="4" class="text-muted small">
-                      <strong>Cấu hình:</strong>
-                      <ul class="mb-0 mt-2">
-                        <li>
-                          <strong>VietNameOCR</strong>: Nhận diện tên (cột 2, từ dòng 2 trở đi)
-                        </li>
-                        <li>
-                          <strong>YOLO</strong>: Detect dấu X (cột 3 và 4, từ dòng 2 trở đi)
-                        </li>
-                      </ul>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Danh sách điều kiện (Bên phải) -->
-    <div class="col-md-6">
-      <div class="card mb-4 h-100 shadow-lg">
-        <div class="card-header bg-success text-white">
-          <h5 class="mb-0"><i class="bi bi-filter"></i> Danh sách điều kiện</h5>
-        </div>
-        <div class="card-body">
-          <!-- Cảnh báo kiểm tự động -->
-          {% if poll.is_counting_started %}
-          <div class="alert alert-warning mb-3" role="alert">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <strong>Kiểm tự động đang bật, không thể kiểm thủ công</strong>
-          </div>
-          {% endif %}
-
-          <!-- Cảnh báo chưa cấu hình -->
-          {% if not config_number %}
-          <div class="alert alert-danger mb-3" role="alert">
-            <i class="bi bi-exclamation-circle-fill"></i>
-            <strong>Chưa cấu hình - Vui lòng lưu cấu hình trước khi kiểm phiếu</strong>
-          </div>
-          {% endif %}
-
-          <!-- Điều kiện 1: Ứng viên -->
-          <p class="mb-2">
-            <strong>Ứng viên:</strong>
-            {% if candidates_count > 0 %}
-            <span class="text-success"
-              >Có {{ candidates_count }} ứng cử viên</span
-            >
-            {% else %}
-            <span class="text-danger">Chưa thêm ứng cử viên</span>
-            {% endif %}
-          </p>
-
-          <!-- Điều kiện 2: Ballot -->
-          <p class="mb-2">
-            <strong>Ballot:</strong>
-            {% if ballots_count > 0 %}
-            <span class="text-success">Có {{ ballots_count }} phiếu bầu</span>
-            {% else %}
-            <span class="text-danger"
-              >Chưa thêm phiếu bầu, hãy thêm ở phần tạo form</span
-            >
-            {% endif %}
-          </p>
-
-          <!-- Điều kiện 3: Check ảnh ballot -->
-          <p class="mb-2">
-            <strong>Check ảnh ballot:</strong>
-            {% if ballots_with_image_count > 0 %}
-            <span class="text-success"
-              >Có {{ ballots_with_image_count }} ảnh upload trên {{ ballots_count }} phiếu bầu</span
-            >
-            {% else %}
-            <span class="text-danger">Chưa upload ảnh lên</span>
-            {% endif %}
-          </p>
-
-          <!-- Điều kiện 4: Tiền xử lý -->
-          <p class="mb-2">
-            <strong>Tiền xử lý:</strong>
-            {% if preprocessed_count == ballots_with_image_total and ballots_with_image_total > 0 %}
-            <span class="text-success"
-              >Tiền xử lý {{ preprocessed_count }}/{{ ballots_with_image_total }}</span
-            >
-            {% elif ballots_with_image_total > 0 %}
-            <span class="text-danger"
-              >Tiền xử lý {{ preprocessed_count }}/{{ ballots_with_image_total }}</span
-            >
-            <button id="tien-xu-ly-btn" class="btn btn-primary btn-sm ms-2">
-              <i class="bi bi-gear-fill"></i> tiền xử lý ngay
-            </button>
-            {% else %}
-            <span class="text-danger">Chưa có ảnh để tiền xử lý</span>
-            {% endif %}
-          </p>
-
-          <!-- Điều kiện 5: Check model AI -->
-          <p class="mb-2">
-            <strong>Check model:</strong>
-            {% if config_number and selected_config_models_ready %}
-            <span class="text-success">Cấu hình {{ config_number }} sẵn sàng</span>
-            {% elif config_number %}
-            <span class="text-danger">Cấu hình {{ config_number }} chưa sẵn sàng</span>
-            {% else %}
-            <span class="text-muted">Chưa lưu cấu hình</span>
-            {% endif %}
-            <br />
-            <small class="text-muted">
-              YOLO {% if yolo_status %}on{% else %}off{% endif %},
-              VietNameOCR {% if vietnameocr_status %}on{% else %}off{% endif %}
-            </small>
-          </p>
-
-          <input type="hidden" name="start_row" value="2" />
-          <input type="hidden" name="end_row" value="" />
-          <input type="hidden" name="yolo_confidence" value="20" />
-
-          <!-- Cấu hình cho config1 -->
-          <input type="hidden" name="config1_yolo_cols" value="3,4" />
-          
-          <!-- Cấu hình cho config2 -->
-          <input type="hidden" name="config2_vietnameocr_col" value="2" />
-          <input type="hidden" name="config2_yolo_cols" value="3,4" />
-        </div>
-      </div>
-    </div>
-  </div>
-</form>
-
-{% block scripts %}
 <script>
+  const pollId = {{ poll.poll_id }};
   const tienXuLyButton = document.getElementById("tien-xu-ly-btn");
   const loadingOverlay = document.getElementById("loading-overlay");
   const loadingText = document.getElementById("loading-text");
   const countingForm = document.getElementById("counting-form");
-
-  // ============================================
-  // XỬ LÝ KIỂM TRA HẬU KIỂM TỰ ĐỘNG
-  // ============================================
+  const toggleForm = document.getElementById("toggle-form");
   const toggleCleanupBtn = document.getElementById("toggle-checking-cleanup-btn");
   const cleanupStatusText = document.getElementById("cleanup-status-text");
-  const pollId = {{ poll.poll_id }};
-  let isCleanupActive = {{ poll.is_checking_started|lower }};
-  
+  const saveConfigBtn = document.getElementById("save-config-btn");
+  const editConfigBtn = document.getElementById("edit-config-btn");
+  const config1Radio = document.getElementById("config1");
+  const config2Radio = document.getElementById("config2");
+  const config1Container = document.getElementById("config1-container");
+  const config2Container = document.getElementById("config2-container");
+  const isCounted = {{ is_counted|yesno:"true,false" }};
+  const isCountingActive = {{ is_counting_active|yesno:"true,false" }};
+  let isCleanupActive = {{ poll.is_checking_started|yesno:"true,false" }};
+  let refreshInterval = null;
+  let bypassToggleConfirm = false;
+
+  function setText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  }
+
+  function showAllConfigOptions() {
+    config1Container.style.display = "block";
+    config2Container.style.display = "block";
+  }
+
+  function getSelectedConfigType() {
+    return config1Radio && config1Radio.checked ? 1 : 2;
+  }
+
+  function appendSelectedConfigInputs() {
+    if (!countingForm || !config1Radio || !config2Radio) return;
+
+    countingForm.querySelectorAll('input[data-generated-config="true"]').forEach((input) => input.remove());
+
+    const configInput1 = document.createElement("input");
+    configInput1.type = "hidden";
+    configInput1.name = "config1";
+    configInput1.value = config1Radio.checked ? "1" : "0";
+    configInput1.dataset.generatedConfig = "true";
+    countingForm.appendChild(configInput1);
+
+    const configInput2 = document.createElement("input");
+    configInput2.type = "hidden";
+    configInput2.name = "config2";
+    configInput2.value = config2Radio.checked ? "1" : "0";
+    configInput2.dataset.generatedConfig = "true";
+    countingForm.appendChild(configInput2);
+  }
+
+  if (countingForm) {
+    countingForm.addEventListener("submit", appendSelectedConfigInputs);
+  }
+
+  function submitToggleForm(skipConfirm) {
+    if (!toggleForm) return;
+    if (!skipConfirm && !bypassToggleConfirm) {
+      const action = isCountingActive ? "tắt" : "bật";
+      if (!confirm(`Bạn có chắc muốn ${action} kiểm phiếu?`)) return;
+    }
+    bypassToggleConfirm = true;
+    toggleForm.submit();
+  }
+
+  if (toggleForm) {
+    toggleForm.addEventListener("submit", function(event) {
+      if (bypassToggleConfirm) return;
+      event.preventDefault();
+      submitToggleForm(false);
+    });
+  }
+
   function updateCleanupButtonUI() {
+    if (!toggleCleanupBtn || !cleanupStatusText) return;
+
     if (isCleanupActive) {
-      toggleCleanupBtn.classList.remove('btn-info');
-      toggleCleanupBtn.classList.add('btn-success');
-      cleanupStatusText.textContent = 'Đang kiểm tra hậu kiểm';
+      toggleCleanupBtn.classList.remove("btn-outline-info");
+      toggleCleanupBtn.classList.add("btn-success");
+      cleanupStatusText.textContent = "Đang hậu kiểm";
     } else {
-      toggleCleanupBtn.classList.remove('btn-success');
-      toggleCleanupBtn.classList.add('btn-info');
-      cleanupStatusText.textContent = 'Bật kiểm tra hậu kiểm';
+      toggleCleanupBtn.classList.remove("btn-success");
+      toggleCleanupBtn.classList.add("btn-outline-info");
+      cleanupStatusText.textContent = "Bật hậu kiểm";
     }
   }
-  
-  function toggleCleanupAPI() {
-    console.log('[Cleanup] Đang toggle cờ is_checking_started...');
-    fetch('/api/checking/toggle-cleanup/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': '{{ csrf_token }}'
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
-        poll_id: pollId
-      })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        console.log('[Cleanup]', data.message);
-        isCleanupActive = data.is_active;
-        updateCleanupButtonUI();
-        showAlert(data.message, 'success');
-      } else {
-        console.error('[Cleanup] Error:', data.message);
-        showAlert('Lỗi: ' + data.message, 'danger');
-      }
-    })
-    .catch(error => {
-      console.error('[Cleanup] Network error:', error);
-      showAlert('Lỗi kết nối đến server', 'danger');
-    });
-  }
-  
-  // Khởi tạo UI
-  updateCleanupButtonUI();
-  
-  // Xử lý click nút
+
   if (toggleCleanupBtn) {
-    toggleCleanupBtn.addEventListener('click', function() {
-      toggleCleanupAPI();
-    });
-  }
-
-  // XỬ LÝ NÚT TIỀN XỬ LÝ
-  if (tienXuLyButton) {
-    tienXuLyButton.addEventListener("click", function (event) {
-      event.preventDefault();
-
-      // Hiển thị loading
-      loadingText.innerText = "Đang bắt đầu tiền xử lý...";
-      loadingOverlay.style.display = "flex";
-
-      // Gọi API tiền xử lý
-      const preprocessUrl = "/preprocessing/process/{{ poll.poll_id }}/";
-
-      fetch(preprocessUrl)
+    updateCleanupButtonUI();
+    toggleCleanupBtn.addEventListener("click", function() {
+      fetch("/api/checking/toggle-cleanup/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": "{{ csrf_token }}"
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ poll_id: pollId })
+      })
         .then((response) => response.json())
         .then((data) => {
-          loadingOverlay.style.display = "none";
+          if (data.success) {
+            isCleanupActive = data.is_active;
+            updateCleanupButtonUI();
+            showAlert(data.message || "Đã cập nhật trạng thái hậu kiểm.");
+          } else {
+            showAlert("Lỗi: " + (data.message || "Không thể cập nhật hậu kiểm."));
+          }
+        })
+        .catch((error) => {
+          console.error("Lỗi hậu kiểm:", error);
+          showAlert("Lỗi kết nối đến server.");
+        });
+    });
+  }
+
+  if (tienXuLyButton) {
+    tienXuLyButton.addEventListener("click", function(event) {
+      event.preventDefault();
+
+      if (loadingOverlay && loadingText) {
+        loadingText.innerText = "Đang bắt đầu tiền xử lý...";
+        loadingOverlay.style.display = "flex";
+      }
+
+      fetch(`/preprocessing/process/${pollId}/`)
+        .then((response) => response.json())
+        .then((data) => {
+          if (loadingOverlay) loadingOverlay.style.display = "none";
 
           if (data.status === "completed") {
-            const message = `Tiền xử lý hoàn tất!\n- Tổng số phiếu: ${data.total_ballots}\n- Thành công: ${data.success_count}\n- Lỗi: ${data.error_count}`;
-            showAlert(message);
-
-            // Reload trang để cập nhật số liệu
-            setTimeout(() => {
-              window.location.reload();
-            }, 2000);
+            showAlert(`Tiền xử lý hoàn tất. Thành công: ${data.success_count}, lỗi: ${data.error_count}`);
+            setTimeout(() => window.location.reload(), 1200);
           } else {
             showAlert("Lỗi: " + (data.message || "Không thể xử lý"));
           }
         })
         .catch((error) => {
-          loadingOverlay.style.display = "none";
+          if (loadingOverlay) loadingOverlay.style.display = "none";
           console.error("Lỗi tiền xử lý:", error);
-          showAlert("Lỗi kết nối đến server tiền xử lý!");
+          showAlert("Lỗi kết nối đến server tiền xử lý.");
         });
     });
   }
 
-  // XỬ LÝ SUBMIT FORM - Thêm config type vào form data
-  if (countingForm) {
-    countingForm.addEventListener("submit", function(event) {
-      const config1Radio = document.getElementById("config1");
-      const config2Radio = document.getElementById("config2");
-      
-      // Tạo hidden input để gửi config đã chọn
-      const configInput1 = document.createElement("input");
-      configInput1.type = "hidden";
-      configInput1.name = "config1";
-      configInput1.value = config1Radio.checked ? "1" : "0";
-      countingForm.appendChild(configInput1);
-      
-      const configInput2 = document.createElement("input");
-      configInput2.type = "hidden";
-      configInput2.name = "config2";
-      configInput2.value = config2Radio.checked ? "1" : "0";
-      countingForm.appendChild(configInput2);
-    });
-  }
-
-  // XỬ LÝ LƯU CẤU HÌNH VÀ SỬA CẤU HÌNH
-  const saveConfigBtn = document.getElementById("save-config-btn");
-  const editConfigBtn = document.getElementById("edit-config-btn");
-  const config1Radio = document.getElementById("config1");
-  const config2Radio = document.getElementById("config2");
-
-  // Lấy các container của từng cấu hình
-  const config1Container = document.getElementById("config1-container");
-  const config2Container = document.getElementById("config2-container");
-  
-  // Kiểm tra trạng thái đã counted
-  const isCounted = {{ is_counted|lower }};
-  const savedConfigNumber = {{ config_number|default:"null" }};
-
-  // Nếu đã counted, ẩn cấu hình không được sử dụng
-  if (isCounted && savedConfigNumber) {
-    if (savedConfigNumber === 1) {
-      config2Container.style.display = "none";
-    } else if (savedConfigNumber === 2) {
-      config1Container.style.display = "none";
-    }
-  }
-
-  if (saveConfigBtn && editConfigBtn && !isCounted) {
-    // Xử lý nút Lưu cấu hình
+  if (saveConfigBtn && !isCounted) {
     saveConfigBtn.addEventListener("click", function() {
-      // Lấy config type đã chọn
-      const configType = config1Radio.checked ? 1 : 2;
-      
-      // Hiển thị loading
+      const configType = getSelectedConfigType();
+
       if (loadingOverlay && loadingText) {
         loadingText.innerText = `Đang lưu cấu hình ${configType}...`;
         loadingOverlay.style.display = "flex";
       }
-      
-      // Gọi API lưu cấu hình
-      const saveConfigUrl = "{% url 'save_configuration' poll.poll_id %}";
-      
-      fetch(saveConfigUrl, {
-        method: 'POST',
+
+      fetch("{% url 'save_configuration' poll.poll_id %}", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': '{{ csrf_token }}'
+          "Content-Type": "application/json",
+          "X-CSRFToken": "{{ csrf_token }}"
         },
-        body: JSON.stringify({
-          config_type: configType
-        })
+        body: JSON.stringify({ config_type: configType })
       })
-      .then(response => response.json())
-      .then(data => {
-        if (loadingOverlay) {
-          loadingOverlay.style.display = "none";
-        }
-        
-        if (data.status === 'success') {
-          // Hiển thị thông báo thành công
-          showAlert(data.message);
-          
-          // Ẩn cấu hình không được chọn
-          if (config1Radio.checked) {
-            config2Container.style.display = "none";
-          } else if (config2Radio.checked) {
-            config1Container.style.display = "none";
+        .then((response) => response.json())
+        .then((data) => {
+          if (loadingOverlay) loadingOverlay.style.display = "none";
+
+          if (data.status === "success") {
+            showAlert(data.message);
+            setTimeout(() => window.location.reload(), 900);
+          } else {
+            showAlert("Lỗi: " + data.message);
           }
-
-          // Disable radio buttons để không thể thay đổi
-          config1Radio.disabled = true;
-          config2Radio.disabled = true;
-
-          // Hiện nút Sửa, ẩn nút Lưu
-          saveConfigBtn.style.display = "none";
-          editConfigBtn.style.display = "inline-block";
-        } else {
-          // Hiển thị lỗi
-          showAlert('Lỗi: ' + data.message);
-        }
-      })
-      .catch(error => {
-        if (loadingOverlay) {
-          loadingOverlay.style.display = "none";
-        }
-        console.error('Lỗi lưu cấu hình:', error);
-        showAlert('Lỗi kết nối đến server!');
-      });
+        })
+        .catch((error) => {
+          if (loadingOverlay) loadingOverlay.style.display = "none";
+          console.error("Lỗi lưu cấu hình:", error);
+          showAlert("Lỗi kết nối đến server.");
+        });
     });
+  }
 
-    // Xử lý nút Sửa
+  if (editConfigBtn && !isCounted) {
     editConfigBtn.addEventListener("click", function() {
-      // Hiện lại tất cả cấu hình
-      config1Container.style.display = "block";
-      config2Container.style.display = "block";
-
-      // Enable lại radio buttons
+      showAllConfigOptions();
       config1Radio.disabled = false;
       config2Radio.disabled = false;
-
-      // Hiện nút Lưu, ẩn nút Sửa
       saveConfigBtn.style.display = "inline-block";
       editConfigBtn.style.display = "none";
     });
   }
+
+  function loadStats() {
+    fetch(`/counting/poll/${pollId}/stats/`)
+      .then((response) => response.json())
+      .then((data) => {
+        setText("total-ballots", data.total);
+        setText("total-ballots-count-1", data.total_ballots_count);
+        setText("total-ballots-count-2", data.total_ballots_count);
+        setText("upload-no-upload", data.upload.no_upload);
+        setText("upload-pending", data.upload.pending);
+        setText("upload-processing", data.upload.processing);
+        setText("upload-success", data.upload.success);
+        setText("upload-failed", data.upload.failed);
+        setText("counting-pending", data.counting.pending);
+        setText("counting-processing", data.counting.processing);
+        setText("counting-success", data.counting.success);
+        setText("counting-failed", data.counting.failed);
+
+        if (
+          data.is_counting_started &&
+          data.upload.success >= data.total_ballots_count &&
+          data.counting.success >= data.total_ballots_count &&
+          data.total_ballots_count > 0
+        ) {
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+          }
+          alert(`Đã hoàn thành kiểm ${data.total_ballots_count} phiếu. Hệ thống sẽ tự động tắt kiểm phiếu.`);
+          submitToggleForm(true);
+          return;
+        }
+
+        if (data.is_counting_started) {
+          setText("refresh-status", "Cập nhật mỗi 10 giây");
+          if (!refreshInterval) refreshInterval = setInterval(loadStats, 10000);
+        } else {
+          setText("refresh-status", "Đã tắt tự động cập nhật");
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+          }
+        }
+      })
+      .catch((error) => {
+        console.error("Lỗi load thống kê:", error);
+        setText("refresh-status", "Không tải được thống kê");
+      });
+  }
+
+  loadStats();
+
+  window.addEventListener("beforeunload", function() {
+    if (refreshInterval) clearInterval(refreshInterval);
+  });
 </script>
-{% endblock %} {% endblock %}
+{% endblock %}
