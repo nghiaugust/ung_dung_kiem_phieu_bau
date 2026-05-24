@@ -11,7 +11,10 @@ from celery import shared_task
 
 from ballot.models import Ballot
 from form.models import BallotDocument
-from preprocessing.preprocessing_for_upload_step_1 import lam_phang_anh_phieu_bau
+from preprocessing.preprocessing_for_upload_step_1 import (
+    lam_phang_anh_phieu_bau,
+    lam_phang_anh_phieu_bau_tu_diem_moc,
+)
 from preprocessing.preprocessing_for_upload_step_2 import cat_va_luu_cac_o_phieu_bau_wrapper
 
 
@@ -80,13 +83,38 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
         
         # STEP 1: Làm phẳng ảnh và lấy data QR
         print(f"[TASK] Bắt đầu làm phẳng ảnh cho ballot_id={ballot_id}")
-        warped_image, qr_data_raw = lam_phang_anh_phieu_bau(
-            duong_dan_anh_dau_vao=temp_input_path,
-            duong_dan_anh_dau_ra=temp_output_path,
-            chieu_ngang_cm=chieu_ngang_cm,
-            chieu_doc_cm=chieu_doc_cm,
-            dpi=300
-        )
+        client_detection = ballot.metadata.get('client_detection') if isinstance(ballot.metadata, dict) else None
+        used_client_detection = False
+
+        if isinstance(client_detection, dict) and client_detection.get('src_points'):
+            try:
+                print(f"[TASK] Dung diem moc tu app de lam phang ballot_id={ballot_id}")
+                warped_image, qr_data_raw = lam_phang_anh_phieu_bau_tu_diem_moc(
+                    duong_dan_anh_dau_vao=temp_input_path,
+                    duong_dan_anh_dau_ra=temp_output_path,
+                    client_detection=client_detection,
+                    chieu_ngang_cm=chieu_ngang_cm,
+                    chieu_doc_cm=chieu_doc_cm,
+                    dpi=300
+                )
+                used_client_detection = True
+            except ValueError as metadata_error:
+                print(f"[TASK WARNING] Metadata app khong dung, fallback detect tren server: {metadata_error}")
+                warped_image, qr_data_raw = lam_phang_anh_phieu_bau(
+                    duong_dan_anh_dau_vao=temp_input_path,
+                    duong_dan_anh_dau_ra=temp_output_path,
+                    chieu_ngang_cm=chieu_ngang_cm,
+                    chieu_doc_cm=chieu_doc_cm,
+                    dpi=300
+                )
+        else:
+            warped_image, qr_data_raw = lam_phang_anh_phieu_bau(
+                duong_dan_anh_dau_vao=temp_input_path,
+                duong_dan_anh_dau_ra=temp_output_path,
+                chieu_ngang_cm=chieu_ngang_cm,
+                chieu_doc_cm=chieu_doc_cm,
+                dpi=300
+            )
         
         # Giải phóng memory ngay sau khi làm phẳng (warped_image có thể rất lớn)
         del warped_image
@@ -115,12 +143,14 @@ def process_ballot_image_task(self, ballot_id, temp_input_path, poll_id, file_ex
         if ballot.metadata:
             ballot.metadata.update({
                 'qr_code_raw': qr_data_raw,
-                'processed_at': str(ballot.timestamp)
+                'processed_at': str(ballot.timestamp),
+                'flattening_source': 'client_detection' if used_client_detection else 'server_detection'
             })
         else:
             ballot.metadata = {
                 'qr_code_raw': qr_data_raw,
-                'processed_at': str(ballot.timestamp)
+                'processed_at': str(ballot.timestamp),
+                'flattening_source': 'client_detection' if used_client_detection else 'server_detection'
             }
         
         ballot.save()

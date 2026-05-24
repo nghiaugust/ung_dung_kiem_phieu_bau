@@ -147,6 +147,83 @@ def _validate_warp_points(src_pts, rotation_label):
 	return True
 
 
+def _coerce_client_point(point):
+	"""Convert an app-sent point to [x, y]."""
+	if isinstance(point, dict):
+		return [float(point["x"]), float(point["y"])]
+	if isinstance(point, (list, tuple)) and len(point) >= 2:
+		return [float(point[0]), float(point[1])]
+	raise ValueError("Diem moc tu app khong dung dinh dang")
+
+
+def _extract_client_src_points(client_detection):
+	if not isinstance(client_detection, dict):
+		raise ValueError("Metadata diem moc tu app khong hop le")
+
+	src_points = client_detection.get("src_points")
+	if not isinstance(src_points, list) or len(src_points) != 4:
+		raise ValueError("Metadata tu app thieu src_points gom 4 diem")
+
+	return np.array([_coerce_client_point(point) for point in src_points], dtype="float32")
+
+
+def lam_phang_anh_phieu_bau_tu_diem_moc(
+	duong_dan_anh_dau_vao,
+	duong_dan_anh_dau_ra,
+	client_detection,
+	chieu_ngang_cm,
+	chieu_doc_cm,
+	dpi=300
+):
+	"""
+	Lam phang anh bang 4 diem da duoc app phan loai theo thu tu:
+	top-left QR, top-right marker, bottom-right marker, bottom-left marker.
+	Neu metadata sai, ham se raise ValueError de caller fallback sang detect tren server.
+	"""
+	pixels_per_cm = dpi / 2.54
+	chieu_rong_pixel = int(chieu_ngang_cm * pixels_per_cm)
+	chieu_dai_pixel = int(chieu_doc_cm * pixels_per_cm)
+
+	img = cv2.imread(duong_dan_anh_dau_vao)
+	if img is None:
+		raise ValueError(f"Khong the doc anh tu: {duong_dan_anh_dau_vao}")
+
+	try:
+		src_pts = _extract_client_src_points(client_detection)
+		h, w = img.shape[:2]
+
+		if np.any(src_pts[:, 0] < 0) or np.any(src_pts[:, 0] >= w) or np.any(src_pts[:, 1] < 0) or np.any(src_pts[:, 1] >= h):
+			raise ValueError("Diem moc tu app nam ngoai kich thuoc anh upload")
+
+		if not _validate_warp_points(src_pts, "client_metadata"):
+			raise ValueError("Diem moc tu app khong tao duoc polygon hop le")
+
+		padding = 50
+		chieu_rong_pixel_with_padding = chieu_rong_pixel + 2 * padding
+		chieu_dai_pixel_with_padding = chieu_dai_pixel + 2 * padding
+
+		dst_pts = np.array([
+			[padding, padding],
+			[chieu_rong_pixel + padding - 1, padding],
+			[chieu_rong_pixel + padding - 1, chieu_dai_pixel + padding - 1],
+			[padding, chieu_dai_pixel + padding - 1]
+		], dtype="float32")
+
+		M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+		warped = gpu_warp_perspective(img, M, (chieu_rong_pixel_with_padding, chieu_dai_pixel_with_padding))
+
+		success = cv2.imwrite(duong_dan_anh_dau_ra, warped)
+		if not success:
+			raise ValueError(f"Khong the luu anh tai: {duong_dan_anh_dau_ra}")
+
+		qr_data_raw = client_detection.get("qr_raw") or client_detection.get("qr_code_raw")
+		print("[STEP1] Lam phang bang diem moc tu app thanh cong")
+		return warped, qr_data_raw
+	finally:
+		del img
+		gc.collect()
+
+
 def _try_flatten_with_image(img, chieu_rong_pixel, chieu_dai_pixel, rotation_label):
 	"""
 	Thử làm phẳng trên 1 hướng ảnh cụ thể.

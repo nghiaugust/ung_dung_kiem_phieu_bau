@@ -245,6 +245,7 @@ def build_crossed_poll_log_data(poll_id):
     approved_ballots = (
         Ballot.objects.filter(
             poll=poll,
+            is_valid=True,
             checking_status="DONE",
             counting_status="completed",
         )
